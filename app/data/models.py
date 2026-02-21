@@ -23,3 +23,18 @@ class MarketOHLC(Base):
     __table_args__ = (
         UniqueConstraint("symbol", "timestamp", name="uix_symbol_timestamp"),
     )
+
+class DecisionLog(Base):
+    __tablename__ = "decision_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    timestamp = Column(DateTime, nullable=False)
+    symbol = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    quantity = Column(Float)
+    price = Column(Float)
+    reasoning = Column(String)
+    portfolio_before = Column(String)  # store JSON string
+    portfolio_after = Column(String)
+
+

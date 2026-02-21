@@ -1,0 +1,30 @@
+from dataclasses import dataclass, field
+from typing import Dict
+
+
+@dataclass
+class Position:
+    symbol: str
+    quantity: float
+    average_price: float
+
+
+@dataclass
+class Portfolio:
+    cash: float
+    positions: Dict[str, Position] = field(default_factory=dict)
+    realized_pnl: float = 0.0
+
+    def total_equity(self, current_prices: Dict[str, float]) -> float:
+        equity = self.cash
+        for symbol, position in self.positions.items():
+            equity += position.quantity * current_prices.get(symbol, 0)
+        return equity
+    
+    def unrealized_pnl(self, current_prices: Dict[str, float]) -> float:
+        pnl = 0.0
+        for symbol, position in self.positions.items():
+            current_price = current_prices.get(symbol, 0)
+            pnl += (current_price - position.average_price) * position.quantity
+        return pnl
+
