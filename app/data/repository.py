@@ -9,6 +9,11 @@ from app.core.database import SessionLocal
 from app.data.models import MarketOHLC
 from app.data.providers.base import OHLCRecord
 
+import json
+from app.data.models import DecisionLog
+
+
+
 
 class MarketDataRepository:
 
@@ -66,3 +71,28 @@ class MarketDataRepository:
 
         finally:
             session.close()
+    
+    def log_decision(
+    self,
+    timestamp,
+    symbol,
+    decision,
+    execution_result
+):
+
+        session = SessionLocal()
+
+        log_entry = DecisionLog(
+            timestamp=timestamp,
+            symbol=symbol,
+            action=decision.action,
+            quantity=decision.quantity,
+            price=execution_result.price,
+            reasoning=decision.reasoning,
+            portfolio_before=json.dumps(execution_result.portfolio_before),
+            portfolio_after=json.dumps(execution_result.portfolio_after)
+        )
+
+        session.add(log_entry)
+        session.commit()
+        session.close()
