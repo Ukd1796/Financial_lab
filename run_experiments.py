@@ -12,7 +12,12 @@ from app.evaluation.agent import EvaluationAgent
 from app.reflection.agent import ReflectionAgent
 from app.analysis.regime_agent import RegimeAnalysisAgent
 from app.strategy.cross_sectional import CrossSectionalMomentumStrategy
-
+from app.meta.performance_monitor import PerformanceMonitor
+from app.meta.regime_monitor import RegimeFragilityMonitor
+from app.meta.meta_reflection import MetaReflectionAgent
+from openai import OpenAI
+import os 
+from app.meta.llm_recommender import LLMConfigurationRecommender
 
 # ---------------------------------------
 # Robustness Period
@@ -23,15 +28,15 @@ FULL_PERIOD = (datetime(2018, 1, 1), datetime(2024, 6, 1))
 # Parameter Sweep (sanity check only)
 # ---------------------------------------
 PARAMETER_SWEEP = [
-    {"lookback": 80,  "rebalance": 20, "threshold": 0.05},
-    {"lookback": 100, "rebalance": 20, "threshold": 0.05},  # baseline
-    {"lookback": 120, "rebalance": 20, "threshold": 0.05},
+    # {"lookback": 80,  "rebalance": 20, "threshold": 0.05},
+    # {"lookback": 100, "rebalance": 20, "threshold": 0.05},  # baseline
+    # {"lookback": 120, "rebalance": 20, "threshold": 0.05},
 
-    {"lookback": 100, "rebalance": 15, "threshold": 0.05},
+    # {"lookback": 100, "rebalance": 15, "threshold": 0.05},
     {"lookback": 100, "rebalance": 25, "threshold": 0.05},
 
-    {"lookback": 100, "rebalance": 20, "threshold": 0.03},
-    {"lookback": 100, "rebalance": 20, "threshold": 0.07},
+    # {"lookback": 100, "rebalance": 20, "threshold": 0.03},
+    # {"lookback": 100, "rebalance": 20, "threshold": 0.07},
 ]
 
 INITIAL_CAPITAL = 100000
@@ -58,7 +63,12 @@ def build_master_timeline(repository, start_date, end_date):
 # ---------------------------------------
 # Backtest Runner
 # ---------------------------------------
-def run_multi_asset_experiment(risk_params, repository, param_config):
+def run_multi_asset_experiment(
+    risk_params,
+    repository,
+    param_config,
+    use_meta=False
+):
 
     start_date, end_date = FULL_PERIOD
 
@@ -80,16 +90,44 @@ def run_multi_asset_experiment(risk_params, repository, param_config):
         momentum_threshold=param_config["threshold"]
     )
 
+    # ---------------------------------------------------
+    # 🔥 META LAYER SETUP
+    # ---------------------------------------------------
+    meta_agent = None
+
+    if use_meta:
+
+        performance_monitor = PerformanceMonitor()
+        regime_monitor = RegimeFragilityMonitor()
+
+        llm_recommender = LLMConfigurationRecommender()
+
+        meta_agent = MetaReflectionAgent(
+            performance_monitor=performance_monitor,
+            regime_monitor=regime_monitor,
+            llm_recommender=llm_recommender  # ← ENABLED
+        )
+
+    # ---------------------------------------------------
+    # BACKTEST ENGINE
+    # ---------------------------------------------------
     backtest = BacktestEngine(
         observer=observer,
         strategy_router=strategy,
         risk_agent=risk_agent,
         execution_agent=execution_agent,
         portfolio=portfolio,
-        repository=repository
+        repository=repository,
+        meta_reflection=meta_agent,
+        meta_frequency=30,
+        meta_lookback=60
     )
 
-    historical_dates = build_master_timeline(repository, start_date, end_date)
+    historical_dates = build_master_timeline(
+        repository,
+        start_date,
+        end_date
+    )
 
     if not historical_dates:
         return None
@@ -100,7 +138,11 @@ def run_multi_asset_experiment(risk_params, repository, param_config):
     portfolio_metrics = evaluator.evaluate(results, INITIAL_CAPITAL)
     trade_metrics = evaluator.evaluate_trades(trades)
 
-    return portfolio_metrics, trade_metrics
+    return {
+        "portfolio_metrics": portfolio_metrics,
+        "trade_metrics": trade_metrics,
+        "mode_history": backtest.meta_mode_history
+    }
 
 
 # ---------------------------------------
@@ -124,11 +166,13 @@ def main():
         result = run_multi_asset_experiment(
             risk_params={"max_position_pct": 0.2},
             repository=repository,
-            param_config=param_config
+            param_config=param_config,
+            use_meta=False
         )
 
         if result:
-            pm, tm = result
+            pm = result["portfolio_metrics"]
+            tm = result["trade_metrics"]
 
             print(
                 f"Sharpe {pm['sharpe_ratio']:.2f} | "
