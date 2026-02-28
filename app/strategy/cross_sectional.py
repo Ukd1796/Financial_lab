@@ -2,6 +2,7 @@
 
 from app.strategy.models import Decision
 from datetime import timedelta
+from app.meta.strategy_mode import StrategyMode
 
 
 class CrossSectionalMomentumStrategy:
@@ -96,3 +97,20 @@ class CrossSectionalMomentumStrategy:
                 )
 
         return decisions
+    
+    def apply_mode(self, mode: StrategyMode):
+
+        if mode == StrategyMode.AGGRESSIVE:
+            self.rebalance_frequency = 15
+            self.momentum_threshold = 0.03
+            self.top_n = 4
+
+        elif mode == StrategyMode.BALANCED:
+            self.rebalance_frequency = 20
+            self.momentum_threshold = 0.05
+            self.top_n = 3
+
+        elif mode == StrategyMode.DEFENSIVE:
+            self.rebalance_frequency = 30
+            self.momentum_threshold = 0.08
+            self.top_n = 2

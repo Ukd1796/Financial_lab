@@ -1,5 +1,37 @@
 from app.strategy.models import Decision
+from app.meta.strategy_mode import ModePolicy
+from app.meta.strategy_mode import StrategyMode
 
+MODE_POLICIES = {
+    StrategyMode.AGGRESSIVE: ModePolicy(
+        max_position_pct=0.30,
+        atr_multiplier=3.0,
+        allowed_regimes=[
+            "LOW_VOL_UPTREND",
+            "MID_VOL_UPTREND",
+            "HIGH_VOL_UPTREND",
+            "SIDEWAYS"
+        ]
+    ),
+
+    StrategyMode.BALANCED: ModePolicy(
+        max_position_pct=0.20,
+        atr_multiplier=2.0,
+        allowed_regimes=[
+            "LOW_VOL_UPTREND",
+            "MID_VOL_UPTREND",
+            "HIGH_VOL_UPTREND"
+        ]
+    ),
+
+    StrategyMode.DEFENSIVE: ModePolicy(
+        max_position_pct=0.10,
+        atr_multiplier=1.5,
+        allowed_regimes=[
+            "LOW_VOL_UPTREND"
+        ]
+    ),
+}
 
 class RiskAgent:
 
@@ -12,26 +44,40 @@ class RiskAgent:
         self.max_position_pct = max_position_pct
         self.atr_multiplier = atr_multiplier
 
-        # Default: only trade in uptrend regimes
+        # 🔥 Meta-controlled multiplier (default 1.0)
+        self.allocation_multiplier = 1.0
+
         self.allowed_regimes = allowed_regimes or [
             "LOW_VOL_UPTREND",
             "MID_VOL_UPTREND",
             "HIGH_VOL_UPTREND",
         ]
 
+    # ---------------------------------------------------
+    # 🔥 Meta Hook
+    # ---------------------------------------------------
+    def update_allocation_multiplier(self, multiplier: float):
+        self.allocation_multiplier = multiplier
+
+    def apply_mode_policy(self, policy: ModePolicy):
+        self.max_position_pct = policy.max_position_pct
+        self.atr_multiplier = policy.atr_multiplier
+        self.allowed_regimes = policy.allowed_regimes
+
+    # ---------------------------------------------------
+    # MAIN EVALUATION
+    # ---------------------------------------------------
     def evaluate(self, decision: Decision, portfolio, market_state):
 
         symbol = decision.symbol
         current_price = market_state.latest_price
         atr = market_state.indicators.get("atr_14")
-
-        # ---------------------------------------------------
-        # 0️⃣ Regime Filter (NEW FIX)
-        # ---------------------------------------------------
         regime = market_state.indicators.get("regime")
 
+        # ---------------------------------------------------
+        # 0️⃣ Regime Filter
+        # ---------------------------------------------------
         if decision.action == "BUY":
-
             if regime not in self.allowed_regimes:
                 return Decision(
                     symbol=symbol,
@@ -43,10 +89,8 @@ class RiskAgent:
         # 1️⃣ ATR Stop Enforcement
         # ---------------------------------------------------
         if symbol in portfolio.positions and atr:
-
             position = portfolio.positions[symbol]
             entry_price = position.average_price
-
             stop_price = entry_price - (self.atr_multiplier * atr)
 
             if current_price <= stop_price:
@@ -58,19 +102,23 @@ class RiskAgent:
                 )
 
         # ---------------------------------------------------
-        # 2️⃣ HOLD Case
+        # 2️⃣ HOLD
         # ---------------------------------------------------
         if decision.action == "HOLD":
             return decision
 
+        # ---------------------------------------------------
+        # 3️⃣ Capital Allocation
+        # ---------------------------------------------------
         total_equity = portfolio.total_equity(
             {symbol: current_price}
         )
 
-        max_allocatable = total_equity * self.max_position_pct
+        effective_pct = self.max_position_pct * self.allocation_multiplier
+        max_allocatable = total_equity * effective_pct
 
         # ---------------------------------------------------
-        # 3️⃣ BUY Logic
+        # BUY
         # ---------------------------------------------------
         if decision.action == "BUY":
 
@@ -86,11 +134,14 @@ class RiskAgent:
                 symbol=symbol,
                 action="BUY",
                 quantity=quantity,
-                reasoning=f"Risk-adjusted allocation ({self.max_position_pct*100}%)"
+                reasoning=(
+                    f"Allocation: {effective_pct*100:.1f}% "
+                    f"(multiplier {self.allocation_multiplier:.2f})"
+                )
             )
 
         # ---------------------------------------------------
-        # 4️⃣ SELL Logic
+        # SELL
         # ---------------------------------------------------
         if decision.action == "SELL":
 
