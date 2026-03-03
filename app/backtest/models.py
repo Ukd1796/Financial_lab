@@ -8,3 +8,15 @@ class BacktestResult:
     equity: float
     cash: float
     realized_pnl: float
+    
+
+@dataclass
+class Trade:
+    symbol: str
+    entry_price: float
+    exit_price: float
+    quantity: float
+    pnl: float
+    entry_date: datetime
+    exit_date: datetime
+

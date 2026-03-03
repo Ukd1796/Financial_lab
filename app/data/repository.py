@@ -4,15 +4,12 @@ from typing import List
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from datetime import datetime
-
 from app.core.database import SessionLocal
-from app.data.models import MarketOHLC
-from app.data.providers.base import OHLCRecord
+from app.data.models import MarketOHLC, OHLCRecord
+
 
 import json
 from app.data.models import DecisionLog
-
-
 
 
 class MarketDataRepository:
