@@ -4,7 +4,7 @@ from app.features.indicators import (
     simple_moving_average,
     average_true_range
 )
-from app.data.market_state import MarketState
+from app.data.models import MarketState
 import pandas as pd
 
 
@@ -16,8 +16,7 @@ class MarketObserverAgent:
 
     def preload(self, symbol: str, start: datetime, end: datetime):
 
-        buffer_start = start - timedelta(days=300)  # larger buffer for ATR percentile
-
+        buffer_start = start - timedelta(days=300)  
         records = self.repository.get_ohlc(symbol, buffer_start, end)
 
         if not records:
@@ -95,7 +94,7 @@ class MarketObserverAgent:
                     "sma_20": sma_20[i],
                     "sma_50": sma_50[i],
                     "atr_14": atr_14[i],
-                    "regime": df["regime"].iloc[i],   # ✅ injected
+                    "regime": df["regime"].iloc[i],  
                 },
                 previous_indicators={
                     "sma_20": sma_20[i - 1],

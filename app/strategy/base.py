@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from app.strategy.models import Decision
-from app.data.market_state import MarketState
+from app.data.models import MarketState
 from app.portfolio.models import Portfolio
 
 
