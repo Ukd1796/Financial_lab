@@ -6,29 +6,33 @@ class RiskAgent:
     def __init__(
         self,
         max_position_pct: float = 0.2,
-        atr_multiplier: float = 2.0,
-        allowed_regimes=None,
+        atr_multiplier:   float = 2.0,
+        allowed_regimes         = None,
     ):
         self.max_position_pct = max_position_pct
         self.atr_multiplier   = atr_multiplier
-        self.allowed_regimes  = allowed_regimes or [
-            "LOW_VOL_UPTREND",
-            "MID_VOL_UPTREND",
-            "HIGH_VOL_UPTREND",
-        ]
+        # None → no regime filter applied (all regimes allowed)
+        # list → only regimes in the list pass the BUY gate
+        self.allowed_regimes  = allowed_regimes
 
     # --------------------------------------------------
     # MAIN EVALUATION
     # --------------------------------------------------
-    def evaluate(self, decision: Decision, portfolio, market_state):
-
+    def evaluate(self, decision: Decision, portfolio, market_state, equity_prices: dict = None):
+        """
+        equity_prices — full {symbol: price} map for the current day,
+            covering all held positions (not just the universe subset).
+            Used to compute true portfolio equity for position sizing.
+            Falls back to single-symbol pricing when not provided.
+        """
         symbol        = decision.symbol
         current_price = market_state.latest_price
         atr           = market_state.indicators.get("atr_14")
         regime        = market_state.indicators.get("regime")
 
         # --- Regime filter (BUY only) ---
-        if decision.action == "BUY":
+        # Skipped entirely when allowed_regimes is None.
+        if decision.action == "BUY" and self.allowed_regimes is not None:
             if regime not in self.allowed_regimes:
                 return Decision(
                     symbol=symbol,
@@ -38,8 +42,8 @@ class RiskAgent:
 
         # --- ATR stop enforcement ---
         if symbol in portfolio.positions and atr:
-            position    = portfolio.positions[symbol]
-            stop_price  = position.average_price - (self.atr_multiplier * atr)
+            position   = portfolio.positions[symbol]
+            stop_price = position.average_price - (self.atr_multiplier * atr)
             if current_price <= stop_price:
                 return Decision(
                     symbol=symbol,
@@ -53,7 +57,10 @@ class RiskAgent:
             return decision
 
         # --- Capital allocation ---
-        total_equity   = portfolio.total_equity({symbol: current_price})
+        # Use the full equity_prices map so that all held positions are
+        # valued at their current market price, not $0.
+        price_map    = equity_prices if equity_prices else {symbol: current_price}
+        total_equity = portfolio.total_equity(price_map)
         max_allocatable = total_equity * self.max_position_pct
 
         # BUY
@@ -61,7 +68,10 @@ class RiskAgent:
             if symbol in portfolio.positions:
                 return Decision(symbol=symbol, action="HOLD")
 
-            quantity = max_allocatable // current_price
+            # max_allocatable is based on total equity (includes unrealized gains)
+            # but we can only spend actual cash — cap accordingly
+            spendable = min(max_allocatable, portfolio.cash)
+            quantity  = spendable // current_price
             if quantity <= 0:
                 return Decision(symbol=symbol, action="HOLD")
 
@@ -69,7 +79,7 @@ class RiskAgent:
                 symbol=symbol,
                 action="BUY",
                 quantity=quantity,
-                reasoning=f"Allocation: {self.max_position_pct*100:.1f}%",
+                reasoning=f"Allocation: {self.max_position_pct * 100:.1f}%",
             )
 
         # SELL

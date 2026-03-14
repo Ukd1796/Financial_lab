@@ -1,8 +1,8 @@
+import inspect
 from datetime import datetime
 from typing import List
 
-from app.backtest.models import BacktestResult , Trade
-from app.strategy.cross_sectional import CrossSectionalMomentumStrategy
+from app.backtest.models import BacktestResult, Trade
 
 
 class BacktestEngine:
@@ -15,13 +15,17 @@ class BacktestEngine:
         execution_agent,
         portfolio,
         repository=None,
+        dynamic_universe_agent=None,
+        universe_agent=None,
     ):
-        self.observer         = observer
-        self.strategy_router  = strategy_router
-        self.risk_agent       = risk_agent
-        self.execution_agent  = execution_agent
-        self.portfolio        = portfolio
-        self.repository       = repository
+        self.observer                = observer
+        self.strategy_router         = strategy_router
+        self.risk_agent              = risk_agent
+        self.execution_agent         = execution_agent
+        self.portfolio               = portfolio
+        self.repository              = repository
+        self.dynamic_universe_agent  = dynamic_universe_agent
+        self.universe_agent          = universe_agent
 
     # ==================================================
     # MAIN RUN
@@ -38,11 +42,20 @@ class BacktestEngine:
         start_date = historical_dates[0]
         end_date   = historical_dates[-1]
 
-        # ------------------------------------------
-        # PRELOAD DATA
-        # ------------------------------------------
-        for symbol in symbols:
-            self.observer.preload(symbol, start_date, end_date)
+        # Determine dispatch path once — avoids repeated inspection in the loop.
+        # Multi-symbol strategies: decide(current_date, symbol_states, portfolio)  → 3 params
+        # Per-symbol strategies:   decide(market_state, portfolio)                 → 2 params
+        _n_params     = len(inspect.signature(self.strategy_router.decide).parameters)
+        _multi_symbol = _n_params == 3
+
+        # Observer is preloaded lazily — only when a symbol first appears
+        # in the filtered universe, never upfront for the full symbol list.
+        _preloaded_syms: set = set()
+
+        # Tracks the last seen price for every symbol ever observed.
+        # Used to value held positions that are absent from today's universe
+        # so that total_equity is never distorted by missing prices.
+        _last_known_prices: dict = {}
 
         open_positions_meta = {}
 
@@ -51,21 +64,56 @@ class BacktestEngine:
         # ==================================================
         for current_date in historical_dates:
 
+            # --- Two-stage universe filtering ---
+            # Stage 1: DynamicUniverseAgent scores all symbols → top 80 UniverseCandidates
+            # Stage 2: UniverseSelectionAgent applies hard thresholds → top 20 symbols
+            if self.dynamic_universe_agent and self.universe_agent:
+                broad_candidates = self.dynamic_universe_agent.select_candidates(current_date)
+                active_symbols   = self.universe_agent.select_symbols(broad_candidates)
+                if not active_symbols:
+                    active_symbols = [c.symbol for c in broad_candidates[: self.universe_agent.top_n]]
+            elif self.dynamic_universe_agent:
+                active_symbols = self.dynamic_universe_agent.select_symbols(current_date)
+            else:
+                active_symbols = symbols
+
+            # P0 fix: always include held positions so exit signals can fire
+            # and prices are always available for equity valuation.
+            held_symbols   = set(self.portfolio.positions.keys())
+            active_symbols = list(set(active_symbols) | held_symbols)
+
             daily_symbol_states = {}
             current_prices      = {}
 
+            # --- Lazy preload: load observer data on first encounter ---
+            for symbol in active_symbols:
+                if symbol not in _preloaded_syms:
+                    try:
+                        self.observer.preload(symbol, start_date, end_date)
+                    except Exception:
+                        pass  # symbol has no data for this period — skip silently
+                    _preloaded_syms.add(symbol)
+
             # --- Gather market states ---
-            for symbol in symbols:
+            for symbol in active_symbols:
                 state = self.observer.run_for_day(symbol, current_date)
                 if state:
                     daily_symbol_states[symbol] = state
                     current_prices[symbol]       = state.latest_price
+                    _last_known_prices[symbol]   = state.latest_price
 
             if not daily_symbol_states:
                 continue
 
+            # --- P0 fix: build a complete price map for equity valuation ---
+            # Merge today's prices with last-known prices for any held position
+            # that has no data today (trading halt, de-listing, etc.) so that
+            # total_equity never prices a live position at $0.
+            equity_prices = dict(_last_known_prices)
+            equity_prices.update(current_prices)
+
             # --- Strategy layer ---
-            if isinstance(self.strategy_router, CrossSectionalMomentumStrategy):
+            if _multi_symbol:
                 proposed_decisions = self.strategy_router.decide(
                     current_date,
                     daily_symbol_states,
@@ -92,7 +140,7 @@ class BacktestEngine:
                 if not market_state:
                     continue
 
-                risk_adjusted    = self.risk_agent.evaluate(decision, self.portfolio, market_state)
+                risk_adjusted    = self.risk_agent.evaluate(decision, self.portfolio, market_state, equity_prices=equity_prices)
                 execution_result = self.execution_agent.execute(risk_adjusted, market_state, self.portfolio)
 
                 if execution_result.executed:
@@ -129,11 +177,11 @@ class BacktestEngine:
                             execution_result=execution_result,
                         )
 
-            # --- Equity snapshot ---
+            # --- Equity snapshot (uses full price map, never prices positions at $0) ---
             results.append(
                 BacktestResult(
                     date=current_date,
-                    equity=self.portfolio.total_equity(current_prices),
+                    equity=self.portfolio.total_equity(equity_prices),
                     cash=self.portfolio.cash,
                     realized_pnl=self.portfolio.realized_pnl,
                 )
