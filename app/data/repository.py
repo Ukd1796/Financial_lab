@@ -1,8 +1,9 @@
 # app/data/repository.py
 
-from typing import List
+from collections import defaultdict
+from typing import Dict, List, Set
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
+from sqlalchemy import select, distinct
 from datetime import datetime
 from app.core.database import SessionLocal
 from app.data.models import MarketOHLC, OHLCRecord
@@ -45,6 +46,16 @@ class MarketDataRepository:
         finally:
             session.close()
 
+    def get_ingested_symbols(self) -> Set[str]:
+        """Return the set of symbols that already have data in the database."""
+        session = SessionLocal()
+        try:
+            stmt = select(distinct(MarketOHLC.symbol))
+            results = session.execute(stmt).scalars().all()
+            return set(results)
+        finally:
+            session.close()
+
     def get_ohlc(
         self,
         symbol: str,
@@ -69,6 +80,35 @@ class MarketDataRepository:
         finally:
             session.close()
     
+    def get_ohlc_bulk(
+        self,
+        symbols: List[str],
+        start: datetime,
+        end: datetime,
+    ) -> Dict[str, List[MarketOHLC]]:
+        """
+        Fetch OHLCV data for multiple symbols in a single DB query.
+        Returns a dict of symbol → sorted list of MarketOHLC records.
+        Symbols with no data in the period are absent from the dict.
+        """
+        session = SessionLocal()
+        try:
+            stmt = (
+                select(MarketOHLC)
+                .where(MarketOHLC.symbol.in_(symbols))
+                .where(MarketOHLC.timestamp >= start)
+                .where(MarketOHLC.timestamp <= end)
+                .order_by(MarketOHLC.symbol.asc(), MarketOHLC.timestamp.asc())
+            )
+            rows = session.execute(stmt).scalars().all()
+
+            result: Dict[str, List[MarketOHLC]] = defaultdict(list)
+            for row in rows:
+                result[row.symbol].append(row)
+            return dict(result)
+        finally:
+            session.close()
+
     def log_decision(
     self,
     timestamp,
