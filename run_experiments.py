@@ -13,6 +13,11 @@ from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
 from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
+from app.universe.filters import (
+    BreakoutUniverseFilter,
+    MeanReversionUniverseFilter,
+    PullbackUniverseFilter,
+)
 
 # -----------------------------------------------------------------------
 # Full symbol universe — mirrors scripts/ingest_symbols.py
@@ -149,46 +154,51 @@ STRATEGIES = [
 
     # ---- Short-term momentum strategies (uptrend + sideways) ---------
     {
-        "label":           "Breakout 10d",
-        "factory":         lambda: BreakoutMomentumStrategy(),
-        "max_pos_pct":     0.10,
-        "allowed_regimes": _TREND_AND_SIDEWAYS,
-        "group":           "Short-term",
+        "label":            "Breakout 10d",
+        "factory":          lambda: BreakoutMomentumStrategy(),
+        "universe_filter":  lambda: BreakoutUniverseFilter(top_n=20),
+        "max_pos_pct":      0.10,
+        "allowed_regimes":  _TREND_AND_SIDEWAYS,
+        "group":            "Short-term",
     },
     {
-        "label":           "TrendPB v2 pct=3%",
-        "factory":         lambda: TrendPullbackStrategy(pullback_threshold=0.03),
-        "max_pos_pct":     0.10,
-        "allowed_regimes": _TREND_AND_SIDEWAYS,
-        "group":           "Short-term",
+        "label":            "TrendPB v2 pct=3%",
+        "factory":          lambda: TrendPullbackStrategy(pullback_threshold=0.03),
+        "universe_filter":  lambda: PullbackUniverseFilter(top_n=20),
+        "max_pos_pct":      0.10,
+        "allowed_regimes":  _TREND_AND_SIDEWAYS,
+        "group":            "Short-term",
     },
     {
-        "label":           "TrendPB v2 pct=5%",
-        "factory":         lambda: TrendPullbackStrategy(pullback_threshold=0.05),
-        "max_pos_pct":     0.10,
-        "allowed_regimes": _TREND_AND_SIDEWAYS,
-        "group":           "Short-term",
+        "label":            "TrendPB v2 pct=5%",
+        "factory":          lambda: TrendPullbackStrategy(pullback_threshold=0.05),
+        "universe_filter":  lambda: PullbackUniverseFilter(top_n=20),
+        "max_pos_pct":      0.10,
+        "allowed_regimes":  _TREND_AND_SIDEWAYS,
+        "group":            "Short-term",
     },
 
     # ---- Mean-reversion strategies (uptrend/sideways only + breadth circuit breaker) --
-    # Regime filter: only enter when the *individual stock* is in UPTREND or SIDEWAYS.
-    # "Oversold in a downtrend" is a falling knife; "oversold in an uptrend" is a bounce.
+    # Both the universe filter (stock-level) and allowed_regimes (per-decision gate in
+    # RiskAgent) enforce the "oversold in an uptrend only" rule at two independent layers.
     {
         "label":                   "RSI-MR  os=10 ob=70",
         "factory":                 lambda: RSIMeanReversionStrategy(
                                        rsi_oversold=10, rsi_overbought=70, max_hold_days=5),
+        "universe_filter":         lambda: MeanReversionUniverseFilter(top_n=20),
         "max_pos_pct":             0.10,
         "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
-        "breadth_circuit_breaker": True,   # suppress buys when >60% of universe in DOWNTREND
+        "breadth_circuit_breaker": True,
         "group":                   "Mean-reversion",
     },
     {
         "label":                   "RSI-MR  os=5  ob=80",
         "factory":                 lambda: RSIMeanReversionStrategy(
                                        rsi_oversold=5,  rsi_overbought=80, max_hold_days=7),
+        "universe_filter":         lambda: MeanReversionUniverseFilter(top_n=20),
         "max_pos_pct":             0.10,
         "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
-        "breadth_circuit_breaker": True,   # suppress buys when >60% of universe in DOWNTREND
+        "breadth_circuit_breaker": True,
         "group":                   "Mean-reversion",
     },
 ]
@@ -248,7 +258,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None):
 
     if not ctx.historical_dates:
         return None
@@ -276,15 +286,19 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         max_downtrend_pct=0.60,        # block BUY when >60% of universe in DOWNTREND
     )
 
+    # Use the per-strategy universe filter when provided; fall back to the
+    # shared UniverseSelectionAgent (the original activity-based filter).
+    active_universe_agent = universe_filter if universe_filter is not None else ctx.universe_agent
+
     engine = BacktestEngine(
         observer=ctx.observer,
         strategy_router=strategy,
         risk_agent=risk_agent,
         execution_agent=execution_agent,
         portfolio=portfolio,
-        repository=repository,
+        repository=None,   # no decision logging during backtests — avoids DB timeouts
         dynamic_universe_agent=ctx.dynamic_universe_agent,
-        universe_agent=ctx.universe_agent,
+        universe_agent=active_universe_agent,
     )
 
     results, trades = engine.run(BROAD_UNIVERSE, ctx.historical_dates)
@@ -356,12 +370,14 @@ def main():
                 current_group = cfg["group"]
                 print(f"{DIVIDER}  [{current_group}]")
 
-            strategy = cfg["factory"]()
-            result   = run_experiment(
+            strategy         = cfg["factory"]()
+            universe_filter  = cfg["universe_filter"]() if cfg.get("universe_filter") else None
+            result           = run_experiment(
                 repository, strategy, ctx,
                 max_position_pct=cfg["max_pos_pct"],
                 allowed_regimes=cfg.get("allowed_regimes"),
                 breadth_circuit_breaker=cfg.get("breadth_circuit_breaker", False),
+                universe_filter=universe_filter,
             )
             _print_row(cfg["label"], result)
 

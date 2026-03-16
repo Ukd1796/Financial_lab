@@ -106,11 +106,21 @@ class DynamicUniverseAgent:
 
         # ---- Price movement ----
         df["daily_return"] = df["close"].pct_change(1)
+        df["return_3d"]    = df["close"].pct_change(3)
 
         # ---- Short-term realised volatility ----
         df["rolling_vol_5d"] = (
             df["daily_return"].rolling(5, min_periods=5).std()
         )
+
+        # ---- Trend state — used by per-strategy universe filters ----
+        # shift(1) so that today's SMA is computed from completed bars only;
+        # no look-ahead into today's close.
+        df["sma_20"] = df["close"].rolling(20, min_periods=20).mean()
+        df["sma_50"] = df["close"].rolling(50, min_periods=50).mean()
+        df["sma_20_above_sma_50"]   = df["sma_20"] > df["sma_50"]
+        # slope > 0 means the SMA_20 is still rising — trend accelerating, not topping
+        df["sma_20_slope_positive"] = df["sma_20"].diff() > 0
 
         # ---- Normalised ATR (stored for reference, not used in scoring) ----
         prev_close = df["close"].shift(1)
@@ -161,14 +171,21 @@ class DynamicUniverseAgent:
             if pd.isna(rel_vol) or pd.isna(daily_ret) or pd.isna(vol_5d):
                 continue
 
+            return_3d          = row.get("return_3d", float("nan"))
+            sma_20_above_sma50 = row.get("sma_20_above_sma_50", False)
+            sma_20_slope_pos   = row.get("sma_20_slope_positive", False)
+
             rows.append(
                 {
-                    "symbol":           symbol,
-                    "relative_volume":  float(rel_vol),
-                    "daily_return":     float(daily_ret),
-                    "abs_daily_return": abs(float(daily_ret)),
-                    "rolling_vol_5d":   float(vol_5d),
-                    "atr_ratio":        float(atr_ratio) if not pd.isna(atr_ratio) else 0.0,
+                    "symbol":               symbol,
+                    "relative_volume":      float(rel_vol),
+                    "daily_return":         float(daily_ret),
+                    "abs_daily_return":     abs(float(daily_ret)),
+                    "rolling_vol_5d":       float(vol_5d),
+                    "atr_ratio":            float(atr_ratio) if not pd.isna(atr_ratio) else 0.0,
+                    "return_3d":            float(return_3d) if not pd.isna(return_3d) else 0.0,
+                    "sma_20_above_sma_50":  bool(sma_20_above_sma50),
+                    "sma_20_slope_positive": bool(sma_20_slope_pos),
                 }
             )
 
@@ -179,6 +196,10 @@ class DynamicUniverseAgent:
                     relative_volume=r["relative_volume"],
                     daily_return=r["daily_return"],
                     atr_ratio=r["atr_ratio"],
+                    sma_20_above_sma_50=r["sma_20_above_sma_50"],
+                    sma_20_slope_positive=r["sma_20_slope_positive"],
+                    return_3d=r["return_3d"],
+                    rolling_vol_5d=r["rolling_vol_5d"],
                 )
                 for r in rows
             ]
@@ -204,6 +225,10 @@ class DynamicUniverseAgent:
                 relative_volume=float(scores.loc[symbol, "relative_volume"]),
                 daily_return=float(scores.loc[symbol, "daily_return"]),
                 atr_ratio=float(scores.loc[symbol, "atr_ratio"]),
+                sma_20_above_sma_50=bool(scores.loc[symbol, "sma_20_above_sma_50"]),
+                sma_20_slope_positive=bool(scores.loc[symbol, "sma_20_slope_positive"]),
+                return_3d=float(scores.loc[symbol, "return_3d"]),
+                rolling_vol_5d=float(scores.loc[symbol, "rolling_vol_5d"]),
             )
             for symbol in top.index
         ]
