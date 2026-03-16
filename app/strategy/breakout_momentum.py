@@ -11,6 +11,14 @@ class BreakoutMomentumStrategy:
     Exit:   Close falls back below SMA_10 — momentum stalling.
 
     Horizon: 3–10 days.
+
+    Implementation note
+    -------------------
+    Multi-symbol strategies must emit an explicit HOLD decision for every held position
+    that has no other action. Without this, the RiskAgent's ATR stop check is never
+    triggered for that symbol (RiskAgent only runs when it receives a Decision).
+    The ATR stop in RiskAgent is a critical secondary exit — especially important
+    for breakouts that fail and reverse sharply below SMA_10.
     """
 
     def decide(
@@ -42,6 +50,17 @@ class BreakoutMomentumStrategy:
                         f"Momentum weakening "
                         f"(price={price:.2f} < SMA_10={sma_10:.2f})"
                     ),
+                ))
+                continue
+
+            # --- Still holding above SMA_10: emit HOLD so RiskAgent checks ATR stop ---
+            # Without this, a sharp gap-down that breaches the ATR stop but lands
+            # above SMA_10 would not trigger the ATR stop check.
+            if in_position:
+                decisions.append(Decision(
+                    symbol=symbol,
+                    action="HOLD",
+                    reasoning=f"Breakout intact (price={price:.2f} >= SMA_10={sma_10:.2f})",
                 ))
                 continue
 

@@ -1,4 +1,5 @@
 import bisect
+import statistics
 
 from app.strategy.models import Decision
 
@@ -7,8 +8,19 @@ class CrossSectionalMomentumStrategy:
     """
     Cross-sectional momentum strategy.
 
-    Ranks symbols by N-day return, buys top-K, sells positions that drop out.
+    Ranks symbols by risk-adjusted momentum score (N-day return / rolling vol),
+    buys top-K, sells positions that drop out.
     Rebalances every `rebalance_frequency` trading days.
+
+    Scoring
+    -------
+    momentum_score = N_day_return / rolling_vol_N_day
+
+    This normalises momentum by each stock's own volatility so that a smooth
+    20% gain scores higher than a volatile 20% gain. The `momentum_threshold`
+    parameter now applies to this score (unit: return/vol, not raw %), making
+    it a meaningful differentiator rather than an always-satisfied raw return
+    gate.
 
     Price feed modes
     ----------------
@@ -29,7 +41,7 @@ class CrossSectionalMomentumStrategy:
         lookback_days:       int   = 100,
         top_n:               int   = 3,
         rebalance_frequency: int   = 20,
-        momentum_threshold:  float = 0.05,
+        momentum_threshold:  float = 0.5,  # min risk-adjusted score (return / vol)
     ):
         self.lookback_days        = lookback_days
         self.top_n                = top_n
@@ -125,10 +137,15 @@ class CrossSectionalMomentumStrategy:
         current_date,
     ) -> float | None:
         """
-        Return the N-day price momentum for `symbol` as of `current_date`.
+        Return the risk-adjusted momentum score for `symbol`:
 
-        Uses the pre-loaded price feed when available (preferred), otherwise
-        falls back to the incrementally accumulated price_history.
+            score = N_day_return / rolling_vol_N_day
+
+        `rolling_vol_N_day` is the standard deviation of daily returns over
+        the lookback window. This normalises momentum by volatility so that
+        smooth gains score higher than choppy gains of the same magnitude.
+
+        Returns None when there is insufficient history.
         """
         if self._price_feed:
             dates = self._sorted_dates.get(symbol)
@@ -140,15 +157,35 @@ class CrossSectionalMomentumStrategy:
             if idx < self.lookback_days:
                 return None
 
-            past_price = self._price_feed[symbol][dates[idx - self.lookback_days]]
-            if past_price == 0:
+            price_series = [
+                self._price_feed[symbol][dates[i]]
+                for i in range(idx - self.lookback_days, idx + 1)
+            ]
+        else:
+            # Fallback: accumulate from symbol_states
+            self.price_history.setdefault(symbol, []).append(latest_price)
+            history = self.price_history[symbol]
+            if len(history) < self.lookback_days + 1:
                 return None
+            price_series = history[-(self.lookback_days + 1):]
 
-            return (latest_price / past_price) - 1
-
-        # Fallback: accumulate from symbol_states
-        self.price_history.setdefault(symbol, []).append(latest_price)
-        history = self.price_history[symbol]
-        if len(history) < self.lookback_days:
+        if not price_series or price_series[0] == 0:
             return None
-        return (latest_price / history[-self.lookback_days]) - 1
+
+        n_day_return = (price_series[-1] / price_series[0]) - 1
+
+        # Daily returns over the lookback window for vol calculation
+        daily_returns = [
+            (price_series[i] / price_series[i - 1]) - 1
+            for i in range(1, len(price_series))
+            if price_series[i - 1] != 0
+        ]
+
+        if len(daily_returns) < 2:
+            return None
+
+        vol = statistics.stdev(daily_returns)
+        if vol == 0:
+            return None
+
+        return n_day_return / vol

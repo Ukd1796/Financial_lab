@@ -128,6 +128,17 @@ class BacktestEngine:
                     )
                     proposed_decisions.append(decision)
 
+            # --- Market breadth: fraction of active universe in DOWNTREND ---
+            # Used by the breadth circuit breaker in RiskAgent.
+            downtrend_count = sum(
+                1 for s in daily_symbol_states.values()
+                if isinstance(s.indicators.get("regime"), str)
+                and "DOWNTREND" in s.indicators["regime"]
+            )
+            market_downtrend_pct = (
+                downtrend_count / len(daily_symbol_states) if daily_symbol_states else 0.0
+            )
+
             # --- Risk + execution ---
             for decision in proposed_decisions:
 
@@ -140,7 +151,13 @@ class BacktestEngine:
                 if not market_state:
                     continue
 
-                risk_adjusted    = self.risk_agent.evaluate(decision, self.portfolio, market_state, equity_prices=equity_prices)
+                risk_adjusted    = self.risk_agent.evaluate(
+                    decision,
+                    self.portfolio,
+                    market_state,
+                    equity_prices=equity_prices,
+                    market_downtrend_pct=market_downtrend_pct,
+                )
                 execution_result = self.execution_agent.execute(risk_adjusted, market_state, self.portfolio)
 
                 if execution_result.executed:

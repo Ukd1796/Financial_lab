@@ -18,8 +18,15 @@ class ExecutionResult:
 
 class ExecutionAgent:
 
-    def __init__(self, portfolio_engine):
+    def __init__(
+        self,
+        portfolio_engine,
+        commission_pct: float = 0.001,   # 0.10% per side (NSE brokerage + STT + charges)
+        slippage_pct:   float = 0.0005,  # 0.05% per side market-impact estimate
+    ):
         self.portfolio_engine = portfolio_engine
+        self.commission_pct   = commission_pct
+        self.slippage_pct     = slippage_pct
 
     def _serialize_positions(self, positions):
         return {
@@ -34,6 +41,21 @@ class ExecutionAgent:
 
         current_price = market_state.latest_price
 
+        # ------------------------------------------------------------------
+        # Effective execution price — bakes slippage + commission into the
+        # per-share price so all downstream accounting (cash, avg_price,
+        # realized PnL, trade PnL) is automatically post-cost.
+        #
+        #   BUY  : we pay more  → price * (1 + slip) * (1 + comm)
+        #   SELL : we receive less → price * (1 - slip) * (1 - comm)
+        # ------------------------------------------------------------------
+        if decision.action == "BUY":
+            exec_price = current_price * (1 + self.slippage_pct) * (1 + self.commission_pct)
+        elif decision.action == "SELL":
+            exec_price = current_price * (1 - self.slippage_pct) * (1 - self.commission_pct)
+        else:
+            exec_price = current_price
+
         # Snapshot BEFORE execution
         portfolio_before = {
             "cash": portfolio.cash,
@@ -41,37 +63,42 @@ class ExecutionAgent:
             "realized_pnl": portfolio.realized_pnl
         }
 
-        executed = False
-        trade_pnl = 0.0
+        executed     = False
+        trade_pnl    = 0.0
+        exec_quantity = decision.quantity  # actual shares transacted (may differ from decision)
 
         # -------------------------
         # BUY
         # -------------------------
         if decision.action == "BUY" and decision.quantity:
 
-            self.portfolio_engine.buy(
-                decision.symbol,
-                decision.quantity,
-                current_price
-            )
-            executed = True
+            # RiskAgent sized using raw price; exec_price includes cost markup.
+            # Trim down to what cash can actually cover at the effective price.
+            exec_quantity = min(int(decision.quantity), int(portfolio.cash // exec_price))
+            if exec_quantity > 0:
+                self.portfolio_engine.buy(
+                    decision.symbol,
+                    exec_quantity,
+                    exec_price,
+                )
+                executed = True
 
         # -------------------------
         # SELL
         # -------------------------
         elif decision.action == "SELL" and decision.quantity:
 
-            # Capture entry price BEFORE selling
+            # Capture cost basis BEFORE selling so trade_pnl reflects net P&L
+            # (entry_price already includes buy-side costs from the BUY exec_price)
             if decision.symbol in portfolio.positions:
-                entry_price = portfolio.positions[decision.symbol].average_price
-                quantity = portfolio.positions[decision.symbol].quantity
-
-                trade_pnl = (current_price - entry_price) * quantity
+                entry_price   = portfolio.positions[decision.symbol].average_price
+                exec_quantity = portfolio.positions[decision.symbol].quantity
+                trade_pnl     = (exec_price - entry_price) * exec_quantity
 
             self.portfolio_engine.sell(
                 decision.symbol,
-                decision.quantity,
-                current_price
+                exec_quantity,
+                exec_price,
             )
             executed = True
 
@@ -85,8 +112,8 @@ class ExecutionAgent:
         return ExecutionResult(
             executed=executed,
             action=decision.action,
-            quantity=decision.quantity,
-            price=current_price,
+            quantity=exec_quantity,
+            price=exec_price,
             portfolio_before=portfolio_before,
             portfolio_after=portfolio_after,
             trade_pnl=trade_pnl
