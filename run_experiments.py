@@ -9,8 +9,6 @@ from app.portfolio.engine import PortfolioEngine
 from app.portfolio.models import Portfolio
 from app.risk.agent import RiskAgent
 from app.strategy.breakout_momentum import BreakoutMomentumStrategy
-from app.strategy.cross_sectional import CrossSectionalMomentumStrategy
-from app.strategy.dual_ma import DualMovingAverageStrategy
 from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
 from app.universe.agent import UniverseSelectionAgent
@@ -80,6 +78,13 @@ _TREND_AND_SIDEWAYS = [
 # Mean-reversion: works in any regime — None disables the filter entirely
 _ALL_REGIMES = None
 
+# Mean-reversion restricted to uptrend/sideways: "oversold in an uptrend"
+# Prevents RSI-MR from catching falling knives in downtrending stocks.
+_UPTREND_AND_SIDEWAYS = [
+    "LOW_VOL_UPTREND",  "MID_VOL_UPTREND",  "HIGH_VOL_UPTREND",
+    "LOW_VOL_SIDEWAYS", "MID_VOL_SIDEWAYS",  "HIGH_VOL_SIDEWAYS",
+]
+
 # -----------------------------------------------------------------------
 # Time periods
 # -----------------------------------------------------------------------
@@ -106,41 +111,41 @@ PERIODS = {
 #   group           — section header for the printed table
 # -----------------------------------------------------------------------
 STRATEGIES = [
-    # ---- Medium-term trend strategies (uptrend regime only) ----------
-    {
-        "label":           "CS  L=100 R=20 T=5%",
-        "factory":         lambda: CrossSectionalMomentumStrategy(
-                               lookback_days=100, top_n=3,
-                               rebalance_frequency=20, momentum_threshold=0.05),
-        "max_pos_pct":     0.20,
-        "allowed_regimes": _UPTREND_ONLY,
-        "group":           "Medium-term",
-    },
-    {
-        "label":           "CS  L=80  R=20 T=5%",
-        "factory":         lambda: CrossSectionalMomentumStrategy(
-                               lookback_days=80, top_n=3,
-                               rebalance_frequency=20, momentum_threshold=0.05),
-        "max_pos_pct":     0.20,
-        "allowed_regimes": _UPTREND_ONLY,
-        "group":           "Medium-term",
-    },
-    {
-        "label":           "CS  L=100 R=20 T=3%",
-        "factory":         lambda: CrossSectionalMomentumStrategy(
-                               lookback_days=100, top_n=3,
-                               rebalance_frequency=20, momentum_threshold=0.03),
-        "max_pos_pct":     0.20,
-        "allowed_regimes": _UPTREND_ONLY,
-        "group":           "Medium-term",
-    },
-    {
-        "label":           "DualMA SMA20/50",
-        "factory":         lambda: DualMovingAverageStrategy(),
-        "max_pos_pct":     0.15,
-        "allowed_regimes": _UPTREND_ONLY,
-        "group":           "Medium-term",
-    },
+    # # ---- Medium-term trend strategies (uptrend regime only) ----------
+    # {
+    #     "label":           "CS  L=100 R=20 T=5%",
+    #     "factory":         lambda: CrossSectionalMomentumStrategy(
+    #                            lookback_days=100, top_n=3,
+    #                            rebalance_frequency=20, momentum_threshold=0.05),
+    #     "max_pos_pct":     0.20,
+    #     "allowed_regimes": _UPTREND_ONLY,
+    #     "group":           "Medium-term",
+    # },
+    # {
+    #     "label":           "CS  L=80  R=20 T=5%",
+    #     "factory":         lambda: CrossSectionalMomentumStrategy(
+    #                            lookback_days=80, top_n=3,
+    #                            rebalance_frequency=20, momentum_threshold=0.05),
+    #     "max_pos_pct":     0.20,
+    #     "allowed_regimes": _UPTREND_ONLY,
+    #     "group":           "Medium-term",
+    # },
+    # {
+    #     "label":           "CS  L=100 R=20 T=3%",
+    #     "factory":         lambda: CrossSectionalMomentumStrategy(
+    #                            lookback_days=100, top_n=3,
+    #                            rebalance_frequency=20, momentum_threshold=0.03),
+    #     "max_pos_pct":     0.20,
+    #     "allowed_regimes": _UPTREND_ONLY,
+    #     "group":           "Medium-term",
+    # },
+    # {
+    #     "label":           "DualMA SMA20/50",
+    #     "factory":         lambda: DualMovingAverageStrategy(),
+    #     "max_pos_pct":     0.15,
+    #     "allowed_regimes": _UPTREND_ONLY,
+    #     "group":           "Medium-term",
+    # },
 
     # ---- Short-term momentum strategies (uptrend + sideways) ---------
     {
@@ -151,36 +156,40 @@ STRATEGIES = [
         "group":           "Short-term",
     },
     {
-        "label":           "TrendPB pct=3%",
+        "label":           "TrendPB v2 pct=3%",
         "factory":         lambda: TrendPullbackStrategy(pullback_threshold=0.03),
         "max_pos_pct":     0.10,
         "allowed_regimes": _TREND_AND_SIDEWAYS,
         "group":           "Short-term",
     },
     {
-        "label":           "TrendPB pct=5%",
+        "label":           "TrendPB v2 pct=5%",
         "factory":         lambda: TrendPullbackStrategy(pullback_threshold=0.05),
         "max_pos_pct":     0.10,
         "allowed_regimes": _TREND_AND_SIDEWAYS,
         "group":           "Short-term",
     },
 
-    # ---- Mean-reversion strategies (no regime gate) ------------------
+    # ---- Mean-reversion strategies (uptrend/sideways only + breadth circuit breaker) --
+    # Regime filter: only enter when the *individual stock* is in UPTREND or SIDEWAYS.
+    # "Oversold in a downtrend" is a falling knife; "oversold in an uptrend" is a bounce.
     {
-        "label":           "RSI-MR  os=10 ob=70",
-        "factory":         lambda: RSIMeanReversionStrategy(
-                               rsi_oversold=10, rsi_overbought=70, max_hold_days=5),
-        "max_pos_pct":     0.10,
-        "allowed_regimes": _ALL_REGIMES,
-        "group":           "Mean-reversion",
+        "label":                   "RSI-MR  os=10 ob=70",
+        "factory":                 lambda: RSIMeanReversionStrategy(
+                                       rsi_oversold=10, rsi_overbought=70, max_hold_days=5),
+        "max_pos_pct":             0.10,
+        "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
+        "breadth_circuit_breaker": True,   # suppress buys when >60% of universe in DOWNTREND
+        "group":                   "Mean-reversion",
     },
     {
-        "label":           "RSI-MR  os=5  ob=80",
-        "factory":         lambda: RSIMeanReversionStrategy(
-                               rsi_oversold=5,  rsi_overbought=80, max_hold_days=7),
-        "max_pos_pct":     0.10,
-        "allowed_regimes": _ALL_REGIMES,
-        "group":           "Mean-reversion",
+        "label":                   "RSI-MR  os=5  ob=80",
+        "factory":                 lambda: RSIMeanReversionStrategy(
+                                       rsi_oversold=5,  rsi_overbought=80, max_hold_days=7),
+        "max_pos_pct":             0.10,
+        "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
+        "breadth_circuit_breaker": True,   # suppress buys when >60% of universe in DOWNTREND
+        "group":                   "Mean-reversion",
     },
 ]
 
@@ -239,7 +248,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False):
 
     if not ctx.historical_dates:
         return None
@@ -252,11 +261,19 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
 
     portfolio        = Portfolio(cash=INITIAL_CAPITAL)
     portfolio_engine = PortfolioEngine(portfolio)
-    execution_agent  = ExecutionAgent(portfolio_engine)
+    execution_agent  = ExecutionAgent(
+        portfolio_engine,
+        commission_pct=0.001,   # 0.10% per side
+        slippage_pct=0.0005,    # 0.05% per side
+    )
     risk_agent       = RiskAgent(
         max_position_pct=max_position_pct,
         atr_multiplier=2.0,
         allowed_regimes=allowed_regimes,
+        risk_per_trade_pct=0.005,      # risk 0.5% of portfolio per trade
+        use_vol_sizing=True,
+        breadth_circuit_breaker=breadth_circuit_breaker,
+        max_downtrend_pct=0.60,        # block BUY when >60% of universe in DOWNTREND
     )
 
     engine = BacktestEngine(
@@ -328,6 +345,7 @@ def main():
         print(f"\n{'=' * (ROW_W + 2)}")
         print(f"  Period: {period_label}   ({start_date.date()} → {end_date.date()})")
         print(f"  Universe: {len(BROAD_UNIVERSE)} symbols → DynamicUniverse top 80 → UniverseSelection top 20")
+        print(f"  Costs: 0.10% commission + 0.05% slippage per side (all returns net of costs)")
         print(f"{'=' * (ROW_W + 2)}")
         print(HEADER)
 
@@ -343,6 +361,7 @@ def main():
                 repository, strategy, ctx,
                 max_position_pct=cfg["max_pos_pct"],
                 allowed_regimes=cfg.get("allowed_regimes"),
+                breadth_circuit_breaker=cfg.get("breadth_circuit_breaker", False),
             )
             _print_row(cfg["label"], result)
 
