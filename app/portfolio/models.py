@@ -20,7 +20,7 @@ class Portfolio:
         for symbol, position in self.positions.items():
             equity += position.quantity * current_prices.get(symbol, 0)
         return equity
-    
+
     def unrealized_pnl(self, current_prices: Dict[str, float]) -> float:
         pnl = 0.0
         for symbol, position in self.positions.items():
