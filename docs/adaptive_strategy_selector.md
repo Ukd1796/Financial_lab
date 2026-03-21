@@ -1,5 +1,10 @@
 # Adaptive Strategy Selector — Design & Integration Guide
 
+**Last updated**: 2026-03-19
+**Status**: Pre-requisites complete. Ready to build.
+
+---
+
 ## 1. What It Is
 
 The Adaptive Strategy Selector is a weekly meta-layer that reads the current market regime
@@ -12,11 +17,12 @@ allocated to each strategy's signals is scaled by a **weight vector** that shift
 on market conditions:
 
 ```
-Current regime snapshot → AdaptiveStrategySelector (LLM) → {CS: 0.4, Breakout: 0.3, DualMA: 0.2, RSI-MR: 0.1}
+Current regime snapshot → AdaptiveStrategySelector (Claude API) →
+  {DualMA: 0.35, Breakout: 0.30, QuietBrk: 0.20, TrendPB: 0.10, RSI-MR: 0.05}
 ```
 
-The weights then influence position sizing: a strategy with weight 0.4 gets 40% of the
-portfolio's available risk budget, while one with weight 0.1 only gets 10%.
+The weights influence position sizing: a strategy with weight 0.35 gets 35% of the
+portfolio's available risk budget, while one with weight 0.05 only gets 5%.
 
 ---
 
@@ -25,94 +31,106 @@ portfolio's available risk budget, while one with weight 0.1 only gets 10%.
 The results reveal a pattern the rules-based system cannot exploit: **no single strategy
 dominates across all regimes, but regime-matched strategies significantly outperform.**
 
-### Per-regime best performer
+### 2.1 Per-regime best performer (current strategy pool)
 
-| Period | Regime | Best strategy | Sharpe | Return |
+| Period | Regime character | Best strategy | Sharpe | Return |
 |---|---|---|---|---|
-| Bull 2019 | Trending, low-vol | CS L=100 | 1.53 | +9.6% |
-| Crash 2020 | High-vol, falling | Breakout 10d | 1.44 | +23.9% |
-| Recovery 2020–21 | V-shaped, high-breadth | Breakout 10d | 2.48 | +101.5% |
-| Bear 2022 | Choppy, declining | CS L=100 | 1.11 | +8.4% |
-| Recent 2022–24 | Mixed trending | DualMA | 1.67 | +65.8% |
+| Bull 2019–20 | Slow, low-vol uptrend | QuietBrk 20d | 0.98 | +14% |
+| Crash 2020 | High-vol, V-shaped | QuietBrk 20d | 2.00 | +35% |
+| Recovery 2020–21 | Broad uptrend, high breadth | QuietBrk 20d | **2.80** | +129% |
+| Bear 2022 | Choppy, rolling decline | DualMA | **0.56** | +8% |
+| Recent 2022–24 | Mixed, trending | DualMA | **1.73** | +81% |
 
-### What gets left on the table
+### 2.2 Full Sharpe matrix — current strategy pool
 
-In Recovery 2020–21, RSI-MR (os=10) delivered only +5.7% Sharpe 0.53 while Breakout
-delivered +101.5% Sharpe 2.48. A system running both with equal weight averages the two
-outcomes. A system that allocated 70% to Breakout in that regime would have captured
-most of the upside.
+| Strategy | Bull 19–20 | Crash 20 | Recov 20–21 | Bear 22 | Recent 22–24 | Full 18–24 |
+|---|---|---|---|---|---|---|
+| DualMA SMA20/50 | 0.40 | 1.38 | 2.55 | **0.56** | **1.73** | 1.29 |
+| Breakout 10d | 0.49 | 1.49 | 2.48 | 0.39 | 1.15 | 1.12 |
+| QuietBrk 20d | 0.98 | **2.00** | **2.80** | -0.67 | 0.67 | 1.05 |
+| TrendPB 5% | 0.97 | 1.80 | 1.23 | -0.34 | 0.89 | 0.80 |
+| RSI-MR os=5 | 0.21 | 0.86 | 1.37 | -0.66 | -0.11 | 0.25 |
 
-In Bear 2022, DualMA delivered +65.8% on the 2022-24 window while TrendPB lost -10.6%.
-Equal weighting again drags the combined result toward the median, not the best performer.
+### 2.3 What gets left on the table
 
-**The core insight:** regime characteristics are measurable from the universe data we
-already compute daily (% UPTREND, % DOWNTREND, ATR percentile, breadth). The LLM is
-the right tool to translate these signals into a strategy weight vector because the
-mapping is pattern-matching with many interacting variables, not a deterministic rule.
+**Recovery 2020–21**: QuietBrk produced Sharpe 2.80 (+129%) while RSI-MR os=5 produced
+Sharpe 1.37 (+33%). Running both at equal weight averages toward 2.09. A selector routing
+60% to QuietBrk + 30% to Breakout + 10% to DualMA in that regime would have captured
+most of the upside while maintaining diversification.
+
+**Bear 2022**: DualMA is the only positive strategy (+8%, Sharpe 0.56). QuietBrk loses
+-10%, TrendPB loses -9%, RSI-MR loses -9% to -12%. An equal-weight portfolio of all
+five would have lost roughly -4% in Bear 2022. A selector routing 70% to DualMA + 20%
+to Breakout + 10% to TrendPB5% (the least-bad of the others) limits losses to near-zero
+and still captures the DualMA upside.
+
+**The core insight:** regime characteristics are measurable from the universe data already
+computed daily (% UPTREND, % DOWNTREND, ATR percentile, breadth). The selector translates
+these signals into a weight vector. The key insight is that **QuietBrk and DualMA are
+complementary**: QuietBrk excels in volatile trending conditions (Crash/Recovery),
+DualMA excels when the trend is sustained and low-noise (Bear survival + Recent trending).
+No single strategy holds both characteristics.
 
 ---
 
-## 3. Pre-requisites — Fix These Before Building the Selector
+## 3. Pre-requisites — Status
 
-**The adaptive selector allocates weight to strategies. If a strategy is structurally
-broken, the selector will learn to give it zero weight — but that means the complexity
-is wasted.** Fix the strategies first so the selector has 3-4 genuinely profitable
-strategies to allocate between.
+All critical pre-requisites are now resolved. The strategy pool is ready for the selector.
 
-### 3.1 CS momentum threshold is still dead (Priority: Critical)
+### ✅ 3.1 RSI-MR HOLD emission — DONE
 
-`CS L=100 T=0.5` and `CS L=100 T=1.0` produce **identical results** across all six
-periods — same 75 trades, same 189.31% full-period return. The risk-adjusted momentum
-score (`N_day_return / rolling_vol`) was implemented but the threshold is still not
-differentiating.
+`RSIMeanReversionStrategy.decide()` emits explicit `HOLD` decisions for all held positions
+when neither the time-stop nor the RSI exit fires. The ATR stop in `RiskAgent` runs
+correctly on every bar. Verified in code (`rsi_mean_reversion.py` lines 90–105).
 
-**Diagnosis to run:** Add a print inside `_compute_momentum()` to log the min, max, and
-mean score across the universe for a single date. If all scores are well above both 0.5
-and 1.0, the threshold is in dead space for a different reason than before.
+### ✅ 3.2 Breadth circuit breaker tightened to 40% — DONE (R1)
 
-**Fix options:**
-- Lower thresholds to 0.1 and 0.3 (risk-adj score in recovery periods can be 2-5, in
-  sideways periods 0.1-0.5)
-- Or remove threshold entirely and rely on top-N selection by score rank
+`RiskAgent.max_downtrend_pct` default is now 0.40. BUY signals are blocked when >40%
+of the active universe is in DOWNTREND. This was the primary Bear 2022 fix — RSI-MR
+Bear losses reduced from -21% to -12% as a result.
 
-### 3.2 RSI-MR does not emit HOLD decisions (Priority: High)
+### ✅ 3.3 sma_cross_age filter for RSI-MR — DONE (R2)
 
-Unlike Breakout and TrendPullback which were fixed to emit `HOLD` for held positions,
-`RSIMeanReversionStrategy.decide()` only emits decisions when the time-stop or RSI exit
-fires. When neither condition is met, no decision is emitted → `RiskAgent.evaluate()` is
-never called → **the ATR stop is silently disabled for all RSI-MR held positions**.
+`MeanReversionUniverseFilter` requires `sma_cross_age >= 10`. Stocks whose SMA20 crossed
+SMA50 in the last 9 days are rejected as mean-reversion candidates (false uptrends in
+bear markets). This complemented R1 in cutting RSI-MR bear losses.
 
-This is the same bug that was fixed in TrendPullback. For RSI-MR's 1–5 day hold window,
-the ATR stop is critical because it cuts losers before the time-stop fires.
+### ✅ 3.4 CS momentum strategy — RETIRED
 
-**Fix:** Add an explicit `HOLD` emission in the `in_position` branch when neither the
-time-stop nor the RSI exit fires (same pattern as Breakout and TrendPullback).
+`CrossSectionalMomentumStrategy` is commented out of `run_experiments.py`. It is not
+part of the active strategy pool and does not need to be included in the selector.
 
-### 3.3 TrendPullback — still losing on full period (Priority: Medium)
+### ⚠️ 3.5 QuietBrk 20d Bear regime gate — OPEN (Priority: High before multi-strategy run)
 
-Full period: -11.8% (3% threshold), +1.86% (5% threshold). Both are below breakeven
-adjusted for opportunity cost. The SMA_20 exit fix helped in Recovery (+16.7%) but the
-strategy loses in Bull, Bear, and Recent periods.
+QuietBrk 20d loses -10% in Bear 2022 (Sharpe -0.67). Its current `allowed_regimes` is
+`_TREND_AND_SIDEWAYS`, which permits entries on stocks classified as SIDEWAYS even when
+the broad market is declining.
 
-**Root issue:** The strategy buys pullbacks in uptrends but the NSE mid-cap stocks in
-the universe have highly asymmetric pullback profiles — when they pull back 3-5%, half
-of them are breaking down, not pulling back. The `sma_20 > sma_50` filter is too weak.
+**Two options:**
+- Switch `allowed_regimes` to `_UPTREND_ONLY` in `run_experiments.py` (tightest gate —
+  blocks entry on any stock not in a confirmed UPTREND per SMA50 regime classifier)
+- Or let the adaptive selector handle it by weighting QuietBrk to ~0.05 in bear regimes
+  (simpler, but the per-trade losses still occur even at low weight)
 
-**Proposed fix before including in the selector:**
-- Add a volume confirmation: entry only when pullback occurs on declining volume
-  (distribution signal vs panic selling)
-- Or add a minimum recovery signal: require RSI_3 < 30 on entry (ensures the pullback
-  is extreme, not just a routine -3%)
-- Or retire TrendPB from the active strategy pool and replace with a
-  volatility-breakout entry (Donchian channels)
+**Recommendation:** Apply `_UPTREND_ONLY` first. Test that Crash/Recovery Sharpe is
+preserved (the crash-to-recovery V-shape has most stocks in confirmed UPTREND by the
+time QuietBrk entries fire). Then confirm the selector can further down-weight it in bear.
 
-### 3.4 RSI-MR needs a hold-duration guard (Priority: Low)
+### ⚠️ 3.6 RSI-MR os=10 — SHOULD BE RETIRED from multi-strategy pool
 
-In Bear 2022, RSI-MR (os=10) loses -10.88% with 209 trades. The `max_hold_days=5`
-time-stop fires consistently but the position is usually down by then. The problem is
-RSI_3 < 10 is a genuine extreme in downtrends — stocks are oversold for a reason.
-The breadth circuit breaker (60% in DOWNTREND) helps but Bear 2022 shows -10.88%
-despite it, meaning the threshold may need tightening to 50%.
+RSI-MR os=10 is -13% full period and -12% in Bear 2022. RSI-MR os=5 dominates it in
+every single period (higher or equal Sharpe, lower or equal losses). Running both in the
+multi-strategy pool adds execution noise without diversification benefit. The selector
+should only include RSI-MR os=5.
+
+### ⚠️ 3.7 TrendPB Bear 2022 — STRUCTURAL ISSUE REMAINS
+
+TrendPB 3% and 5% both lose in Bear 2022 (-9% / -2%). R3 (`sma_cross_age >= 15` filter)
+was reverted because it harmed Recovery without fixing Bear. TrendPB 5% has an acceptable
+full-period result (+39%, Sharpe 0.80) and should remain in the selector pool, but the
+selector should learn to down-weight it in bear conditions. TrendPB 3% (+42%, Sharpe 0.63)
+offers minimal additional diversification over TrendPB 5% — consider dropping it from
+the multi-strategy pool to reduce decision noise (5% threshold dominates in most periods).
 
 ---
 
@@ -123,233 +141,379 @@ despite it, meaning the threshold may need tightening to 50%.
 ```
 BacktestEngine.run()
   for each day:
-    universe_filter()         → active_symbols
-    strategy_router.decide()  → proposed_decisions   # ONE strategy runs
-    risk_agent.evaluate()     → sized_decisions
-    execution_agent.execute() → fills
+    dynamic_universe_agent.select_candidates()  → 80 UniverseCandidates
+    per_strategy_filter.select_symbols()        → 20 active symbols
+    strategy_router.decide()                    → proposed_decisions  # ONE strategy
+    risk_agent.evaluate()                       → sized_decisions
+    execution_agent.execute()                   → fills
 ```
 
-The current `strategy_router` is a single strategy instance. Each experiment runs one
-strategy in isolation on the full portfolio.
+Each experiment in `run_experiments.py` runs one strategy in isolation on the full
+portfolio. The five strategies have never run simultaneously on a shared capital pool.
 
 ### 4.2 Target architecture with adaptive selector
 
 ```
 BacktestEngine.run()
   for each day:
-    universe_filter()           → active_symbols
+    dynamic_universe_agent.select_candidates()  → 80 UniverseCandidates
+    [each strategy's filter runs independently] → per-strategy symbol lists
     [weekly] adaptive_selector.rebalance(regime_snapshot) → strategy_weights
-    multi_strategy_router.decide(strategy_weights)         → proposed_decisions
-    risk_agent.evaluate()       → sized_decisions (weight applied here)
-    execution_agent.execute()   → fills
+    multi_strategy_router.decide(strategy_weights)         → merged decisions
+    risk_agent.evaluate(decision.weight)        → sized_decisions (weight scales size)
+    execution_agent.execute()                   → fills
 ```
 
-Three new components:
+Three new components to build:
 
 ```
-app/strategy/multi_router.py          # aggregates decisions from all strategies
-app/meta/adaptive_selector.py         # LLM call → strategy weights
-app/meta/regime_snapshot.py           # builds the regime stats dict for the LLM
+app/strategy/multi_router.py     # aggregates decisions from all active strategies
+app/meta/adaptive_selector.py    # Claude API call → strategy weight vector (weekly)
+app/meta/regime_snapshot.py      # builds the regime stats dict from daily symbol states
 ```
 
 ### 4.3 MultiStrategyRouter
 
-Wraps all registered strategies and merges their decisions. For the same symbol, when
-two strategies emit a BUY, only one is kept (highest-weight strategy wins). When one
-emits BUY and another HOLD, the BUY is kept. SELL always overrides.
+Wraps all registered strategies and merges their decisions for each day.
+
+Conflict resolution rules:
+- Same symbol, two BUYs → keep the one from the highest-weight strategy
+- Same symbol, BUY + HOLD → keep BUY (the active signal takes precedence)
+- Same symbol, any SELL → SELL always overrides (risk-first)
+- Each winning decision carries `weight` and `source` for RiskAgent sizing
 
 ```python
 class MultiStrategyRouter:
-    def __init__(self, strategies: dict[str, object], weights: dict[str, float] = None):
-        self.strategies = strategies   # {"CS": cs_instance, "Breakout": bo_instance, ...}
-        self.weights    = weights or {k: 1.0 for k in strategies}
+    def __init__(self, strategies: dict[str, BaseStrategyAgent], weights: dict[str, float] = None):
+        self.strategies = strategies  # {"DualMA": dual_ma, "Breakout": breakout, ...}
+        self.weights    = weights or {k: 1.0 / len(strategies) for k in strategies}
+
+    def update_weights(self, weights: dict[str, float]):
+        self.weights = weights
 
     def decide(self, current_date, symbol_states, portfolio) -> list[Decision]:
-        all_decisions = {}  # symbol → Decision (highest-weight wins on conflict)
+        # Per-strategy decisions, keyed by symbol
+        per_strategy: dict[str, dict[str, Decision]] = {}
         for name, strategy in self.strategies.items():
             w = self.weights.get(name, 0.0)
             if w < 0.05:
-                continue  # strategy effectively disabled
+                continue  # effectively disabled
             decisions = strategy.decide(current_date, symbol_states, portfolio)
-            for d in decisions:
-                if d.symbol not in all_decisions or w > self.weights.get(all_decisions[d.symbol].source, 0):
-                    d.weight = w        # attach weight for RiskAgent to use
-                    d.source = name     # which strategy generated it
-                    all_decisions[d.symbol] = d
-        return list(all_decisions.values())
+            per_strategy[name] = {d.symbol: d for d in decisions}
+
+        # Merge: SELL > BUY > HOLD; ties broken by strategy weight
+        merged: dict[str, tuple[Decision, float]] = {}  # symbol → (decision, weight)
+        action_priority = {"SELL": 2, "BUY": 1, "HOLD": 0}
+
+        for name, decisions in per_strategy.items():
+            w = self.weights[name]
+            for symbol, d in decisions.items():
+                if symbol not in merged:
+                    merged[symbol] = (d, w)
+                else:
+                    existing_d, existing_w = merged[symbol]
+                    p_new = action_priority.get(d.action, 0)
+                    p_old = action_priority.get(existing_d.action, 0)
+                    if p_new > p_old or (p_new == p_old and w > existing_w):
+                        merged[symbol] = (d, w)
+
+        result = []
+        for symbol, (d, w) in merged.items():
+            d.weight = w
+            d.source = next(
+                (n for n, ds in per_strategy.items() if symbol in ds and ds[symbol] is d),
+                "unknown",
+            )
+            result.append(d)
+        return result
 ```
 
-Add `weight` and `source` fields to the `Decision` model.
+Add `weight: float = 1.0` and `source: str = ""` fields to `app/strategy/models.py`
+`Decision` dataclass.
+
+**Universe filter handling**: Each strategy in the router needs its own filter. The
+`MultiStrategyRouter.decide()` receives `symbol_states` — these must include the union
+of all strategies' filtered universes. Two approaches:
+
+- **Simple**: Pass the full top-80 `symbol_states` to all strategies (no per-strategy
+  filter at the router level). Each strategy's entry conditions act as their own filter.
+  Fastest to implement.
+- **Correct**: Run each per-strategy filter before calling `strategy.decide()`, passing
+  only that strategy's filtered symbol list. Slower but preserves the filter architecture.
+
+Recommended: start with the simple approach. The per-strategy entry conditions (RSI threshold,
+20d high, golden cross) already filter heavily — the universe filter just pre-scores.
 
 ### 4.4 AdaptiveStrategySelector
 
-Called once per week (not daily — LLM latency is 1-3 seconds per call, daily would add
-250 calls per year per backtest run).
+Called once per week. Returns a weight dict; weights hold until next rebalance.
 
 ```python
+import json
+from datetime import datetime
+import anthropic
+
+
 class AdaptiveStrategySelector:
-    def __init__(self, anthropic_client, strategy_names: list[str]):
-        self.client         = anthropic_client
+    def __init__(self, strategy_names: list[str]):
+        self.client         = anthropic.Anthropic()
         self.strategy_names = strategy_names
         self.weights        = {s: 1.0 / len(strategy_names) for s in strategy_names}
-        self._last_updated  = None
+        self._last_updated: datetime | None = None
 
-    def rebalance(self, current_date: datetime, regime_snapshot: dict):
-        if self._last_updated and (current_date - self._last_updated).days < 7:
-            return self.weights   # reuse last week's weights
+    def rebalance(self, current_date: datetime, regime_snapshot: dict) -> dict[str, float]:
+        if self._last_updated and (current_date - self._last_updated).days < 5:
+            return self.weights  # trading week not elapsed yet
 
-        prompt = self._build_prompt(regime_snapshot)
+        prompt   = self._build_prompt(regime_snapshot)
         response = self.client.messages.create(
             model="claude-opus-4-6",
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=256,
+            messages=[{"role": "user", "content": prompt}],
         )
-        self.weights    = self._parse_weights(response.content[0].text)
+        raw = response.content[0].text.strip()
+        try:
+            parsed = json.loads(raw)
+            # Normalise to sum=1.0, clip negatives
+            total = sum(max(0.0, v) for v in parsed.values())
+            if total > 0:
+                self.weights = {
+                    k: max(0.0, parsed.get(k, 0.0)) / total
+                    for k in self.strategy_names
+                }
+        except (json.JSONDecodeError, KeyError):
+            pass  # keep previous weights if parse fails
+
         self._last_updated = current_date
         return self.weights
 ```
 
 ### 4.5 RegimeSnapshot
 
-Computes the regime statistics from the daily symbol states already available in the
-engine. No additional data fetching needed.
+Computes regime statistics from the daily symbol states already available in the engine.
+No additional data fetching required — `daily_symbol_states` is built before the strategy
+layer runs.
 
 ```python
 def build_regime_snapshot(daily_symbol_states: dict, current_date: datetime) -> dict:
-    regimes = [s.indicators.get("regime", "") for s in daily_symbol_states.values()]
-    n = len(regimes)
+    states  = list(daily_symbol_states.values())
+    regimes = [s.indicators.get("regime", "") for s in states]
+    n       = max(len(regimes), 1)
+
+    # ATR as % of price — both fields available in every MarketState
+    atr_pcts = [
+        s.indicators["atr_14"] / s.latest_price
+        for s in states
+        if s.indicators.get("atr_14") and s.latest_price
+    ]
+    avg_atr_pct = sum(atr_pcts) / len(atr_pcts) if atr_pcts else 0.0
+
     return {
-        "date":              current_date.strftime("%Y-%m-%d"),
-        "universe_size":     n,
-        "pct_uptrend":       sum(1 for r in regimes if "UPTREND"   in str(r)) / n,
-        "pct_downtrend":     sum(1 for r in regimes if "DOWNTREND" in str(r)) / n,
-        "pct_sideways":      sum(1 for r in regimes if "SIDEWAYS"  in str(r)) / n,
-        "pct_high_vol":      sum(1 for r in regimes if "HIGH_VOL"  in str(r)) / n,
-        "avg_atr_pct":       mean(s.indicators.get("atr_pct", 0) for s in daily_symbol_states.values()),
-        "market_breadth":    round(sum(1 for r in regimes if "UPTREND" in str(r)) / n, 3),
+        "date":          current_date.strftime("%Y-%m-%d"),
+        "universe_size": n,
+        "pct_uptrend":   sum(1 for r in regimes if "UPTREND"   in str(r)) / n,
+        "pct_downtrend": sum(1 for r in regimes if "DOWNTREND" in str(r)) / n,
+        "pct_sideways":  sum(1 for r in regimes if "SIDEWAYS"  in str(r)) / n,
+        "pct_high_vol":  sum(1 for r in regimes if "HIGH_VOL"  in str(r)) / n,
+        "avg_atr_pct":   avg_atr_pct,
     }
 ```
 
 ### 4.6 LLM Prompt Design
 
-The prompt gives the LLM the regime state, the historical performance of each strategy
-per regime (hard-coded from backtest results), and asks for a weight vector.
+The prompt gives the model the current regime snapshot and the empirical Sharpe table
+from backtests, then asks for a normalised weight vector.
 
 ```python
-STRATEGY_REGIME_PERFORMANCE = """
-Strategy historical performance by regime (Sharpe ratio):
-                    Trending/Bull  Crash/High-vol  Recovery  Bear/Choppy  Sideways
-CS L=100 momentum      1.53           1.31          2.74       1.11        1.21
-Breakout 10d           0.72           1.44          2.48       0.69        1.07
-DualMA SMA20/50       -0.78           0.58          2.24       0.50        1.67
-RSI-MR os=5 ob=80     -0.68           0.87          1.32      -1.83       -0.36
+# Hard-coded from backtest results (updated March 2026, net of 0.10%+0.05% costs)
+STRATEGY_REGIME_PERFORMANCE = """\
+Strategy Sharpe by market regime (NSE Indian equities, 2018–2024 backtests):
+
+                  Bull/LowVol  Crash/HighVol  Recovery  Bear/Choppy  Mixed/Recent
+DualMA SMA20/50      0.40          1.38         2.55        0.56         1.73
+Breakout 10d         0.49          1.49         2.48        0.39         1.15
+QuietBrk 20d         0.98          2.00         2.80       -0.67         0.67
+TrendPB 5%           0.97          1.80         1.23       -0.34         0.89
+RSI-MR os=5          0.21          0.86         1.37       -0.66        -0.11
+
+Regime definitions:
+  Bull/LowVol    : >55% stocks in UPTREND, avg ATR% < 1.5%, broad slow uptrend
+  Crash/HighVol  : >30% stocks in DOWNTREND, avg ATR% > 2.5%, sharp high-vol moves
+  Recovery       : >60% stocks in UPTREND, avg ATR% > 2.0%, post-crash V-shape
+  Bear/Choppy    : >40% stocks in DOWNTREND, avg ATR% 1.5–2.5%, grinding decline
+  Mixed/Recent   : 30–55% UPTREND, 20–40% DOWNTREND, moderate vol — sector rotation
 """
 
-def _build_prompt(self, snapshot: dict) -> str:
-    return f"""You are a portfolio risk manager allocating capital across four trading
-strategies on the NSE Indian equity market.
 
-Current market regime snapshot (computed from {snapshot['universe_size']} stocks):
-- Date: {snapshot['date']}
-- % in UPTREND:   {snapshot['pct_uptrend']:.1%}
-- % in DOWNTREND: {snapshot['pct_downtrend']:.1%}
-- % in SIDEWAYS:  {snapshot['pct_sideways']:.1%}
-- % HIGH_VOL:     {snapshot['pct_high_vol']:.1%}
-- Market breadth: {snapshot['market_breadth']:.3f}
-- Avg ATR %:      {snapshot['avg_atr_pct']:.2%}
+def _build_prompt(self, snapshot: dict) -> str:
+    return f"""You are a portfolio risk manager allocating capital across five trading
+strategies on the NSE Indian equity market. Your goal is to maximise risk-adjusted
+returns by concentrating capital in the strategies best suited to the current regime.
+
+Current market regime snapshot ({snapshot['universe_size']} stocks):
+  Date:         {snapshot['date']}
+  % UPTREND:    {snapshot['pct_uptrend']:.1%}
+  % DOWNTREND:  {snapshot['pct_downtrend']:.1%}
+  % SIDEWAYS:   {snapshot['pct_sideways']:.1%}
+  % HIGH_VOL:   {snapshot['pct_high_vol']:.1%}
+  Avg ATR %:    {snapshot['avg_atr_pct']:.2%}
 
 {STRATEGY_REGIME_PERFORMANCE}
 
-Based on the current regime snapshot, allocate capital weights across the four strategies.
-Weights must sum to 1.0. Set a weight to 0 to fully disable a strategy.
+Rules:
+- Weights must sum to 1.0
+- Minimum weight is 0.0 (fully disable) — do not force capital into losing strategies
+- A weight of 0.05 is the practical minimum for any active strategy (below this, sizing
+  rounds to 0 shares at current position sizing parameters)
+- In bear/downtrend regimes, strongly prefer DualMA; all other strategies have negative
+  or near-zero historical Sharpe in bear conditions
+- QuietBrk 20d is high-reward in recovery/crash but deeply negative in bear — weight
+  it proportionally to the probability that the current regime is NOT bear/choppy
 
 Respond ONLY with a JSON object, no explanation:
-{{"CS": 0.XX, "Breakout": 0.XX, "DualMA": 0.XX, "RSI-MR": 0.XX}}"""
+{{"DualMA": 0.XX, "Breakout": 0.XX, "QuietBrk": 0.XX, "TrendPB": 0.XX, "RSI-MR": 0.XX}}"""
 ```
 
 ### 4.7 Weight application in RiskAgent
 
-The `Decision` now carries a `weight` field. `RiskAgent._size_position()` applies it:
+`Decision` carries a `weight` field (default 1.0 for backward compatibility). The
+`RiskAgent._size_position()` scales the risk budget by this weight:
 
 ```python
-def _size_position(self, total_equity, price, atr, strategy_weight=1.0) -> int:
-    risk_budget = total_equity * self.risk_per_trade_pct * strategy_weight
-    stop_distance = self.atr_multiplier * atr
-    vol_qty  = risk_budget / stop_distance
-    max_qty  = (total_equity * self.max_position_pct * strategy_weight) // price
-    return min(int(vol_qty), int(max_qty))
+def _size_position(self, total_equity: float, price: float, atr, strategy_weight: float = 1.0) -> int:
+    if self.use_vol_sizing and atr and atr > 0:
+        risk_budget   = total_equity * self.risk_per_trade_pct * strategy_weight
+        stop_distance = self.atr_multiplier * atr
+        vol_qty       = risk_budget / stop_distance
+        max_qty       = (total_equity * self.max_position_pct * strategy_weight) // price
+        return min(int(vol_qty), int(max_qty))
+    return int((total_equity * self.max_position_pct * strategy_weight) // price)
 ```
 
-A strategy with weight 0.3 can only deploy 30% of what it would otherwise size at
-full weight. This is the cleanest integration — no changes to BacktestEngine or
-ExecutionAgent.
+A strategy with weight 0.30 sizes positions to 30% of what it would deploy at full
+weight. This is the cleanest integration point — no changes required in `BacktestEngine`
+or `ExecutionAgent`.
 
 ---
 
 ## 5. BacktestEngine Changes
 
-The engine needs two additions:
+Two minimal additions to `app/backtest/engine.py`:
 
-1. Accept `adaptive_selector` and `multi_strategy_router` parameters (both optional —
-   backward compatible with single-strategy experiments).
-
-2. Call `adaptive_selector.rebalance()` weekly and push updated weights to the router.
+**1. Accept optional new components** (backward compatible — existing single-strategy
+experiments continue to work unchanged):
 
 ```python
-# In BacktestEngine.run(), inside the daily loop:
-if self.adaptive_selector:
-    weights = self.adaptive_selector.rebalance(current_date, regime_snapshot)
-    self.strategy_router.update_weights(weights)   # MultiStrategyRouter method
+def __init__(self, ..., adaptive_selector=None):
+    ...
+    self.adaptive_selector = adaptive_selector
 ```
 
-`regime_snapshot` is built from `daily_symbol_states` after the market-breadth
-computation (line 131 in current engine.py) — same data, no extra fetch.
+**2. Weekly rebalance + regime snapshot in the daily loop**, inserted after the
+market-breadth computation block (currently lines 132–140 in `engine.py`):
+
+```python
+# Build regime snapshot for adaptive selector (reuses data already computed)
+if self.adaptive_selector:
+    regime_snapshot = build_regime_snapshot(daily_symbol_states, current_date)
+    weights = self.adaptive_selector.rebalance(current_date, regime_snapshot)
+    self.strategy_router.update_weights(weights)  # MultiStrategyRouter method
+```
+
+`build_regime_snapshot()` iterates over `daily_symbol_states` which is already populated
+at this point in the loop — no extra data access.
 
 ---
 
 ## 6. Why the LLM Is the Right Tool Here
 
-A rules-based version of this would look like:
+A rules-based version of the selector would look like:
 
 ```python
-if pct_uptrend > 0.60:
-    weights = {CS: 0.5, Breakout: 0.3, DualMA: 0.1, RSI-MR: 0.1}
-elif pct_downtrend > 0.50:
-    weights = {CS: 0.3, Breakout: 0.4, DualMA: 0.1, RSI-MR: 0.2}
+if pct_uptrend > 0.60 and avg_atr_pct > 0.020:   # Recovery
+    weights = {"DualMA": 0.25, "Breakout": 0.25, "QuietBrk": 0.35, "TrendPB": 0.10, "RSI-MR": 0.05}
+elif pct_downtrend > 0.40:                         # Bear
+    weights = {"DualMA": 0.70, "Breakout": 0.20, "QuietBrk": 0.00, "TrendPB": 0.05, "RSI-MR": 0.05}
+elif pct_uptrend > 0.55 and avg_atr_pct < 0.015:  # Slow Bull
+    weights = {"DualMA": 0.20, "Breakout": 0.15, "QuietBrk": 0.35, "TrendPB": 0.25, "RSI-MR": 0.05}
 ...
 ```
 
-This requires enumerating every regime combination and manually tuning 4×N weights.
-With 4 regime dimensions (uptrend %, downtrend %, vol level, breadth) at 3 levels each,
-that's 81 combinations — each requiring manually assigned weights based on intuition.
+With 5 regime dimensions (uptrend %, downtrend %, vol level, breadth, ATR trend) at
+3 levels each, there are 243 possible combinations — each requiring manually calibrated
+weights for 5 strategies. That's 1215 parameters set by intuition.
 
 The LLM instead:
-- Reads the performance table once (hard-coded in the prompt)
-- Reasons about which regime the current data most closely resembles
-- Outputs calibrated weights accounting for interaction effects
+- Reads the empirical Sharpe table once per prompt call
+- Reasons about which historical regime the current snapshot most resembles
+- Outputs a calibrated weight vector accounting for interactions (e.g., "high ATR but
+  also high downtrend breadth" signals crash-phase volatility, not recovery volatility —
+  favour Breakout over QuietBrk since QuietBrk's bear losses outweigh its crash gains)
 
-The LLM also naturally handles edge cases like "60% uptrend but high ATR" (momentum
-strategy is risky — reduce weight) that a rule-based system would need explicit branches
-for.
+The LLM also handles transition regimes naturally: when pct_downtrend is 35% (just
+below the Bear threshold), it can assign partial weights to DualMA without requiring
+a hard if/else boundary.
 
 ---
 
-## 7. Implementation Order
+## 7. Implementation Checklist
 
-| Step | What | Effort |
-|---|---|---|
-| 1 | Fix RSI-MR HOLD emission (same as Breakout fix) | 30 min |
-| 2 | Debug CS threshold deadlock (print momentum scores) | 1 hr |
-| 3 | Fix TrendPullback or retire it from multi-strategy pool | 1–2 hr |
-| 4 | Add `weight` and `source` fields to `Decision` model | 15 min |
-| 5 | Build `MultiStrategyRouter` | 2 hr |
-| 6 | Build `RegimeSnapshot` helper | 1 hr |
-| 7 | Build `AdaptiveStrategySelector` with Anthropic SDK | 2 hr |
-| 8 | Wire into `BacktestEngine` (optional `adaptive_selector` param) | 1 hr |
-| 9 | Run backtests: compare fixed equal-weight vs adaptive | 1 hr |
+### Completed
 
-Total: ~10 hours of implementation. Steps 1-3 are pre-requisites that should be done
-regardless of the adaptive selector.
+| # | Step | Completed | Notes |
+|---|---|---|---|
+| 1 | RSI-MR HOLD emission | ✅ 2026-03-17 | `rsi_mean_reversion.py` lines 90–105 — ATR stop now active on all held positions |
+| 2 | R1: Breadth CB 60%→40% | ✅ 2026-03-17 | `RiskAgent.max_downtrend_pct=0.40` default — RSI-MR Bear losses halved |
+| 3 | R2: sma_cross_age for RSI-MR | ✅ 2026-03-17 | `MeanReversionUniverseFilter(min_cross_age=10)` — false uptrend entries eliminated |
+| 4 | DualMA strategy + filter | ✅ 2026-03-19 | `dual_ma.py` + `DualMAUniverseFilter` — Sharpe 1.73 Recent, 2.55 Recovery |
+| 5 | QuietBrk 20d strategy + filter | ✅ 2026-03-19 | `quiet_breakout.py` + relaxed `BreakoutUniverseFilter` — Sharpe 2.80 Recovery |
+| 6 | Retire CS momentum | ✅ 2026-03-19 | Commented out in `run_experiments.py` |
+| 7 | QuietBrk Bear regime gate | ✅ 2026-03-19 | `allowed_regimes=_UPTREND_ONLY` in `run_experiments.py` — blocks SIDEWAYS entries during rolling bear |
+| 8 | Retire RSI-MR os=10 from pool | ✅ 2026-03-19 | Removed from `STRATEGIES` — os=5 dominates in every period |
+| 9 | Add `weight`+`source` to `Decision` | ✅ 2026-03-19 | `app/strategy/models.py` — defaults 1.0/"" preserve all existing call sites |
+
+### Active strategy pool (post-cleanup)
+
+Five strategies remain. This is the pool the multi-strategy router will operate over.
+
+| Strategy | File | Full Sharpe | Bear Sharpe | Regime strength |
+|---|---|---|---|---|
+| DualMA SMA20/50 | `dual_ma.py` | 1.29 | **0.56** | Bear survival + sustained trends |
+| Breakout 10d | `breakout_momentum.py` | 1.12 | 0.39 | Consistent across all vol regimes |
+| QuietBrk 20d | `quiet_breakout.py` | 1.05 | — (gated) | Crash + Recovery specialist |
+| TrendPB 5% | `trend_pullback.py` | 0.80 | -0.34 | Crash/Recovery; reduce in Bear |
+| RSI-MR os=5 | `rsi_mean_reversion.py` | 0.25 | -0.66 | Recovery only; weight near-zero in Bear |
+
+### Next — build the meta-layer (in order)
+
+| # | Step | Effort | Why this order |
+|---|---|---|---|
+| 10 | Build `MultiStrategyRouter` | ~2 hr | Foundation — must exist before steps 11–13 can be tested |
+| 11 | Build `build_regime_snapshot()` | ~1 hr | Standalone util, no dependencies, easy to unit-test |
+| 12 | Build `AdaptiveStrategySelector` | ~2 hr | Depends on 11 for input shape; Anthropic SDK call |
+| 13 | Wire into `BacktestEngine` | ~1 hr | Add optional `adaptive_selector` param; backward compatible |
+| 14 | Baseline: equal-weight multi-strategy run | ~1 hr | **Must run before step 15** — establishes the comparison floor |
+| 15 | Adaptive run: compare vs equal-weight | ~1 hr | Final validation — is the LLM adding value over equal weighting? |
+
+**Step 14 is critical.** Run all five strategies simultaneously with equal weights (0.20
+each) before enabling the LLM layer. This isolates two effects:
+- Equal-weight multi-strategy vs best single strategy (diversification benefit)
+- Adaptive-weight vs equal-weight (LLM allocation benefit)
+
+Without step 14 you cannot separate the two effects and cannot tell whether any
+improvement in step 15 comes from the LLM or simply from running five strategies at once.
+
+**Files to create:**
+
+```
+app/
+  strategy/
+    multi_router.py          # step 10
+  meta/
+    __init__.py
+    regime_snapshot.py       # step 11
+    adaptive_selector.py     # step 12
+```
 
 ---
 
@@ -357,30 +521,43 @@ regardless of the adaptive selector.
 
 Based on the per-regime Sharpe numbers:
 
-**Best-case:** The selector correctly routes capital to CS + Breakout in trending
-regimes and to RSI-MR in high-vol/crash regimes. The full-period blended Sharpe should
-rise from the current ~1.0 (Breakout alone) toward the regime-matched peak of ~2.0-2.5.
+**Conservative case** (selector avoids allocating to losing strategies in the wrong regime):
+- In Bear 2022, routing away from QuietBrk (-0.67), TrendPB (-0.34), and RSI-MR (-0.66)
+  toward DualMA (0.56) alone could convert an equal-weight portfolio Bear loss of ~-4%
+  into a near-zero or positive Bear outcome.
+- In Recovery, routing toward QuietBrk (2.80) + DualMA (2.55) at combined 65% weight
+  should lift the blended Recovery Sharpe from ~1.6 (equal weight) toward 2.3+.
 
-**Conservative case:** The selector correctly avoids deploying RSI-MR and TrendPB in
-Bear and Bull regimes where they lose money. Even without finding the optimal weights,
-preventing capital allocation to losing strategies in wrong regimes is itself a
-meaningful improvement.
+**Best case** (selector correctly identifies regime transitions):
+- Full 2018–24 blended Sharpe should rise from ~1.0 (best single strategy) toward
+  1.6–2.0 if the selector correctly allocates in 4 of 6 regime periods.
 
-**Key risk:** The LLM is calibrated on the same backtest periods it's being tested on.
-In live trading, use walk-forward validation — train the performance table on years 1-4,
-test the selector's weight choices on year 5, roll forward.
+**Key risk — look-ahead bias in the prompt**: The performance table in the prompt is
+derived from the same backtest periods it's being tested on. In a live or walk-forward
+setting, use a rolling performance table: train on years 1–4, test on year 5, roll forward.
+The backtest result is an upper bound on what the selector can achieve — it knows the
+"correct" answer. Walk-forward validation will give the realistic number.
 
 ---
 
 ## 9. What This Does NOT Solve
 
-- **TrendPullback's structural issue** — weighting it at 0.0 avoids the losses but
-  doesn't fix the strategy. Worth fixing or replacing.
-- **RSI-MR in choppy/bear markets** — the breadth circuit breaker already addresses
-  this partially. The selector adds a second layer.
-- **Inter-strategy correlation** — CS and Breakout both buy momentum stocks and will
-  often be in the same positions simultaneously. A sector concentration limit (A4 in
-  roadmap) is needed to prevent the combined portfolio from being 80% IT + metals.
-- **Walk-forward overfitting** — the performance table in the prompt is derived from
-  backtests. If live regimes differ from historical ones, the selector's prior is wrong.
-  B5 (Regime Narrative Agent) would add a real-time sanity check on top.
+- **TrendPB Bear losses** — the selector weights TrendPB low in bear conditions, but the
+  per-trade losses still occur at low weight. The structural fix (volume confirmation on
+  entry) remains open.
+
+- **QuietBrk Bear losses** — mitigated by the Bear regime gate (step 7 above), but the
+  gap between its crash performance (2.00) and bear performance (-0.67) is the largest
+  regime sensitivity in the strategy pool. Monitor carefully.
+
+- **Inter-strategy correlation** — DualMA and Breakout both favour trending, high-activity
+  stocks. In Recovery, they will often be in overlapping positions simultaneously (both
+  buying the same momentum names). A per-sector or per-position concentration limit in
+  `RiskAgent` would prevent the combined portfolio from being 80% in one sector.
+
+- **Walk-forward overfitting** — addressed in section 8. The selector's performance table
+  must be kept out-of-sample in any live deployment.
+
+- **Latency in live trading** — each weekly rebalance is one Claude API call (~1–2s).
+  For a paper-trading system this is acceptable. For live intraday systems it would need
+  to be pre-computed overnight.

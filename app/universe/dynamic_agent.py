@@ -122,6 +122,17 @@ class DynamicUniverseAgent:
         # slope > 0 means the SMA_20 is still rising — trend accelerating, not topping
         df["sma_20_slope_positive"] = df["sma_20"].diff() > 0
 
+        # Consecutive days SMA_20 has been above SMA_50 (resets on cross-under).
+        # Used by PullbackUniverseFilter (R3, threshold=15) and
+        # MeanReversionUniverseFilter (R2, threshold=10) to reject stocks whose
+        # uptrend is too fresh — these are often false crossovers that will fail.
+        cross_age = []
+        count = 0
+        for above in df["sma_20_above_sma_50"]:
+            count = count + 1 if above else 0
+            cross_age.append(count)
+        df["sma_cross_age"] = cross_age
+
         # ---- Normalised ATR (stored for reference, not used in scoring) ----
         prev_close = df["close"].shift(1)
         true_range = pd.concat(
@@ -174,18 +185,20 @@ class DynamicUniverseAgent:
             return_3d          = row.get("return_3d", float("nan"))
             sma_20_above_sma50 = row.get("sma_20_above_sma_50", False)
             sma_20_slope_pos   = row.get("sma_20_slope_positive", False)
+            sma_cross_age      = row.get("sma_cross_age", 0)
 
             rows.append(
                 {
-                    "symbol":               symbol,
-                    "relative_volume":      float(rel_vol),
-                    "daily_return":         float(daily_ret),
-                    "abs_daily_return":     abs(float(daily_ret)),
-                    "rolling_vol_5d":       float(vol_5d),
-                    "atr_ratio":            float(atr_ratio) if not pd.isna(atr_ratio) else 0.0,
-                    "return_3d":            float(return_3d) if not pd.isna(return_3d) else 0.0,
-                    "sma_20_above_sma_50":  bool(sma_20_above_sma50),
+                    "symbol":                symbol,
+                    "relative_volume":       float(rel_vol),
+                    "daily_return":          float(daily_ret),
+                    "abs_daily_return":      abs(float(daily_ret)),
+                    "rolling_vol_5d":        float(vol_5d),
+                    "atr_ratio":             float(atr_ratio) if not pd.isna(atr_ratio) else 0.0,
+                    "return_3d":             float(return_3d) if not pd.isna(return_3d) else 0.0,
+                    "sma_20_above_sma_50":   bool(sma_20_above_sma50),
                     "sma_20_slope_positive": bool(sma_20_slope_pos),
+                    "sma_cross_age":         int(sma_cross_age) if not pd.isna(sma_cross_age) else 0,
                 }
             )
 
@@ -200,6 +213,7 @@ class DynamicUniverseAgent:
                     sma_20_slope_positive=r["sma_20_slope_positive"],
                     return_3d=r["return_3d"],
                     rolling_vol_5d=r["rolling_vol_5d"],
+                    sma_cross_age=r["sma_cross_age"],
                 )
                 for r in rows
             ]
@@ -229,6 +243,7 @@ class DynamicUniverseAgent:
                 sma_20_slope_positive=bool(scores.loc[symbol, "sma_20_slope_positive"]),
                 return_3d=float(scores.loc[symbol, "return_3d"]),
                 rolling_vol_5d=float(scores.loc[symbol, "rolling_vol_5d"]),
+                sma_cross_age=int(scores.loc[symbol, "sma_cross_age"]),
             )
             for symbol in top.index
         ]

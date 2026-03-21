@@ -17,6 +17,11 @@ class UniverseCandidate:
       sma_20_slope_positive   — True when SMA_20 is still rising (trend accelerating)
       return_3d               — 3-day return; negative = stock pulling back
       rolling_vol_5d          — 5-day realised volatility (activity level)
+      sma_cross_age           — consecutive trading days SMA_20 has been above SMA_50.
+                                 Resets to 0 when SMA_20 drops below SMA_50.
+                                 Used by:
+                                   PullbackUniverseFilter  (R3): >= 15 → confirmed trend
+                                   MeanReversionUniverseFilter (R2): >= 10 → confirmed trend
     """
     symbol:                str
     score:                 float   # composite ranking score
@@ -30,3 +35,4 @@ class UniverseCandidate:
     sma_20_slope_positive: bool  = field(default=False)
     return_3d:             float = field(default=0.0)
     rolling_vol_5d:        float = field(default=0.0)
+    sma_cross_age:         int   = field(default=0)

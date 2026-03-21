@@ -81,10 +81,11 @@ class MarketObserverAgent:
         rolling_vol_5d  = daily_return.rolling(5,  min_periods=5).std()
         rolling_vol_10d = daily_return.rolling(10, min_periods=10).std()
 
-        # shift(1) excludes today so that close > high_10d is a valid
+        # shift(1) excludes today so that close > high_Nd is a valid
         # breakout condition (today's close can't exceed today's high).
         high_10d        = highs_s.shift(1).rolling(10, min_periods=10).max()
         low_10d         = lows_s.shift(1).rolling(10,  min_periods=10).min()
+        high_20d        = highs_s.shift(1).rolling(20, min_periods=20).max()
 
         # Convert to None-safe lists for uniform index access in the loop
         daily_return_l    = _nan_to_none(daily_return)
@@ -95,6 +96,7 @@ class MarketObserverAgent:
         rolling_vol_10d_l = _nan_to_none(rolling_vol_10d)
         high_10d_l        = _nan_to_none(high_10d)
         low_10d_l         = _nan_to_none(low_10d)
+        high_20d_l        = _nan_to_none(high_20d)
 
         # ----------------------------------------------------------
         # Regime classification (existing vectorised logic)
@@ -177,6 +179,7 @@ class MarketObserverAgent:
                     # ---- Price-range levels ----
                     "high_10d": high_10d_l[i],
                     "low_10d":  low_10d_l[i],
+                    "high_20d": high_20d_l[i],
                 },
                 previous_indicators={
                     # ---- Medium-term trend (existing) ----
