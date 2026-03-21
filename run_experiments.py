@@ -16,6 +16,7 @@ from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
 from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
+from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.universe.filters import (
     BreakoutUniverseFilter,
     DualMAUniverseFilter,
@@ -244,7 +245,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None):
 
     if not ctx.historical_dates:
         return None
@@ -285,6 +286,7 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         repository=None,   # no decision logging during backtests — avoids DB timeouts
         dynamic_universe_agent=ctx.dynamic_universe_agent,
         universe_agent=active_universe_agent,
+        adaptive_selector=adaptive_selector,
     )
 
     results, trades = engine.run(BROAD_UNIVERSE, ctx.historical_dates)
@@ -430,6 +432,66 @@ def main():
             universe_filter=union_filter, # each strategy sees its own domain candidates
         )
         _print_row("EqualWeight (5-strat)", result_multi)
+
+        # ------------------------------------------------------------------
+        # Step 15: Adaptive (LLM-driven) multi-strategy run
+        #
+        # Same 5 strategies + same UnionUniverseFilter as the equal-weight
+        # baseline — the ONLY difference is that strategy weights are updated
+        # weekly by AdaptiveStrategySelector (OpenAI GPT-4o-mini call).
+        #
+        # Comparison:
+        #   equal-weight  →  measures diversification benefit
+        #   adaptive       →  measures LLM allocation benefit ON TOP of that
+        # ------------------------------------------------------------------
+        print(f"{DIVIDER}  [Multi-strategy adaptive — LLM weights]")
+
+        _STRATEGY_NAMES = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+
+        adaptive_router = MultiStrategyRouter(
+            strategies={
+                "DualMA":   DualMovingAverageStrategy(),
+                "Breakout": BreakoutMomentumStrategy(),
+                "QuietBrk": QuietBreakoutStrategy(),
+                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                "RSI-MR":   RSIMeanReversionStrategy(
+                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+            },
+            weights={n: 0.20 for n in _STRATEGY_NAMES},   # start equal; LLM adjusts weekly
+            allowed_regimes={
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        )
+
+        selector = AdaptiveStrategySelector(
+            strategy_names=_STRATEGY_NAMES,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=True,    # prints each weekly weight update
+        )
+
+        adaptive_union_filter = UnionUniverseFilter([
+            BreakoutUniverseFilter(top_n=20),
+            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+            PullbackUniverseFilter(top_n=20),
+            MeanReversionUniverseFilter(top_n=20),
+            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ])
+
+        result_adaptive = run_experiment(
+            repository, adaptive_router, ctx,
+            max_position_pct=0.10,
+            allowed_regimes=None,
+            breadth_circuit_breaker=True,
+            universe_filter=adaptive_union_filter,
+            adaptive_selector=selector,
+        )
+        _print_row("Adaptive  (5-strat)", result_adaptive)
+        print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
 
     print(f"\n{'=' * (ROW_W + 2)}\n")
 
