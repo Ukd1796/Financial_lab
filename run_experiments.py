@@ -9,14 +9,19 @@ from app.portfolio.engine import PortfolioEngine
 from app.portfolio.models import Portfolio
 from app.risk.agent import RiskAgent
 from app.strategy.breakout_momentum import BreakoutMomentumStrategy
+from app.strategy.dual_ma import DualMovingAverageStrategy
+from app.strategy.multi_router import MultiStrategyRouter
+from app.strategy.quiet_breakout import QuietBreakoutStrategy
 from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
 from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.universe.filters import (
     BreakoutUniverseFilter,
+    DualMAUniverseFilter,
     MeanReversionUniverseFilter,
     PullbackUniverseFilter,
+    UnionUniverseFilter,
 )
 
 # -----------------------------------------------------------------------
@@ -116,41 +121,15 @@ PERIODS = {
 #   group           — section header for the printed table
 # -----------------------------------------------------------------------
 STRATEGIES = [
-    # # ---- Medium-term trend strategies (uptrend regime only) ----------
-    # {
-    #     "label":           "CS  L=100 R=20 T=5%",
-    #     "factory":         lambda: CrossSectionalMomentumStrategy(
-    #                            lookback_days=100, top_n=3,
-    #                            rebalance_frequency=20, momentum_threshold=0.05),
-    #     "max_pos_pct":     0.20,
-    #     "allowed_regimes": _UPTREND_ONLY,
-    #     "group":           "Medium-term",
-    # },
-    # {
-    #     "label":           "CS  L=80  R=20 T=5%",
-    #     "factory":         lambda: CrossSectionalMomentumStrategy(
-    #                            lookback_days=80, top_n=3,
-    #                            rebalance_frequency=20, momentum_threshold=0.05),
-    #     "max_pos_pct":     0.20,
-    #     "allowed_regimes": _UPTREND_ONLY,
-    #     "group":           "Medium-term",
-    # },
-    # {
-    #     "label":           "CS  L=100 R=20 T=3%",
-    #     "factory":         lambda: CrossSectionalMomentumStrategy(
-    #                            lookback_days=100, top_n=3,
-    #                            rebalance_frequency=20, momentum_threshold=0.03),
-    #     "max_pos_pct":     0.20,
-    #     "allowed_regimes": _UPTREND_ONLY,
-    #     "group":           "Medium-term",
-    # },
-    # {
-    #     "label":           "DualMA SMA20/50",
-    #     "factory":         lambda: DualMovingAverageStrategy(),
-    #     "max_pos_pct":     0.15,
-    #     "allowed_regimes": _UPTREND_ONLY,
-    #     "group":           "Medium-term",
-    # },
+    # ---- Medium-term trend strategies (golden cross, uptrend regime only) ----
+    {
+        "label":           "DualMA SMA20/50",
+        "factory":         lambda: DualMovingAverageStrategy(),
+        "universe_filter": lambda: DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        "max_pos_pct":     0.15,
+        "allowed_regimes": _UPTREND_ONLY,
+        "group":           "Medium-term",
+    },
 
     # ---- Short-term momentum strategies (uptrend + sideways) ---------
     {
@@ -159,6 +138,23 @@ STRATEGIES = [
         "universe_filter":  lambda: BreakoutUniverseFilter(top_n=20),
         "max_pos_pct":      0.10,
         "allowed_regimes":  _TREND_AND_SIDEWAYS,
+        "group":            "Short-term",
+    },
+    {
+        # Quiet variant: 20-day breakout with relaxed activity thresholds.
+        # Targets slow-bull conditions where 10d breakout starves for signals.
+        # UPTREND_ONLY (not TREND_AND_SIDEWAYS) because QuietBrk loses -10% in Bear
+        # when SIDEWAYS entries are allowed — stocks classified SIDEWAYS during a
+        # rolling bear are often in early breakdown, not genuine consolidation.
+        "label":            "QuietBrk 20d",
+        "factory":          lambda: QuietBreakoutStrategy(),
+        "universe_filter":  lambda: BreakoutUniverseFilter(
+                                vol_threshold=1.2,
+                                return_threshold=0.008,
+                                top_n=20,
+                            ),
+        "max_pos_pct":      0.10,
+        "allowed_regimes":  _UPTREND_ONLY,
         "group":            "Short-term",
     },
     {
@@ -181,16 +177,6 @@ STRATEGIES = [
     # ---- Mean-reversion strategies (uptrend/sideways only + breadth circuit breaker) --
     # Both the universe filter (stock-level) and allowed_regimes (per-decision gate in
     # RiskAgent) enforce the "oversold in an uptrend only" rule at two independent layers.
-    {
-        "label":                   "RSI-MR  os=10 ob=70",
-        "factory":                 lambda: RSIMeanReversionStrategy(
-                                       rsi_oversold=10, rsi_overbought=70, max_hold_days=5),
-        "universe_filter":         lambda: MeanReversionUniverseFilter(top_n=20),
-        "max_pos_pct":             0.10,
-        "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
-        "breadth_circuit_breaker": True,
-        "group":                   "Mean-reversion",
-    },
     {
         "label":                   "RSI-MR  os=5  ob=80",
         "factory":                 lambda: RSIMeanReversionStrategy(
@@ -283,7 +269,7 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         risk_per_trade_pct=0.005,      # risk 0.5% of portfolio per trade
         use_vol_sizing=True,
         breadth_circuit_breaker=breadth_circuit_breaker,
-        max_downtrend_pct=0.60,        # block BUY when >60% of universe in DOWNTREND
+        max_downtrend_pct=0.40,        # block BUY when >40% of universe in DOWNTREND (R1)
     )
 
     # Use the per-strategy universe filter when provided; fall back to the
@@ -380,6 +366,70 @@ def main():
                 universe_filter=universe_filter,
             )
             _print_row(cfg["label"], result)
+
+        # ------------------------------------------------------------------
+        # Step 14 baseline: all 5 strategies at equal weight (0.20 each)
+        # on a shared portfolio.
+        #
+        # Three correctness requirements addressed here:
+        #   1. decision.weight (0.20) is now applied in RiskAgent._size_position()
+        #      so each strategy deploys 20% of the normal risk budget per trade.
+        #   2. Per-strategy allowed_regimes are enforced inside MultiStrategyRouter
+        #      before each strategy's decide() is called — same gates as solo runs.
+        #   3. Universe uses the activity-based top-20 filter (same as solo runs)
+        #      so each strategy sees the same candidate pool it was calibrated on.
+        #
+        # This is the comparison floor for AdaptiveStrategySelector (step 15).
+        # ------------------------------------------------------------------
+        print(f"{DIVIDER}  [Multi-strategy baseline — equal weight]")
+
+        multi_router = MultiStrategyRouter(
+            strategies={
+                "DualMA":   DualMovingAverageStrategy(),
+                "Breakout": BreakoutMomentumStrategy(),
+                "QuietBrk": QuietBreakoutStrategy(),
+                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                "RSI-MR":   RSIMeanReversionStrategy(
+                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+            },
+            weights={
+                "DualMA":   0.20,
+                "Breakout": 0.20,
+                "QuietBrk": 0.20,
+                "TrendPB":  0.20,
+                "RSI-MR":   0.20,
+            },
+            # Mirror each strategy's solo allowed_regimes — the router filters
+            # symbol_states per-strategy before calling decide().
+            allowed_regimes={
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        )
+
+        # Build the union filter once per period — runs each strategy's own filter
+        # on the top-80 DynamicAgent candidates and takes the de-duplicated union.
+        # This gives each strategy a domain-appropriate candidate pool without
+        # competing for the same 20 activity-filtered slots.
+        union_filter = UnionUniverseFilter([
+            BreakoutUniverseFilter(top_n=20),
+            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),  # QuietBrk
+            PullbackUniverseFilter(top_n=20),
+            MeanReversionUniverseFilter(top_n=20),
+            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ])
+
+        result_multi = run_experiment(
+            repository, multi_router, ctx,
+            max_position_pct=0.10,        # per-position cap (further scaled by weight inside RiskAgent)
+            allowed_regimes=None,         # router handles per-strategy regime gating internally
+            breadth_circuit_breaker=True,
+            universe_filter=union_filter, # each strategy sees its own domain candidates
+        )
+        _print_row("EqualWeight (5-strat)", result_multi)
 
     print(f"\n{'=' * (ROW_W + 2)}\n")
 

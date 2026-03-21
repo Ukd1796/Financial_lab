@@ -11,7 +11,7 @@ class RiskAgent:
         risk_per_trade_pct:  float = 0.005,  # 0.5% of portfolio at risk per trade
         use_vol_sizing:      bool  = True,   # ATR-based sizing; falls back to max_position_pct
         breadth_circuit_breaker: bool  = False, # suppress BUY when market is broadly falling
-        max_downtrend_pct:   float = 0.60,   # block BUY when >60% of universe in DOWNTREND
+        max_downtrend_pct:   float = 0.40,   # block BUY when >40% of universe in DOWNTREND (R1)
     ):
         self.max_position_pct        = max_position_pct
         self.atr_multiplier          = atr_multiplier
@@ -94,7 +94,12 @@ class RiskAgent:
             if symbol in portfolio.positions:
                 return Decision(symbol=symbol, action="HOLD")
 
-            quantity = self._size_position(total_equity, current_price, atr)
+            # decision.weight (set by MultiStrategyRouter) scales the risk budget
+            # so each strategy only deploys its allocated share of capital.
+            # Default 1.0 preserves full sizing for single-strategy experiments.
+            strategy_weight = getattr(decision, "weight", 1.0)
+
+            quantity = self._size_position(total_equity, current_price, atr, strategy_weight)
             if quantity <= 0:
                 return Decision(symbol=symbol, action="HOLD")
 
@@ -108,7 +113,7 @@ class RiskAgent:
                 symbol=symbol,
                 action="BUY",
                 quantity=quantity,
-                reasoning=self._sizing_reasoning(total_equity, current_price, atr, quantity),
+                reasoning=self._sizing_reasoning(total_equity, current_price, atr, quantity, strategy_weight),
             )
 
         # SELL
@@ -128,38 +133,38 @@ class RiskAgent:
     # --------------------------------------------------
     # POSITION SIZING
     # --------------------------------------------------
-    def _size_position(self, total_equity: float, price: float, atr) -> int:
+    def _size_position(self, total_equity: float, price: float, atr, strategy_weight: float = 1.0) -> int:
         """
-        Volatility-adjusted sizing: each position risks a fixed fraction of
-        portfolio equity regardless of the stock's absolute volatility.
+        Volatility-adjusted sizing scaled by strategy_weight.
 
-            quantity = (portfolio_risk_budget) / (atr_stop_distance_per_share)
-                     = (equity * risk_per_trade_pct) / (atr_multiplier * atr)
+            risk_budget   = equity × risk_per_trade_pct × strategy_weight
+            stop_distance = atr_multiplier × atr
+            quantity      = min(risk_budget / stop_distance,
+                                equity × max_position_pct × strategy_weight / price)
 
-        Falls back to fixed max_position_pct allocation when ATR is missing.
-        The result is further capped at max_position_pct of equity to prevent
-        a single position from becoming too large in low-vol environments.
+        strategy_weight (from Decision.weight) lets MultiStrategyRouter allocate
+        each strategy a proportional share of the portfolio's risk budget:
+          - Single strategy run: weight=1.0 → full sizing (unchanged behaviour)
+          - 5-strategy equal weight: weight=0.20 → each strategy gets 20% of budget
         """
         if self.use_vol_sizing and atr and atr > 0:
-            risk_budget = total_equity * self.risk_per_trade_pct
-            stop_distance = self.atr_multiplier * atr   # per-share risk in price units
-            vol_qty = risk_budget / stop_distance        # shares to risk exactly risk_budget
-
-            # Hard cap: no position > max_position_pct of equity
-            max_qty = (total_equity * self.max_position_pct) // price
-            quantity = min(int(vol_qty), int(max_qty))
+            risk_budget   = total_equity * self.risk_per_trade_pct * strategy_weight
+            stop_distance = self.atr_multiplier * atr
+            vol_qty       = risk_budget / stop_distance
+            max_qty       = (total_equity * self.max_position_pct * strategy_weight) // price
+            quantity      = min(int(vol_qty), int(max_qty))
         else:
-            # Fallback to fixed-% sizing
-            quantity = int((total_equity * self.max_position_pct) // price)
+            quantity = int((total_equity * self.max_position_pct * strategy_weight) // price)
 
         return quantity
 
-    def _sizing_reasoning(self, total_equity, price, atr, quantity) -> str:
+    def _sizing_reasoning(self, total_equity, price, atr, quantity, strategy_weight: float = 1.0) -> str:
         if self.use_vol_sizing and atr and atr > 0:
-            risk_budget = total_equity * self.risk_per_trade_pct
+            risk_budget = total_equity * self.risk_per_trade_pct * strategy_weight
+            weight_str  = f" w={strategy_weight:.2f}" if strategy_weight != 1.0 else ""
             return (
-                f"VolSizing: {quantity} shares × {self.atr_multiplier}×ATR({atr:.2f}) "
+                f"VolSizing{weight_str}: {quantity} shares × {self.atr_multiplier}×ATR({atr:.2f}) "
                 f"= ₹{quantity * self.atr_multiplier * atr:,.0f} risk "
                 f"(budget ₹{risk_budget:,.0f})"
             )
-        return f"FixedAlloc: {self.max_position_pct * 100:.1f}% of equity"
+        return f"FixedAlloc: {self.max_position_pct * 100:.1f}% of equity (w={strategy_weight:.2f})"
