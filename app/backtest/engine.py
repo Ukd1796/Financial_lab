@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List
 
 from app.backtest.models import BacktestResult, Trade
+from app.meta.regime_snapshot import build_regime_snapshot
 
 
 class BacktestEngine:
@@ -17,6 +18,7 @@ class BacktestEngine:
         repository=None,
         dynamic_universe_agent=None,
         universe_agent=None,
+        adaptive_selector=None,
     ):
         self.observer                = observer
         self.strategy_router         = strategy_router
@@ -26,6 +28,9 @@ class BacktestEngine:
         self.repository              = repository
         self.dynamic_universe_agent  = dynamic_universe_agent
         self.universe_agent          = universe_agent
+        # Optional: AdaptiveStrategySelector — calls LLM weekly to update weights.
+        # When None, the router's weights stay constant (equal-weight baseline).
+        self.adaptive_selector       = adaptive_selector
 
     # ==================================================
     # MAIN RUN
@@ -138,6 +143,15 @@ class BacktestEngine:
             market_downtrend_pct = (
                 downtrend_count / len(daily_symbol_states) if daily_symbol_states else 0.0
             )
+
+            # --- Adaptive weight rebalance (weekly, LLM-driven) ---
+            # Only active when an AdaptiveStrategySelector is configured AND the
+            # router supports update_weights() (i.e. is a MultiStrategyRouter).
+            # All data used here (daily_symbol_states) is already populated above.
+            if self.adaptive_selector and hasattr(self.strategy_router, "update_weights"):
+                regime_snapshot = build_regime_snapshot(daily_symbol_states, current_date)
+                new_weights = self.adaptive_selector.rebalance(current_date, regime_snapshot)
+                self.strategy_router.update_weights(new_weights)
 
             # --- Risk + execution ---
             for decision in proposed_decisions:
