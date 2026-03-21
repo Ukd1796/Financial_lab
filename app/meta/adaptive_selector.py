@@ -181,6 +181,7 @@ class AdaptiveStrategySelector:
         model: str = "gpt-4o-mini",
         verbose: bool = False,
         history_weeks: int = 4,
+        regime_stability_weeks: int = 2,
     ):
         self.client                   = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.strategy_names           = strategy_names
@@ -188,6 +189,9 @@ class AdaptiveStrategySelector:
         self.model                    = model
         self.verbose                  = verbose
         self.history_weeks            = history_weeks
+        # Require a new regime to appear for this many consecutive weeks before
+        # acting on it. Prevents whipsaw from 1-week regime spikes in choppy markets.
+        self.regime_stability_weeks   = regime_stability_weeks
 
         n = max(len(strategy_names), 1)
         self.weights: dict[str, float]      = {s: 1.0 / n for s in strategy_names}
@@ -195,6 +199,10 @@ class AdaptiveStrategySelector:
         self._call_count: int               = 0
         # Rolling buffer of (date_str, label, pct_uptrend, pct_downtrend, avg_atr_pct)
         self._snapshot_history: list[dict]  = []
+        # Regime stability tracking
+        self._confirmed_regime: str | None  = None   # last regime confirmed for ≥ stability_weeks
+        self._pending_regime: str | None    = None   # candidate not yet confirmed
+        self._pending_count: int            = 0      # consecutive weeks seen for pending
 
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -215,6 +223,57 @@ class AdaptiveStrategySelector:
 
         # Classify regime deterministically before calling the LLM
         label, desc, confidence = _classify_regime(regime_snapshot)
+
+        # Regime stability gate: require a new regime to appear for
+        # `regime_stability_weeks` consecutive calls before switching allocation.
+        # On first call (_confirmed_regime is None) act immediately.
+        if self._confirmed_regime is None:
+            self._confirmed_regime = label
+            self._pending_regime   = None
+            self._pending_count    = 0
+            effective_label        = label
+        elif label == self._confirmed_regime:
+            # Still in the confirmed regime — reset any pending candidate
+            self._pending_regime = None
+            self._pending_count  = 0
+            effective_label      = label
+        else:
+            # Different from confirmed — track as pending
+            if label == self._pending_regime:
+                self._pending_count += 1
+            else:
+                self._pending_regime = label
+                self._pending_count  = 1
+
+            if self._pending_count >= self.regime_stability_weeks:
+                # Confirmed transition — promote pending to confirmed
+                if self.verbose:
+                    print(
+                        f"  [AdaptiveSelector] Regime transition confirmed: "
+                        f"{self._confirmed_regime} → {label} "
+                        f"(after {self._pending_count} weeks)"
+                    )
+                self._confirmed_regime = label
+                self._pending_regime   = None
+                self._pending_count    = 0
+                effective_label        = label
+            else:
+                # Not yet confirmed — hold the previous allocation
+                effective_label = self._confirmed_regime
+                if self.verbose:
+                    print(
+                        f"  [AdaptiveSelector] Regime pending: "
+                        f"{label} ({self._pending_count}/{self.regime_stability_weeks} weeks) "
+                        f"— holding {effective_label}"
+                    )
+
+        # Re-fetch desc/confidence for the effective label if it differs from raw label
+        if effective_label != label:
+            for lbl, d, _, conf in _REGIME_RULES:
+                if lbl == effective_label:
+                    desc, confidence = d, conf
+                    break
+            label = effective_label
 
         new_weights = self._call_llm(regime_snapshot, label, desc, confidence)
         if new_weights:

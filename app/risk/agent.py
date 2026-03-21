@@ -12,6 +12,8 @@ class RiskAgent:
         use_vol_sizing:      bool  = True,   # ATR-based sizing; falls back to max_position_pct
         breadth_circuit_breaker: bool  = False, # suppress BUY when market is broadly falling
         max_downtrend_pct:   float = 0.40,   # block BUY when >40% of universe in DOWNTREND (R1)
+        min_atr_cost_ratio:  float = 3.0,    # ATR must cover ≥ N× round-trip cost (0 = disabled)
+        round_trip_cost_pct: float = 0.0015, # 0.10% commission + 0.05% slippage per side
     ):
         self.max_position_pct        = max_position_pct
         self.atr_multiplier          = atr_multiplier
@@ -20,6 +22,8 @@ class RiskAgent:
         self.use_vol_sizing          = use_vol_sizing
         self.breadth_circuit_breaker = breadth_circuit_breaker
         self.max_downtrend_pct       = max_downtrend_pct
+        self.min_atr_cost_ratio      = min_atr_cost_ratio
+        self.round_trip_cost_pct     = round_trip_cost_pct
 
     # --------------------------------------------------
     # MAIN EVALUATION
@@ -56,6 +60,24 @@ class RiskAgent:
                 action="HOLD",
                 reasoning=f"Market breadth circuit breaker: {market_downtrend_pct:.0%} in DOWNTREND",
             )
+
+        # --- Min ATR-to-cost filter (BUY only) ---
+        # Skips entry when the expected move (ATR) is too small relative to
+        # round-trip costs. Prevents churning in low-vol choppy markets where
+        # commissions exceed gross PnL. Disabled when min_atr_cost_ratio=0.
+        if (
+            decision.action == "BUY"
+            and self.min_atr_cost_ratio > 0
+            and atr and current_price
+        ):
+            atr_pct = atr / current_price
+            min_atr = self.round_trip_cost_pct * self.min_atr_cost_ratio
+            if atr_pct < min_atr:
+                return Decision(
+                    symbol=symbol,
+                    action="HOLD",
+                    reasoning=f"ATR {atr_pct:.3%} below min cost ratio ({min_atr:.3%})",
+                )
 
         # --- Regime filter (BUY only) ---
         # Skipped entirely when allowed_regimes is None.

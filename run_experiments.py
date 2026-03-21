@@ -245,7 +245,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0):
 
     if not ctx.historical_dates:
         return None
@@ -270,7 +270,8 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         risk_per_trade_pct=0.005,      # risk 0.5% of portfolio per trade
         use_vol_sizing=True,
         breadth_circuit_breaker=breadth_circuit_breaker,
-        max_downtrend_pct=0.40,        # block BUY when >40% of universe in DOWNTREND (R1)
+        max_downtrend_pct=max_downtrend_pct,
+        min_atr_cost_ratio=min_atr_cost_ratio,
     )
 
     # Use the per-strategy universe filter when provided; fall back to the
@@ -430,6 +431,8 @@ def main():
             allowed_regimes=None,         # router handles per-strategy regime gating internally
             breadth_circuit_breaker=True,
             universe_filter=union_filter, # each strategy sees its own domain candidates
+            max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
+            min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
         )
         _print_row("EqualWeight (5-strat)", result_multi)
 
@@ -489,6 +492,8 @@ def main():
             breadth_circuit_breaker=True,
             universe_filter=adaptive_union_filter,
             adaptive_selector=selector,
+            max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
+            min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
         )
         _print_row("Adaptive  (5-strat)", result_adaptive)
         print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
