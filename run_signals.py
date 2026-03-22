@@ -297,7 +297,7 @@ def main():
     fetched = 0
     for symbol in BROAD_UNIVERSE:
         try:
-            records = provider.fetch_ohlc(symbol, start=today, end=today)
+            records = provider.fetch_ohlc(symbol, start=today, end=today + timedelta(days=1))
             if records:
                 repository.bulk_upsert(records)
                 fetched += 1

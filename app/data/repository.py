@@ -56,6 +56,21 @@ class MarketDataRepository:
         finally:
             session.close()
 
+    def get_last_dates(self, symbols: List[str]) -> Dict[str, datetime]:
+        """Return the most recent timestamp in the DB for each symbol."""
+        from sqlalchemy import func
+        session = SessionLocal()
+        try:
+            stmt = (
+                select(MarketOHLC.symbol, func.max(MarketOHLC.timestamp))
+                .where(MarketOHLC.symbol.in_(symbols))
+                .group_by(MarketOHLC.symbol)
+            )
+            rows = session.execute(stmt).all()
+            return {symbol: last_ts for symbol, last_ts in rows}
+        finally:
+            session.close()
+
     def get_ohlc(
         self,
         symbol: str,
