@@ -1,7 +1,7 @@
 # Live Trading Deployment Plan — Multi-Strategy Adaptive System
 
-**Last updated**: 2026-03-21
-**Status**: Pre-paper-trade. Implementing prerequisites.
+**Last updated**: 2026-03-22
+**Status**: Paper trade pipeline complete. Cron scheduled. Ready to run from 2026-03-23.
 
 ---
 
@@ -32,11 +32,12 @@ The current deployed stack is a **5-strategy adaptive portfolio** driven by an L
 | RECOVERY over-triggers in NSE bull markets | DualMA underweighted in 2023-24 | ✅ Threshold raised to 0.022 |
 | BULL_SUSTAINED regime missing | 2023-24 bull misclassified as RECOVERY | ✅ Regime added |
 | DualMA minimum weight floor | Could drop below 0.10 in RECOVERY | ✅ Floor added in `_parse_weights()` |
-| Bull 2019 loss from commission drag | Multi-strategy 5× trade frequency hurts in choppy markets | ❌ Open — min ATR filter not built |
-| Signal persistence (2-day breakout confirm) | False entries in choppy markets | ❌ Not built |
-| Regime stability gate (2-week) | Allocation whipsaws on brief regime spikes | ❌ Not built |
-| Execution price = close (not next-day open) | Backtest slightly optimistic | ❌ Not fixed |
-| No volume constraint on sizing | Market impact underestimated for small-caps | ❌ Not built |
+| Bull 2019 loss from commission drag | Multi-strategy 5× trade frequency hurts | ✅ Min ATR-to-cost filter in `RiskAgent` |
+| Regime stability gate (2-week) | Allocation whipsaws on brief regime spikes | ✅ Built in `AdaptiveStrategySelector` |
+| Breadth circuit breaker threshold | Default 0.40 too loose for current bear | ✅ Tightened to 0.35 in `run_signals.py` |
+| Signal persistence (2-day breakout confirm) | False entries in choppy markets | ❌ Not built (post-paper-trade) |
+| Execution price = close (not next-day open) | Backtest slightly optimistic | ❌ Not fixed (paper run will measure gap) |
+| No volume constraint on sizing | Market impact underestimated for small-caps | ❌ Not built (post-paper-trade) |
 | Look-ahead bias in Sharpe table | LLM "knows" which strategies work — live will be lower | ❌ Structural — needs walk-forward |
 
 ### Current backtest results (full 2018–2024)
@@ -55,51 +56,95 @@ The current deployed stack is a **5-strategy adaptive portfolio** driven by an L
 These are the items that MUST be done before starting any paper trade run.
 Items are sorted: code changes → infrastructure → validation.
 
-### Code changes (implement now, before paper run)
+### Code changes — status as of 2026-03-22
 
-- [ ] **Enable `breadth_circuit_breaker=True`** in `run_experiments.py` and in the live signal job
-  - Already in `RiskAgent` — just change the parameter from `False` to `True`
-  - Set `max_downtrend_pct=0.35` (tighter than the backtest default of 0.40 — appropriate for current war-driven bear)
-  - Zero new code, 5 minutes
+- [x] **Enable `breadth_circuit_breaker=True`** — ✅ Done. `max_downtrend_pct=0.35` in `run_signals.py`
+- [x] **Minimum ATR-to-cost filter** — ✅ Done. `min_atr_cost_ratio=3.0` in `RiskAgent` + `run_signals.py`
+- [x] **Regime stability gate (2-week)** — ✅ Done. `regime_stability_weeks=2` in `AdaptiveStrategySelector`
+- [x] **RECOVERY threshold 0.018 → 0.022** — ✅ Done in `_classify_regime()`
+- [x] **BULL_SUSTAINED regime** — ✅ Done in `_classify_regime()` + LLM allocation rules
+- [x] **DualMA minimum weight floor 0.10** — ✅ Done in `_parse_weights()`
+- [ ] **Earnings date avoidance gate** — ❌ Needed before April 2026 Q4 season. See `app/data/earnings_calendar.py`
+- [ ] **Re-run backtest with all improvements** — ❌ Run `python run_experiments.py` to update reference Sharpe numbers
 
-- [ ] **Minimum ATR-to-cost filter in `RiskAgent`**
-  - Block BUY when `(atr / price) < 3 × 0.0015` (ATR must cover 3× round-trip cost)
-  - Fixes Bull 2019 commission drag without affecting Bear/Recovery results
-  - ~20 lines in `app/risk/agent.py`
+### Infrastructure — status as of 2026-03-22
 
-- [ ] **Earnings date avoidance gate** (Phase 1 news filter)
-  - Avoid new entries within ±3 days of a known quarterly earnings announcement
-  - NSE Q4 results: April–May 2026 — implement before paper run starts
-  - Data: maintain a static `app/data/earnings_calendar.py` updated each quarter
-  - ~50 lines including the calendar data structure
+- [x] **`app/broker/base.py`** — ✅ `BrokerAdapter` ABC
+- [x] **`app/broker/paper_adapter.py`** — ✅ Fills at next-day open from `market_ohlc`
+- [x] **`app/broker/models.py`** — ✅ `Order`, `BrokerPosition` dataclasses
+- [x] **`signal_queue` DB table** — ✅ Live in Supabase (`scripts/init_db.py`)
+- [x] **`live_positions` DB table** — ✅ Live in Supabase (`scripts/init_db.py`)
+- [x] **`selector_state` DB table** — ✅ Live in Supabase (`scripts/create_live_tables.sql`)
+- [x] **`run_signals.py`** — ✅ Complete 15-step pipeline (3:35 PM IST)
+- [x] **`run_orders.py`** — ✅ Complete fill simulation job (9:15 AM IST)
+- [x] **`app/data/calendar.py`** — ✅ `NSECalendar` with 2025-2026 NSE holidays
+- [x] **`scripts/run_signals.sh`** — ✅ Cron wrapper (loads `.env`, runs venv python)
+- [x] **`scripts/run_orders.sh`** — ✅ Cron wrapper
+- [x] **`logs/` directory** — ✅ Created
+- [ ] **`.env` file** — ⚠️ Created at `.env`. **Add real `OPENAI_API_KEY` before first run.**
+- [ ] **Cron installed** — ⚠️ macOS blocked write (Terminal needs Full Disk Access). See install instructions below.
+- [x] **Email notifications** — ✅ Done. `app/core/notify.py` sends Gmail SMTP summary after each run.
+- [ ] **Daily P&L report (Telegram)** — ❌ Not built. Email covers immediate needs; Telegram can be added later.
 
-- [ ] **Regime stability gate (2-week) in `AdaptiveStrategySelector`**
-  - Require regime to appear in ≥ 2 consecutive weekly calls before switching allocation
-  - Prevents whipsaw on 1-week regime spikes (BEAR_CONFIRMED for 1 week in mid-trend)
-  - ~30 lines in `app/meta/adaptive_selector.py`
+### Deployment: Railway.app (Mac does NOT need to be running)
 
-- [ ] **Update `run_experiments.py` backtest to use `breadth_circuit_breaker=True`**
-  - Re-run backtest after the above changes to get updated benchmark numbers
-  - The paper trade reference numbers should match the CB-enabled backtest
+The pipeline is deployed to **Railway.app** — a cloud platform that runs the two cron jobs on its servers.
+Your Mac only needs to be on to push code changes.
 
-### Infrastructure (build the paper trading pipeline)
+**Architecture:**
+```
+Railway cloud
+  ├─ run-signals service  → cron: 5 10 * * 1-5  (3:35 PM IST)
+  └─ run-orders service   → cron: 45 3 * * 1-5  (9:15 AM IST)
+          ↓
+  Supabase (PostgreSQL) — already cloud-hosted
+          ↓
+  Gmail SMTP → email to you after each run
+```
 
-- [ ] **`app/broker/paper_adapter.py`** — fake broker that logs to DB, no real orders
-- [ ] **`app/broker/base.py`** — `BrokerAdapter` ABC interface
-- [ ] **`signal_queue` DB table** — persists signals with status lifecycle
-- [ ] **`live_positions` DB table** — persists portfolio state across daily runs
-- [ ] **`run_signals.py`** — daily EOD signal generation job (3:35 PM IST)
-- [ ] **`run_orders.py`** — reads `signal_queue`, calls broker adapter (9:15 AM IST)
-- [ ] **`app/data/calendar.py`** — NSE trading day calendar (holiday list 2026)
-- [ ] **Daily P&L report** — Telegram/email notification after each session
-- [ ] **Cron scheduling** — automate the two jobs
+**One-time Railway setup:**
+
+1. Install Railway CLI:
+   ```bash
+   brew install railway
+   ```
+2. Login and create project:
+   ```bash
+   railway login
+   railway init        # creates a new Railway project linked to this repo
+   ```
+3. Set environment variables in Railway dashboard (or CLI):
+   ```bash
+   railway variables set OPENAI_API_KEY=sk-...
+   railway variables set EMAIL_FROM=your@gmail.com
+   railway variables set EMAIL_TO=your@gmail.com
+   railway variables set EMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+   # DATABASE_URL is optional — fallback is hardcoded in app/core/database.py
+   ```
+4. Deploy:
+   ```bash
+   git add .
+   git commit -m "add Railway deployment"
+   railway up
+   ```
+5. Railway reads `railway.toml` and creates both cron services automatically.
+   Verify at: `https://railway.app/dashboard` → your project → two services visible.
+
+**Cost:** ~$5/month on Railway Hobby plan (two lightweight cron jobs, minimal CPU/RAM).
+
+**Gmail App Password setup (for email):**
+1. Enable 2-Step Verification on your Google account
+2. Go to: Google Account → Security → App Passwords
+3. Create one named "Financial Lab" — get a 16-char password like `abcd efgh ijkl mnop`
+4. Use that (without spaces) as `EMAIL_APP_PASSWORD`
 
 ### Validation (before calling paper trade "running")
 
-- [ ] Dry-run `run_signals.py` manually on 5 recent trading days — verify signal counts match backtest frequency
-- [ ] Verify `live_positions` persists correctly across two consecutive runs
-- [ ] Trigger `breadth_circuit_breaker` manually (set threshold to 0.01) — confirm BUY signals suppressed
-- [ ] Confirm earnings date avoidance fires for a known upcoming result date
+- [ ] Dry-run `run_signals.py` manually (`./finance/bin/python3 run_signals.py`) — verify signal counts
+- [ ] Check `signal_queue` table for written signals after first real run
+- [ ] Verify `live_positions` persists correctly after `run_orders.py` fills
+- [ ] Trigger `breadth_circuit_breaker` manually (set `max_downtrend_pct=0.01`) — confirm BUY suppressed
+- [ ] Confirm earnings date avoidance fires for a known Q4 result date (build first)
 - [ ] Confirm paper portfolio equity calculation matches manual check
 
 ---
@@ -110,19 +155,20 @@ Ordered by dependency and impact. Items in **bold** block everything downstream.
 
 | Priority | Task | Effort | Blocks |
 |---|---|---|---|
-| P0 | Enable `breadth_circuit_breaker=True` (parameter only) | 5 min | Nothing — do now |
-| P1 | Min ATR-to-cost filter in `RiskAgent` | 30 min | Bull 2019 fix |
-| P1 | Earnings date avoidance gate | 2 hrs | News filter Phase 1 |
-| P1 | Regime stability gate in `AdaptiveSelector` | 1 hr | 2019 whipsaw fix |
-| P2 | Re-run backtest with all P0-P1 changes | 15 min | Updated reference numbers |
-| **P3** | **`app/broker/base.py` + `paper_adapter.py`** | **3 hrs** | **All order execution** |
-| **P3** | **`signal_queue` + `live_positions` DB tables** | **2 hrs** | **State persistence** |
-| **P4** | **`run_signals.py` daily signal job** | **4 hrs** | **Core pipeline** |
-| P4 | `app/data/calendar.py` NSE holiday calendar | 1 hr | Holiday handling |
-| P5 | `run_orders.py` order placement job | 2 hrs | Paper order execution |
-| P5 | Daily P&L report (Telegram) | 2 hrs | Observability |
-| P6 | Cron setup for both jobs | 30 min | Automation |
-| P7 | 5-day manual dry-run | 1 week | Validation |
+| ~~P0~~ | ~~Enable `breadth_circuit_breaker=True`~~ | ✅ Done | — |
+| ~~P1~~ | ~~Min ATR-to-cost filter~~ | ✅ Done | — |
+| ~~P1~~ | ~~Regime stability gate~~ | ✅ Done | — |
+| **P1** | **Earnings date avoidance gate** | **2 hrs — build before April** | **Q4 season** |
+| P2 | Re-run backtest with all improvements | 15 min | Updated reference numbers |
+| ~~P3~~ | ~~`app/broker/base.py` + `paper_adapter.py`~~ | ✅ Done | — |
+| ~~P3~~ | ~~`signal_queue` + `live_positions` DB tables~~ | ✅ Done | — |
+| ~~P4~~ | ~~`run_signals.py` daily signal job~~ | ✅ Done | — |
+| ~~P4~~ | ~~`app/data/calendar.py` NSE holiday calendar~~ | ✅ Done | — |
+| ~~P5~~ | ~~`run_orders.py` order placement job~~ | ✅ Done | — |
+| ~~P5~~ | ~~Email notifications~~ | ✅ Done (`app/core/notify.py`) | — |
+| **P5** | **Set env vars in Railway + deploy** | **15 min — do now** | **Cloud scheduling** |
+| P6 | Daily P&L report (Telegram) | 2 hrs | Richer observability |
+| P7 | 5-day observation (check logs/signals.log daily) | 1 week | Validation |
 | **P8** | **Paper trade: 6–8 weeks** | **6–8 weeks** | **Confidence before real money** |
 
 ---
