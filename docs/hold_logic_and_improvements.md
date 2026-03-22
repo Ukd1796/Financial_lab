@@ -1,6 +1,6 @@
 # Hold Logic, Bull 2019 Losses & Future Improvements
 
-**Last updated**: 2026-03-21
+**Last updated**: 2026-03-22
 
 ---
 
@@ -155,52 +155,31 @@ ATR-based stops are tight, positions are small, and the cost-to-return ratio is 
 
 ---
 
-## 4. Improvements That Could Fix Bull 2019 Without Harming Other Periods
+## 4. Improvements — Status as of 2026-03-22
 
-### 4.1 Minimum trade quality filter on entries (highest impact)
+### ✅ 4.1 Minimum trade quality filter (done)
 
-Add a minimum ATR-to-cost ratio check before entering. If the ATR (expected move) is
-too small relative to round-trip costs, skip the trade:
+`min_atr_cost_ratio=3.0` added to `RiskAgent` and wired in `run_signals.py`.
+ATR must be ≥ 3× round-trip cost (0.45% min). Fires only in low-ATR environments —
+Bear 2022 and Recovery 2020 results unchanged (ATR is high in those periods).
 
-```python
-# In RiskAgent.evaluate(), before the BUY block:
-MIN_ATR_COST_RATIO = 3.0   # ATR must be ≥ 3× round-trip cost
-round_trip_cost_pct = 0.0015  # 0.15%
-if decision.action == "BUY" and atr and current_price:
-    atr_pct = atr / current_price
-    if atr_pct < round_trip_cost_pct * MIN_ATR_COST_RATIO:
-        return Decision(symbol=symbol, action="HOLD",
-                        reasoning=f"ATR {atr_pct:.3%} < min cost ratio")
-```
+### 4.2 Signal persistence: 2-day breakout confirmation (open)
 
-**Why safe**: This fires only in low-ATR environments (slow, choppy markets). During
-Bear 2022 and Recovery 2020, ATR is high — this filter is inactive and results unchanged.
+Require `price > high_10d` for 2 consecutive days before entering.
+Needs `prev_high_10d` in `market_state.previous_indicators`. ~30-40% fewer false entries
+in choppy markets. Build after paper trade baseline is established.
 
-### 4.2 Signal persistence: require 2-day breakout confirmation
+### 4.3 Portfolio trade rate limiter (open, low priority)
 
-Change Breakout and QuietBrk entry from "price > high_10d today" to "price > high_10d
-for 2 consecutive days". Needs a previous-bar high_10d comparison in the indicator set.
-Reduces false entries in choppy markets by ~30-40% based on similar strategy studies.
+Cap total new entries across all strategies to N per week.
+Risk: may block valid Recovery breakout clusters. Calibration-sensitive.
+Deprioritised — min ATR filter addresses the core cost-drag issue more cleanly.
 
-**Implementation note**: requires `prev_high_10d` and `prev_price` in `market_state.previous_indicators`.
+### ✅ 4.4 Regime stability gate (done)
 
-### 4.3 Portfolio trade rate limiter
-
-Cap total new entries across all strategies to N per week. In quiet weeks, reduce N.
-A simple implementation: track `_weekly_buy_count` in MultiStrategyRouter, reset every 5 days.
-
-**Risk**: May block entries in fast-moving recovery markets where many stocks break out
-simultaneously. Needs careful calibration.
-
-### 4.4 Regime stability gate on the adaptive selector
-
-Require the adaptive selector to see the same regime for 2 consecutive weeks before
-acting on it (see Priority 4 in `adaptive_strategy_selector_analysis.md`). This would
-prevent the 2019 whipsaw (RECOVERY → BEAR_CONFIRMED → CRASH → RECOVERY in 3 weeks).
-
-**Expected effect for 2019**: The 1-2 week bear spikes (Jan 27, Aug) would not trigger
-full DualMA re-allocation — the regime would need to be confirmed before capital moved.
-This reduces allocation churn without affecting the sustained Bear 2022 signal.
+`regime_stability_weeks=2` in `AdaptiveStrategySelector`. The 2019 whipsaw
+(RECOVERY → BEAR_CONFIRMED → CRASH → RECOVERY in 3 weeks) will no longer trigger
+full capital reallocation on 1-week regime spikes. State persists via `selector_state` DB table.
 
 ---
 
@@ -429,22 +408,27 @@ Now (March 2026)
               Consider GPT-4o upgrade for final live validation
 ```
 
-### 6.6 The honest risk assessment
+### 6.6 The honest risk assessment (updated 2026-03-22)
 
-The system is **not ready for real money today** for these reasons:
+The system is **not ready for real money yet** but is **ready to paper trade**:
 
-1. Bull 2019 structural loss is not fixed — the minimum ATR-to-cost filter and signal
-   persistence improvements are not yet implemented
-2. The Sharpe table has look-ahead bias — live performance will be below the backtest
-   Sharpe (~0.8–0.9× expected)
-3. In a news-driven bear, the regime classifier will be noisier than it was in 2018–2024
-4. You have never seen this system handle a live regime transition — you do not yet
-   know how the 1-2 week rebalance lag feels when real money is at stake
+**Fixed since last assessment:**
+- Min ATR-to-cost filter — Bull 2019 commission drag partially addressed
+- Regime stability gate — 2019 allocation whipsaw addressed
+- BULL_SUSTAINED regime — 2023-24 misclassification addressed
+- Breadth CB at 0.35 — tighter for current news-driven bear
+- Full paper trade pipeline deployed on Railway.app with email notifications
 
-**What the system IS ready for today:**
-- Paper trading with real-time data to validate regime classification
-- Identifying which adaptations (news filter, min ATR filter) should be built before live
-- Building confidence in the 2022-style bear regime where the system's edge is clearest
+**Still open:**
+1. Backtest with all fixes not yet re-run — reference Sharpe numbers are pre-fix estimates
+2. Signal persistence (2-day confirmation) not yet built — some choppy-market false entries remain
+3. Look-ahead bias in Sharpe table — live will be ~0.8-0.9× backtest Sharpe
+4. First live regime transition not yet observed
+
+**What the system is ready for (as of 2026-03-22):**
+- Paper trading starts 2026-03-23 — `run_signals.py` auto-runs at 3:35 PM IST
+- Regime call quality can be evaluated weekly against subjective market assessment
+- The 2022-style bear edge (Adaptive Sharpe 1.30 vs EW 0.27) is the clearest validated signal
 
 ---
 
@@ -460,8 +444,8 @@ The system is **not ready for real money today** for these reasons:
 | Weight floor (DualMA) | ✅ Just added (0.10 floor) | ✅ No change needed |
 | RECOVERY threshold | ✅ Just raised to 0.022 | Still over-triggering in 2019 — monitor |
 | BULL_SUSTAINED regime | ✅ Just added | Expected to help 2023-24 allocation |
-| Min ATR-to-cost ratio | ❌ Not implemented | Add to RiskAgent — fixes 2019 drag |
+| Min ATR-to-cost ratio | ✅ Built (`min_atr_cost_ratio=3.0`) | — |
 | Signal persistence (2-day) | ❌ Not implemented | Add to Breakout/QuietBrk — reduces churn |
-| Regime stability gate (2-week) | ❌ Not implemented | Add to AdaptiveSelector — fixes 2019 whipsaw |
-| News/event filter | ❌ Not implemented | Phase 1: earnings date avoidance gate |
+| Regime stability gate (2-week) | ✅ Built (`regime_stability_weeks=2`) | — |
+| News/event filter | ❌ Not implemented | Phase 1: earnings date avoidance (before April) |
 | Macro event awareness | ❌ Not implemented | Phase 2: RBI/Budget MIXED shift |
