@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-# Default start command — Railway dashboard overrides this per service:
-#   run-signals: python run_signals.py  (cron: 5 10 * * 1-5,  3:35 PM IST)
-#   run-orders:  python run_orders.py   (cron: 45 3 * * 1-5,  9:15 AM IST)
 startCommand = "python run_signals.py"
+cronSchedule = "5 10 * * 1-5"
+# run-orders service: override startCommand to "python run_orders.py"
+#                     and cronSchedule to "45 3 * * 1-5" in Railway dashboard
