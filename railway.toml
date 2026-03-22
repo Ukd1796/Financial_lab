@@ -1,18 +1,14 @@
 [build]
 builder = "nixpacks"
 
-# Service 1: Daily signal generation — 3:35 PM IST = 10:05 UTC
-[[services]]
-name = "run-signals"
-
-[services.deploy]
-cronSchedule = "5 10 * * 1-5"
-startCommand = "python run_signals.py"
-
-# Service 2: Morning order placement — 9:15 AM IST = 3:45 UTC
-[[services]]
-name = "run-orders"
-
-[services.deploy]
-cronSchedule = "45 3 * * 1-5"
-startCommand = "python run_orders.py"
+# This file controls build settings only.
+# Two cron services (run-signals and run-orders) are configured
+# separately in the Railway dashboard — same repo, different start commands.
+#
+# Service 1 — run-signals:
+#   Start Command: python run_signals.py
+#   Cron Schedule: 5 10 * * 1-5   (3:35 PM IST = 10:05 UTC, weekdays)
+#
+# Service 2 — run-orders:
+#   Start Command: python run_orders.py
+#   Cron Schedule: 45 3 * * 1-5   (9:15 AM IST = 3:45 UTC, weekdays)

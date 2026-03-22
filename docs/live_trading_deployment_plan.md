@@ -86,66 +86,194 @@ Items are sorted: code changes → infrastructure → validation.
 - [x] **Email notifications** — ✅ Done. `app/core/notify.py` sends Gmail SMTP summary after each run.
 - [ ] **Daily P&L report (Telegram)** — ❌ Not built. Email covers immediate needs; Telegram can be added later.
 
-### Deployment: Railway.app (Mac does NOT need to be running)
+### Deployment + Testing — Time Budget (~55 min total)
 
-The pipeline is deployed to **Railway.app** — a cloud platform that runs the two cron jobs on its servers.
-Your Mac only needs to be on to push code changes.
-
-**Architecture:**
 ```
-Railway cloud
-  ├─ run-signals service  → cron: 5 10 * * 1-5  (3:35 PM IST)
-  └─ run-orders service   → cron: 45 3 * * 1-5  (9:15 AM IST)
-          ↓
-  Supabase (PostgreSQL) — already cloud-hosted
-          ↓
-  Gmail SMTP → email to you after each run
+[ 5 min] Step 1 — Gmail App Password
+[15 min] Step 2 — Push to GitHub + Railway account
+[15 min] Step 3 — Railway: create project + two cron services + env vars
+[15 min] Step 4 — Local test run (run_signals.py today)
+[ 5 min] Step 5 — Verify DB + email received
 ```
 
-**One-time Railway setup:**
+---
 
-1. Install Railway CLI:
-   ```bash
-   brew install railway
+### Step 1 — Gmail App Password (5 min)
+
+**Why**: `run_signals.py` and `run_orders.py` both send email via Gmail SMTP.
+
+1. Go to: myaccount.google.com → Security → 2-Step Verification (enable if not on)
+2. Search "App Passwords" in the search bar at the top
+3. Create → name it "Financial Lab" → copy the 16-char password (e.g. `abcd efgh ijkl mnop`)
+4. Edit `.env` (in project root):
    ```
-2. Login and create project:
-   ```bash
-   railway login
-   railway init        # creates a new Railway project linked to this repo
+   OPENAI_API_KEY=sk-YOUR-REAL-KEY
+   EMAIL_FROM=yourname@gmail.com
+   EMAIL_TO=yourname@gmail.com
+   EMAIL_APP_PASSWORD=abcdefghijklmnop   ← no spaces
    ```
-3. Set environment variables in Railway dashboard (or CLI):
-   ```bash
-   railway variables set OPENAI_API_KEY=sk-...
-   railway variables set EMAIL_FROM=your@gmail.com
-   railway variables set EMAIL_TO=your@gmail.com
-   railway variables set EMAIL_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
-   # DATABASE_URL is optional — fallback is hardcoded in app/core/database.py
-   ```
-4. Deploy:
-   ```bash
-   git add .
-   git commit -m "add Railway deployment"
-   railway up
-   ```
-5. Railway reads `railway.toml` and creates both cron services automatically.
-   Verify at: `https://railway.app/dashboard` → your project → two services visible.
 
-**Cost:** ~$5/month on Railway Hobby plan (two lightweight cron jobs, minimal CPU/RAM).
+---
 
-**Gmail App Password setup (for email):**
-1. Enable 2-Step Verification on your Google account
-2. Go to: Google Account → Security → App Passwords
-3. Create one named "Financial Lab" — get a 16-char password like `abcd efgh ijkl mnop`
-4. Use that (without spaces) as `EMAIL_APP_PASSWORD`
+### Step 2 — Push code to GitHub (15 min)
 
-### Validation (before calling paper trade "running")
+Railway deploys from a GitHub repo. If you don't have one yet:
 
-- [ ] Dry-run `run_signals.py` manually (`./finance/bin/python3 run_signals.py`) — verify signal counts
-- [ ] Check `signal_queue` table for written signals after first real run
-- [ ] Verify `live_positions` persists correctly after `run_orders.py` fills
-- [ ] Trigger `breadth_circuit_breaker` manually (set `max_downtrend_pct=0.01`) — confirm BUY suppressed
-- [ ] Confirm earnings date avoidance fires for a known Q4 result date (build first)
-- [ ] Confirm paper portfolio equity calculation matches manual check
+```bash
+cd /Users/ujjwalkumar/Financial_lab
+
+# If no git remote yet:
+git remote add origin https://github.com/YOUR_USERNAME/financial-lab.git
+
+# Push
+git add requirements.txt railway.toml .gitignore app/core/database.py \
+        app/core/notify.py run_signals.py run_orders.py scripts/
+git commit -m "add Railway deployment and paper trading pipeline"
+git push -u origin main
+```
+
+**Important**: `.env` is in `.gitignore` — it will NOT be pushed. Your API keys stay local.
+Verify: `git status` should show `.env` as untracked (not staged).
+
+---
+
+### Step 3 — Railway: create project + two cron services (15 min)
+
+**Railway does not read `[[services]]` from `railway.toml`** — each service is created
+manually in the dashboard. The `railway.toml` only controls how the code is built.
+
+**3a. Create Railway account and project:**
+1. Go to railway.app → Sign up with GitHub
+2. Dashboard → "New Project" → "Deploy from GitHub repo" → select `financial-lab`
+3. Railway will detect `requirements.txt` and auto-build with nixpacks
+
+**3b. Rename the default service to `run-signals`:**
+1. Click the auto-created service → Settings tab
+2. Rename to `run-signals`
+3. Under **Deploy** → **Start Command**: `python run_signals.py`
+4. Under **Deploy** → **Cron Schedule**: `5 10 * * 1-5`
+   _(this is 10:05 UTC = 3:35 PM IST)_
+5. Save
+
+**3c. Add second service `run-orders`:**
+1. Dashboard → your project → "+ New Service" → "GitHub Repo" → same `financial-lab` repo
+2. Rename to `run-orders`
+3. **Start Command**: `python run_orders.py`
+4. **Cron Schedule**: `45 3 * * 1-5`
+   _(this is 03:45 UTC = 9:15 AM IST)_
+5. Save
+
+**3d. Set environment variables (do this for BOTH services):**
+
+For each service → Variables tab → "+ New Variable":
+
+| Key | Value |
+|---|---|
+| `OPENAI_API_KEY` | `sk-...` |
+| `EMAIL_FROM` | `yourname@gmail.com` |
+| `EMAIL_TO` | `yourname@gmail.com` |
+| `EMAIL_APP_PASSWORD` | `abcdefghijklmnop` |
+
+`DATABASE_URL` is optional — the Supabase URL is already hardcoded as fallback in
+`app/core/database.py`. Only add it if you rotate the password.
+
+**3e. Verify both services show "Cron" badge in the Railway dashboard.**
+
+**Cost:** ~$5/month on Railway Hobby plan.
+
+---
+
+### Step 4 — Local test run before first live cron (15 min)
+
+Run `run_signals.py` manually right now (today is a trading day) to confirm the full
+pipeline works end-to-end before Railway takes over.
+
+**First: load your `.env` for the local test:**
+```bash
+cd /Users/ujjwalkumar/Financial_lab
+export $(grep -v '^#' .env | grep -v '^$' | xargs)
+```
+
+**Run the signal job:**
+```bash
+./finance/bin/python3 run_signals.py
+```
+
+**What to look for in the output:**
+```
+[1/8] Fetching today's EOD data for 150 symbols...
+      Fetched: 140+ symbols | Errors: <10   ← yfinance misses are normal
+[2/8] Loading 300-day history...
+[3/8] Running DynamicUniverseAgent → UnionUniverseFilter...
+      Top 80 candidates → 60-80 active symbols
+[4/8] Computing market states...
+[5/8] Building regime snapshot...
+      UP=XX%  DOWN=XX%  ATR=X.XX%
+[6/8] Running AdaptiveStrategySelector...
+      [AdaptiveSelector] Regime: BEAR_EARLY  ← some label
+      Weights: DualMA=0.XX Breakout=0.XX ...
+[7/8] Syncing live positions...
+      Open positions: 0                       ← correct on first run
+[8/8] Generating signals...
+======================================
+  Signals written: N  (BUY: X, SELL: Y)
+```
+
+**If OpenAI key is wrong** → you'll see `[AdaptiveSelector] LLM call failed` and weights
+stay at equal-weight defaults. Fix the key and re-run.
+
+**If DB connection fails** → check Supabase project is not paused (free tier auto-pauses).
+Go to supabase.com → your project → wake it up.
+
+**After run completes — check signals in DB:**
+```bash
+./finance/bin/python3 -c "
+from app.core.database import SessionLocal
+from sqlalchemy import text
+s = SessionLocal()
+rows = s.execute(text('SELECT symbol, action, strategy, status, raw_price FROM signal_queue ORDER BY created_at DESC LIMIT 10')).fetchall()
+for r in rows: print(r)
+s.close()
+"
+```
+Expected: rows with status=`PENDING`, today's date, real NSE symbols.
+
+**Check email**: You should receive `[FinLab] Signals 2026-03-23 — ... | BUY:X SELL:Y`
+
+**Then run orders (simulates tomorrow morning's job):**
+```bash
+./finance/bin/python3 run_orders.py
+```
+Expected output: signals moved to status=`PLACED`, then possibly `FILLED` if today's open
+data is in `market_ohlc`. On first run with no history it will stay `PENDING` — that is correct.
+
+---
+
+### Step 5 — Verify Railway is scheduled correctly (5 min)
+
+In the Railway dashboard after setup:
+1. Click `run-signals` service → **Deployments** tab → should show "Cron" type
+2. Click **Settings** → confirm cron schedule shows `5 10 * * 1-5`
+3. Optionally: trigger a manual run via "Deploy" button to confirm the container builds
+   and runs without import errors — check the deployment logs
+
+**The first automatic run will be tomorrow (2026-03-24) at 3:35 PM IST.**
+You will receive an email. If no email arrives by 4 PM IST, check:
+- Railway deployment logs (Deployments tab → latest run → View Logs)
+- Common issue: Railway build failed on `psycopg2-binary` → add `libpq-dev` to nixpacks
+
+---
+
+### Validation checklist (mark off as you complete)
+
+- [ ] `.env` filled with real OPENAI_API_KEY + Gmail App Password
+- [ ] Code pushed to GitHub (`git push`)
+- [ ] Railway project created with two cron services
+- [ ] Env vars set in Railway for both services
+- [ ] Local `run_signals.py` completed without errors
+- [ ] `signal_queue` table has rows with `status=PENDING` after local test
+- [ ] Email received from local test run
+- [ ] Railway service shows "Cron" badge with correct schedule
 
 ---
 

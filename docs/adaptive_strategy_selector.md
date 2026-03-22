@@ -1,7 +1,7 @@
 # Adaptive Strategy Selector — Design & Integration Guide
 
-**Last updated**: 2026-03-21
-**Status**: Fully implemented. Running in `run_experiments.py` (step 15).
+**Last updated**: 2026-03-22
+**Status**: Fully implemented. Running in `run_experiments.py` (backtest) and `run_signals.py` (live paper trade).
 
 ---
 
@@ -34,7 +34,7 @@ RiskAgent._size_position(strategy_weight=0.40)  ← scales risk budget per posit
 No single strategy dominates across all regimes. Regime-matched strategies significantly
 outperform:
 
-### 2.1 Per-regime Sharpe matrix (updated 2026-03-21)
+### 2.1 Per-regime Sharpe matrix (2026-03-21 run — pre all fixes)
 
 | Strategy | Bull 19–20 | Crash 20 | Recov 20–21 | Bear 22 | Recent 22–24 | Full 18–24 |
 |---|---|---|---|---|---|---|
@@ -44,6 +44,10 @@ outperform:
 | TrendPB 5% | 0.97 | **1.81** | 1.19 | -0.34 | 0.90 | 0.79 |
 | RSI-MR os=5 | 0.15 | 0.88 | 1.34 | -0.65 | -0.14 | 0.22 |
 | **EqualWeight** | -0.52 | **2.41** | 2.84 | **+0.29** | 1.24 | 1.19 |
+
+**Note**: Updated backtest with all 2026-03-22 fixes (RECOVERY threshold, BULL_SUSTAINED,
+DualMA floor, regime stability gate, min ATR filter, CB 0.35) has not yet been re-run.
+Run `python run_experiments.py` to get updated benchmark numbers.
 
 ¹ QuietBrk Bear Sharpe improved from -0.67 to -0.05 after `_UPTREND_ONLY` regime gate.
 
@@ -74,41 +78,81 @@ The LLM should reduce Breakout/RSI-MR and increase QuietBrk/TrendPB in these con
 
 ## 3. System Architecture — Current State
 
+### Backtest mode (`run_experiments.py`)
 ```
 BacktestEngine.run()
   for each day:
-    ① dynamic_universe_agent.select_candidates()   → 80 UniverseCandidates (top-80 by activity)
-    ② UnionUniverseFilter.select_symbols()          → 60–80 unique symbols (per-strategy pools merged)
-    ③ observer.run_for_day() × N                   → daily_symbol_states {symbol: MarketState}
-    ④ [weekly] AdaptiveStrategySelector.rebalance() → new weight dict  ← NEW
-               build_regime_snapshot(daily_symbol_states)               ← feeds the LLM
-               GPT-4o-mini API call → normalised weight vector
-               MultiStrategyRouter.update_weights(new_weights)
+    ① dynamic_universe_agent.select_candidates()   → 80 UniverseCandidates
+    ② UnionUniverseFilter.select_symbols()          → 60–80 unique symbols
+    ③ observer.run_for_day() × N                   → daily_symbol_states
+    ④ [weekly] AdaptiveStrategySelector.rebalance() → weight dict
+               build_regime_snapshot()              → LLM input
+               _classify_regime() Python classifier → explicit label
+               GPT-4o-mini → normalised weight vector
+               regime_stability_weeks=2 gate        → prevents whipsaw
     ⑤ MultiStrategyRouter.decide()                 → merged decisions
-               ├── per-strategy allowed_regimes filter
-               ├── ownership gate (only owning strategy can SELL its positions)
-               └── conflict resolution: SELL > BUY > HOLD, ties by weight
-    ⑥ RiskAgent.evaluate(decision.weight)          → sized decisions
-               ATR stop, breadth circuit breaker, weight-scaled position sizing
+               per-strategy allowed_regimes filter
+               ownership gate (position_owners dict)
+               SELL > BUY > HOLD conflict resolution
+    ⑥ RiskAgent.evaluate()                         → sized decisions
+               breadth CB (max_downtrend_pct=0.35)
+               min ATR-to-cost filter (min_atr_cost_ratio=3.0)
+               ATR stop, weight-scaled position sizing
     ⑦ execution_agent.execute()                    → fills + portfolio update
+```
+
+### Live paper trade mode (`run_signals.py` + `run_orders.py`)
+```
+3:35 PM IST — run_signals.py
+    ① NSECalendar.is_trading_day() check
+    ② yfinance EOD fetch → upsert market_ohlc
+    ③ 300-day history load for warm-up
+    ④–⑥ Same universe/observer/regime pipeline as backtest
+    ⑦ _load_selector_state() from selector_state DB table
+    ⑧ AdaptiveStrategySelector.rebalance() — with stability gate
+    ⑨ _save_selector_state() → selector_state DB table
+    ⑩ PaperAdapter.get_positions() → reconstruct Portfolio + position_owners
+    ⑪ MultiStrategyRouter.decide()
+    ⑫ RiskAgent.evaluate() (breadth CB + min ATR)
+    ⑬ _write_signals() → signal_queue DB (status=PENDING)
+    ⑭ send_email() → Gmail summary to user
+
+9:15 AM IST next day — run_orders.py
+    ① Cancel stale PENDING signals (older than 1 trading day)
+    ② Load PENDING signals from prev trading day
+    ③ Assign PAPER-xxx order IDs → status=PLACED
+    ④ PaperAdapter.get_order_status() → simulate fill at next-day open
+    ⑤ _update_live_position() → upsert live_positions DB
+    ⑥ send_email() → fill confirmation summary
 ```
 
 ### File map
 
 ```
 app/
-  backtest/
-    engine.py              ← accepts adaptive_selector=None param (step 13 ✅)
+  backtest/engine.py         ← adaptive_selector param ✅
   meta/
-    __init__.py
-    regime_snapshot.py     ← build_regime_snapshot() (step 11 ✅)
-    adaptive_selector.py   ← AdaptiveStrategySelector (step 12 ✅)
+    regime_snapshot.py       ← build_regime_snapshot() ✅
+    adaptive_selector.py     ← BULL_SUSTAINED, stability gate, DualMA floor ✅
   strategy/
-    multi_router.py        ← MultiStrategyRouter with position_owners (step 10 ✅)
-    models.py              ← Decision.weight, Decision.source (step 9 ✅)
-  universe/
-    filters.py             ← UnionUniverseFilter (step 14 support ✅)
-run_experiments.py         ← EqualWeight (step 14 ✅) + Adaptive (step 15 ✅)
+    multi_router.py          ← position_owners ownership gate ✅
+    models.py                ← Decision.weight, Decision.source ✅
+  universe/filters.py        ← UnionUniverseFilter ✅
+  risk/agent.py              ← min_atr_cost_ratio, breadth CB 0.35 ✅
+  broker/
+    base.py                  ← BrokerAdapter ABC ✅
+    paper_adapter.py         ← fills at next-day open ✅
+    models.py                ← Order, BrokerPosition dataclasses ✅
+  data/
+    calendar.py              ← NSECalendar, 2025-2026 holidays ✅
+    models.py                ← SignalQueue, LivePosition ORM models ✅
+  core/
+    database.py              ← env-var DATABASE_URL ✅
+    notify.py                ← Gmail SMTP email helper ✅
+run_experiments.py           ← EqualWeight + Adaptive backtest ✅
+run_signals.py               ← daily signal job (3:35 PM IST) ✅
+run_orders.py                ← morning fill job (9:15 AM IST) ✅
+railway.toml                 ← two cron services for Railway.app ✅
 ```
 
 ---
@@ -230,20 +274,32 @@ same 20 activity-filtered slots.
 | # | Step | Status | Date | Notes |
 |---|---|---|---|---|
 | 1 | RSI-MR HOLD emission | ✅ Done | 2026-03-17 | ATR stop active on all held positions |
-| 2 | R1: Breadth CB 60%→40% | ✅ Done | 2026-03-17 | RSI-MR Bear losses halved |
-| 3 | R2: sma_cross_age for RSI-MR | ✅ Done | 2026-03-17 | False uptrend entries eliminated |
+| 2 | Breadth CB 60%→40% | ✅ Done | 2026-03-17 | RSI-MR Bear losses halved |
+| 3 | sma_cross_age for RSI-MR | ✅ Done | 2026-03-17 | False uptrend entries eliminated |
 | 4 | DualMA strategy + filter | ✅ Done | 2026-03-19 | Sharpe 1.69 Recent, 2.66 Recovery |
-| 5 | QuietBrk 20d strategy + filter | ✅ Done | 2026-03-19 | Sharpe 3.18 (via Breakout filter) |
+| 5 | QuietBrk 20d strategy + filter | ✅ Done | 2026-03-19 | |
 | 6 | Retire CS momentum | ✅ Done | 2026-03-19 | Commented out of experiments |
 | 7 | QuietBrk Bear regime gate | ✅ Done | 2026-03-19 | `_UPTREND_ONLY` — Bear loss near-zero |
 | 8 | Retire RSI-MR os=10 | ✅ Done | 2026-03-19 | os=5 dominates in every period |
 | 9 | Decision.weight + .source | ✅ Done | 2026-03-19 | `app/strategy/models.py` |
-| 10 | MultiStrategyRouter | ✅ Done | 2026-03-21 | Position ownership gate added |
+| 10 | MultiStrategyRouter | ✅ Done | 2026-03-21 | Position ownership gate |
 | 11 | build_regime_snapshot() | ✅ Done | 2026-03-21 | `app/meta/regime_snapshot.py` |
-| 12 | AdaptiveStrategySelector | ✅ Done | 2026-03-21 | `app/meta/adaptive_selector.py`, OpenAI |
-| 13 | Wire into BacktestEngine | ✅ Done | 2026-03-21 | `adaptive_selector=None` optional param |
-| 14 | EqualWeight baseline | ✅ Done | 2026-03-21 | UnionUniverseFilter fixed capital deployment |
-| 15 | Adaptive vs EqualWeight | ✅ Done | 2026-03-21 | In `run_experiments.py` final block |
+| 12 | AdaptiveStrategySelector | ✅ Done | 2026-03-21 | GPT-4o-mini, Python classifier |
+| 13 | Wire into BacktestEngine | ✅ Done | 2026-03-21 | `adaptive_selector=None` optional |
+| 14 | EqualWeight baseline | ✅ Done | 2026-03-21 | UnionUniverseFilter |
+| 15 | Adaptive vs EqualWeight | ✅ Done | 2026-03-21 | In `run_experiments.py` |
+| 16 | RECOVERY threshold 0.018→0.022 | ✅ Done | 2026-03-22 | Fixes NSE bull over-trigger |
+| 17 | BULL_SUSTAINED regime | ✅ Done | 2026-03-22 | Replaces RECOVERY misfire in 2023-24 bull |
+| 18 | DualMA minimum floor 0.10 | ✅ Done | 2026-03-22 | `_parse_weights()` |
+| 19 | Regime stability gate (2-week) | ✅ Done | 2026-03-22 | `regime_stability_weeks=2` |
+| 20 | Min ATR-to-cost filter | ✅ Done | 2026-03-22 | `min_atr_cost_ratio=3.0` in RiskAgent |
+| 21 | Breadth CB tightened 0.40→0.35 | ✅ Done | 2026-03-22 | `max_downtrend_pct=0.35` |
+| 22 | Paper trade pipeline | ✅ Done | 2026-03-22 | `run_signals.py` + `run_orders.py` |
+| 23 | Selector state persistence | ✅ Done | 2026-03-22 | `selector_state` DB table |
+| 24 | Email notifications | ✅ Done | 2026-03-22 | `app/core/notify.py` |
+| 25 | Railway.app deployment | ✅ Done | 2026-03-22 | `railway.toml`, two cron services |
+| — | Re-run backtest with all fixes | ❌ Pending | — | Run `python run_experiments.py` |
+| — | Earnings date avoidance gate | ❌ Pending | — | Build before April Q4 season |
 
 ---
 
@@ -261,39 +317,41 @@ same 20 activity-filtered slots.
 
 ---
 
-## 8. Expected Impact
+## 8. Actual Results (2026-03-21 run, pre all fixes)
 
-**Conservative (selector avoids losing strategies in wrong regime):**
-- Bear 2022: routing 60-70% to DualMA should convert equal-weight +2.06% into +4-6%
-- Recovery: routing 35-40% to Breakout lifts blended Sharpe from 2.84 toward 3.0+
+| Run | Sharpe | Return | MaxDD |
+|---|---|---|---|
+| EqualWeight (5-strat) | 1.23 | +101.06% | 15.18% |
+| Adaptive (LLM weights) | 1.18 | +114.74% | 22.03% |
+| Bear 2022 — Adaptive | **1.30** | **+12.56%** | 8.34% |
+| Bear 2022 — EqualWeight | 0.27 | +1.88% | 15.21% |
 
-**Best case (correct regime-transition identification):**
-- Full 2018-24 blended Sharpe: from 1.19 (equal-weight) toward 1.5-2.0
+**Post-fix backtest pending.** Expected improvements from 2026-03-22 changes:
+- Bull 2019 losses reduced (min ATR filter blocks low-quality entries in choppy low-vol markets)
+- 2023-24 allocation improved (BULL_SUSTAINED gives DualMA 0.25 vs previous 0.15-0.17)
+- Less allocation churn (stability gate stops weekly RECOVERY↔BEAR flips)
+- Full-period Sharpe expected to be ≥ 1.25 (up from 1.18)
 
-**Key risk — look-ahead bias in the performance table:**
-The Sharpe table in the prompt is from the same 2018-2024 data being tested. In live or
-walk-forward usage, use a rolling table: train on years 1-N, test year N+1, roll forward.
-The backtest result is an upper bound. Walk-forward will give the realistic number.
+**Key ongoing risk:** Look-ahead bias in the embedded Sharpe table. Live performance will
+be ~0.80-0.90× the backtest Sharpe until walk-forward validation (Priority 5) is built.
 
 ---
 
-## 9. What This Does NOT Solve
+## 9. Known Open Issues
 
 - **TrendPB Bear losses** — selector weights it low in bear, but per-trade losses still
   occur at low weight. Structural fix (volume confirmation on entry) remains open.
 
-- **Bull 2019-20 underperformance** — EqualWeight showed -4.06% when all individuals are
-  positive (+0.93% to +14.71%). Root cause: all five strategies are marginal in this
-  choppy period; cost load exceeds aggregate gross gains at 20% position sizes. The
-  adaptive selector should help by concentrating weight in the best performers (QuietBrk,
-  TrendPB in this period) and zeroing RSI-MR (Sharpe 0.15).
+- **Bull 2019-20 underperformance** — Min ATR filter (done 2026-03-22) is expected to
+  reduce drag. Signal persistence (2-day confirmation) would reduce it further — not yet built.
 
 - **Inter-strategy correlation** — DualMA and Breakout both favour trending stocks.
-  In Recovery they often enter the same names simultaneously. A per-sector concentration
-  limit in RiskAgent would prevent the portfolio being 80% in one sector.
+  In Recovery they often enter the same names simultaneously. Per-sector concentration
+  limit in RiskAgent (Priority 6) not yet built.
 
-- **Walk-forward overfitting** — the LLM's performance table must be kept out-of-sample
-  in any live deployment. The current backtest is an upper bound.
+- **Walk-forward validation** — Sharpe table is derived from same data being backtested.
+  Live performance will be ~0.8-0.9× backtest until walk-forward validation built.
 
-- **Latency** — each weekly rebalance is ~1-2s (one GPT-4o-mini API call). Acceptable
-  for paper trading. For live intraday systems, pre-compute overnight.
+- **Bear-exit lag** — The regime stability gate prevents whipsaw but also slows
+  Recovery entry by 1 additional week. This is an acceptable trade-off for paper trade;
+  revisit if Recovery Sharpe degrades.

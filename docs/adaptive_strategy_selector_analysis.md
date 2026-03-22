@@ -1,6 +1,6 @@
 # AdaptiveStrategySelector — Accuracy Analysis & Design Rationale
 
-**Last updated**: 2026-03-21
+**Last updated**: 2026-03-22
 
 ---
 
@@ -80,17 +80,22 @@ to a modest preference, not a 60%+ allocation.
 
 ## 3. Python-Side Regime Classifier
 
-The classifier is evaluated in priority order (first matching rule wins):
+The classifier is evaluated in priority order (first matching rule wins).
+**Current state as of 2026-03-22** (includes all improvements):
 
-| Label | Trigger condition | Confidence |
-|---|---|---|
-| `BEAR_CONFIRMED` | pct_downtrend > 45% | HIGH |
-| `BEAR_EARLY` | pct_downtrend 35–45% | MEDIUM |
-| `CRASH_HIGHVOL` | pct_downtrend > 25% AND avg_atr_pct > 2.3% | HIGH |
-| `RECOVERY` | pct_uptrend > 60% AND avg_atr_pct > 1.8% | HIGH |
-| `BULL_LOWVOL` | pct_uptrend > 55% AND avg_atr_pct < 1.5% | HIGH |
-| `BULL_MEDVOL` | pct_uptrend > 55% | MEDIUM |
-| `MIXED` | fallback | LOW |
+| Label | Trigger condition | Confidence | Status |
+|---|---|---|---|
+| `BEAR_CONFIRMED` | pct_downtrend > 45% | HIGH | ✅ Live |
+| `BEAR_EARLY` | pct_downtrend 35–45% | MEDIUM | ✅ Live |
+| `CRASH_HIGHVOL` | pct_downtrend > 25% AND avg_atr_pct > 2.3% | HIGH | ✅ Live |
+| `RECOVERY` | pct_uptrend > 60% AND avg_atr_pct > **2.2%** | HIGH | ✅ Updated (was 1.8%) |
+| `BULL_SUSTAINED` | pct_uptrend > 60% AND avg_atr_pct ≤ 2.2% | HIGH | ✅ New regime added |
+| `BULL_LOWVOL` | pct_uptrend > 55% AND avg_atr_pct < 1.5% | HIGH | ✅ Live |
+| `BULL_MEDVOL` | pct_uptrend > 55% | MEDIUM | ✅ Live |
+| `MIXED` | fallback | LOW | ✅ Live |
+
+`BULL_SUSTAINED` allocation: DualMA ≥ 0.25, Breakout ≥ 0.25, QuietBrk ≥ 0.20, RSI-MR ≤ 0.05.
+Regime stability gate: 2 consecutive weeks required before any allocation switch (`regime_stability_weeks=2`).
 
 **Why Python-side, not LLM-side?**
 
@@ -265,89 +270,49 @@ NSE Nifty 50/Next50/Midcap50 universe. They may need recalibration for:
 
 ## 7. Improvement Roadmap
 
-### Priority 1 — Recalibrate RECOVERY threshold (immediate, low risk)
+### ✅ Priority 1 — Recalibrate RECOVERY threshold — DONE (2026-03-22)
 
-Change `avg_atr_pct > 0.018` to `avg_atr_pct > 0.022` in `_REGIME_RULES`.
-Expected effect: ~30% fewer RECOVERY classifications in normal NSE bull weeks,
-routing those to BULL_MEDVOL (DualMA ≥ 0.20) or BULL_LOWVOL (DualMA 0.20–0.30).
+`avg_atr_pct > 0.018` raised to `avg_atr_pct > 0.022` in `_classify_regime()`.
+Effect: fewer RECOVERY misfires in normal NSE bull weeks; those weeks now route to
+`BULL_SUSTAINED` (new) which gives DualMA ≥ 0.25 instead of 0.15–0.20.
 
+### ✅ Priority 2 — Add BULL_SUSTAINED regime label — DONE (2026-03-22)
+
+`BULL_SUSTAINED`: pct_uptrend > 60% AND avg_atr_pct ≤ 0.022.
+Allocation: "DualMA MUST be ≥ 0.25. Breakout MUST be ≥ 0.25. QuietBrk ≥ 0.20. RSI-MR ≤ 0.05."
+Correctly handles the NSE 2023–2024 sustained uptrend that was previously misclassified as RECOVERY.
+
+### ✅ Priority 3 — Global DualMA minimum floor — DONE (2026-03-22)
+
+Added to `_parse_weights()`:
 ```python
-# Current:
-("RECOVERY", "...", lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] > 0.018, "HIGH"),
-# Proposed:
-("RECOVERY", "...", lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] > 0.022, "HIGH"),
-```
-
-### Priority 2 — Add BULL_SUSTAINED regime label
-
-A new label for confirmed multi-week bull markets with DualMA as co-equal strategy:
-
-```python
-("BULL_SUSTAINED",
- "Sustained uptrend — >60% UPTREND for 3+ consecutive weeks, low vol",
- lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] < 0.018,
- "HIGH"),
-```
-
-Allocation rule: "Breakout MUST be ≥ 0.25. DualMA MUST be ≥ 0.25. QuietBrk ≥ 0.20.
-RSI-MR MUST be ≤ 0.05."
-
-This correctly handles the NSE 2023–2024 sustained uptrend without triggering RECOVERY
-(which implies post-crash conditions and underweights DualMA).
-
-### Priority 3 — Global DualMA minimum floor
-
-Add to `_parse_weights()` or as a post-processing step:
-
-```python
-# Enforce: DualMA is never below 0.10 (positive Sharpe in all regimes)
-if "DualMA" in clipped and clipped["DualMA"] < 0.10:
+if clipped["DualMA"] < 0.10:
     clipped["DualMA"] = 0.10
-# Re-normalize
+# renormalize remaining weights
 ```
+DualMA (positive Sharpe in all regimes) now never drops below 10% regardless of LLM output.
 
-Prevents the RECOVERY regime from chronically underweighting the system's most
-reliable strategy.
+### ✅ Priority 4 — Regime transition confirmation (2-week stability) — DONE (2026-03-22)
 
-### Priority 4 — Regime transition confirmation (2-week stability)
+`regime_stability_weeks=2` added to `AdaptiveStrategySelector.__init__()`.
+State variables `_confirmed_regime`, `_pending_regime`, `_pending_count` persist across
+daily runs via `selector_state` DB table. State is restored at start of each `run_signals.py` run.
 
-Require a regime to appear in ≥ 2 consecutive weeks before switching from BEAR_* to
-anything else. Prevents whipsawing on noisy crash-to-recovery transitions:
+### Priority 5 — Walk-forward validation (open)
 
-```python
-# Rough sketch in rebalance():
-if label != self._current_regime_label:
-    if self._pending_regime == label:
-        self._pending_regime_count += 1
-    else:
-        self._pending_regime = label
-        self._pending_regime_count = 1
-    if self._pending_regime_count >= 2:
-        effective_label = label  # confirmed transition
-    else:
-        effective_label = self._current_regime_label  # hold current
-else:
-    effective_label = label
-    self._pending_regime = None
-    self._pending_regime_count = 0
-```
-
-### Priority 5 — Walk-forward validation
-
-Replace the hardcoded Sharpe table with a rolling window table:
-- Train on 2018–2021 → backtest 2022 (first walk-forward fold)
+Replace the hardcoded Sharpe table with a rolling window:
+- Train on 2018–2021 → backtest 2022 (first fold)
 - Train on 2018–2022 → backtest 2023 (second fold)
 - Train on 2018–2023 → backtest 2024 (third fold)
 
-This eliminates the look-ahead bias and gives a realistic Sharpe estimate for live
-deployment. The current full-period Sharpe (1.18 adaptive) is an upper bound.
-Expected walk-forward Sharpe: 0.90–1.10.
+Eliminates look-ahead bias. Current full-period Sharpe (1.18) is an upper bound.
+Expected walk-forward Sharpe: 0.90–1.10. Build after paper trade is running.
 
-### Priority 6 — Per-sector concentration limit in RiskAgent
+### Priority 6 — Per-sector concentration limit in RiskAgent (open)
 
-DualMA and Breakout often enter the same trending stocks simultaneously in Recovery.
-Add a max 35% sector exposure cap per day in RiskAgent to prevent the portfolio being
-80% in one sector when two strategies pile into the same mid-cap momentum names.
+DualMA and Breakout often enter the same trending stocks in Recovery simultaneously.
+Add a 35% max sector exposure cap in `RiskAgent` to prevent the portfolio being 80% in
+one sector. Build after paper trade validation confirms this is a live issue.
 
 ---
 
@@ -382,10 +347,12 @@ Without the Python classifier, the LLM spends most of its reasoning capacity on 
 it does poorly (number-to-category mapping) and produces hedged, near-equal defaults.
 With the classifier, it can focus on the task it actually adds value to.
 
-**System accuracy summary (current state):**
+**System accuracy summary (current state as of 2026-03-22):**
 - Directionally correct in 4 of 5 periods: Bear, Recent, Bull 2019 (reduced losses), Mixed
-- One structural miss: Crash-to-Recovery transition timing (2020)
-- One classification bug: RECOVERY over-triggers on normal NSE bull weeks
-- Net verdict: the adaptive layer is working, but leaving ~0.12 Sharpe on the table due
-  to the RECOVERY threshold calibration issue. Priorities 1–3 above are expected to
-  recover most of that gap without introducing new risks.
+- One structural miss: Crash-to-Recovery transition timing (2020) — bear-exit lag remains open
+- RECOVERY over-triggering: partially fixed (threshold 0.018 → 0.022 + BULL_SUSTAINED added)
+- Regime whipsaw: fixed (stability gate requires 2-week confirmation before switching)
+- DualMA underweighting: fixed (0.10 minimum floor in `_parse_weights()`)
+- Net verdict: Priorities 1–4 implemented. Expected live performance to be more stable than
+  the 2019 backtest showed. Walk-forward validation (Priority 5) will give realistic Sharpe floor.
+- **Next action**: run `python run_experiments.py` to get updated benchmark numbers post all fixes.
