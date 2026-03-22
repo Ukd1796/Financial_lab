@@ -170,10 +170,11 @@ class DynamicUniverseAgent:
         rows = []
 
         for symbol, df in self._cache.items():
-            if current_date not in df.index:
+            loc_key = df.index.asof(current_date)
+            if pd.isnull(loc_key):
                 continue
 
-            row = df.loc[current_date]
+            row = df.loc[loc_key]
             rel_vol   = row["relative_volume"]
             daily_ret = row["daily_return"]
             vol_5d    = row["rolling_vol_5d"]

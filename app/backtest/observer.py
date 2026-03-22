@@ -1,3 +1,4 @@
+import bisect
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -201,10 +202,24 @@ class MarketObserverAgent:
     # QUERY
     # ------------------------------------------------------------------
     def run_for_day(self, symbol: str, date: datetime) -> Optional[MarketState]:
-        """Return the precomputed MarketState for the given symbol and date."""
+        """Return the precomputed MarketState for the given symbol and date.
+
+        Uses an as-of lookup: returns the state for the latest timestamp that
+        is ≤ date.  This handles live-trading calls where date is midnight UTC
+        but DB timestamps are at 18:30 UTC (midnight IST offset).
+        """
         if symbol not in self.symbol_cache:
             return None
-        return self.symbol_cache[symbol].get(date)
+        cache = self.symbol_cache[symbol]
+        # Fast exact-hit path (covers all backtest scenarios)
+        if date in cache:
+            return cache[date]
+        # As-of fallback: find the latest key ≤ date
+        keys = sorted(cache.keys())
+        idx  = bisect.bisect_right(keys, date) - 1
+        if idx < 0:
+            return None
+        return cache[keys[idx]]
 
     # ------------------------------------------------------------------
     # EXPORT (for analysis / visualisation)

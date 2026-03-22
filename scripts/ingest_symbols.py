@@ -53,50 +53,54 @@ NIFTY_MIDCAP_50 = [
 # Nifty 100 (Nifty 50 + Nifty Next 50) + Nifty Midcap 50 = 150 symbols
 SYMBOLS = NIFTY_50 + NIFTY_NEXT_50 + NIFTY_MIDCAP_50
 
-START_DATE = date(2015, 1, 1)
-END_DATE = date(2026, 2, 28)
+FULL_START_DATE = date(2015, 1, 1)   # used only for symbols with no data at all
 
 
 def main():
+    from datetime import timedelta
 
-    provider = YFinanceProvider()
+    provider   = YFinanceProvider()
     repository = MarketDataRepository()
+    end_date   = date.today()
 
-    already_ingested = repository.get_ingested_symbols()
-    pending = [s for s in SYMBOLS if s not in already_ingested]
-    skipped = len(SYMBOLS) - len(pending)
+    # Per-symbol last date — fetch only the gap, not the full history again
+    last_dates = repository.get_last_dates(SYMBOLS)
 
-    print(f"Total symbols: {len(SYMBOLS)} | Already in DB: {skipped} | To fetch: {len(pending)}")
-
-    if not pending:
-        print("Nothing to ingest — all symbols already in database.")
-        return
+    print(f"Total symbols: {len(SYMBOLS)} | End date: {end_date}")
+    print(f"  Already in DB: {len(last_dates)} symbols (will gap-fill)")
+    print(f"  New symbols:   {len(SYMBOLS) - len(last_dates)} symbols (will fetch from {FULL_START_DATE})")
 
     failed = []
 
-    for symbol in pending:
+    for symbol in SYMBOLS:
+        if symbol in last_dates:
+            # DB stores timestamps as UTC; yfinance uses midnight IST (UTC+5:30).
+            # e.g. 2026-02-27 00:00 IST → stored as 2026-02-26 18:30 UTC.
+            # Convert back to IST to get the actual trading date, then add 1 day.
+            last_ts = last_dates[symbol]
+            ist_date = (last_ts + timedelta(hours=5, minutes=30)).date()
+            start_date = ist_date + timedelta(days=1)
+            if start_date >= end_date:
+                print(f"  {symbol}: up to date ({last_dates[symbol].date()})")
+                continue
+        else:
+            start_date = FULL_START_DATE
 
-        print(f"\nFetching data for {symbol}...")
-
-        records = provider.fetch_ohlc(
-            symbol=symbol,
-            start=START_DATE,
-            end=END_DATE
-        )
+        print(f"  Fetching {symbol}: {start_date} → {end_date} ...", end=" ", flush=True)
+        records = provider.fetch_ohlc(symbol=symbol, start=start_date, end=end_date)
 
         if not records:
-            print(f"No data found for {symbol}")
+            print("no data")
             failed.append(symbol)
             continue
 
         repository.bulk_upsert(records)
-
-        print(f"Stored {len(records)} records for {symbol}")
+        print(f"{len(records)} records stored")
 
     if failed:
-        print(f"\nFailed symbols ({len(failed)}): {', '.join(failed)}")
+        print(f"\nFailed ({len(failed)}): {', '.join(failed)}")
     else:
-        print("\nAll pending symbols ingested successfully.")
+        print("\nAll symbols up to date.")
 
 
 if __name__ == "__main__":
