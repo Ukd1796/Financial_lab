@@ -182,6 +182,7 @@ class AdaptiveStrategySelector:
         verbose: bool = False,
         history_weeks: int = 4,
         regime_stability_weeks: int = 2,
+        performance_table: str | None = None,
     ):
         self.client                   = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.strategy_names           = strategy_names
@@ -192,6 +193,9 @@ class AdaptiveStrategySelector:
         # Require a new regime to appear for this many consecutive weeks before
         # acting on it. Prevents whipsaw from 1-week regime spikes in choppy markets.
         self.regime_stability_weeks   = regime_stability_weeks
+        # Injectable performance table — None means use the hardcoded full-history table.
+        # Walk-forward validation injects a table computed from training data only.
+        self._performance_table       = performance_table if performance_table is not None else _STRATEGY_REGIME_PERFORMANCE
 
         n = max(len(strategy_names), 1)
         self.weights: dict[str, float]      = {s: 1.0 / n for s in strategy_names}
@@ -408,7 +412,7 @@ CURRENT REGIME (Python-classified, confidence {confidence}):
 
 {history_block}
 
-{_STRATEGY_REGIME_PERFORMANCE}
+{self._performance_table}
 
 MANDATORY ALLOCATION RULE FOR THIS REGIME:
 {regime_rule}
