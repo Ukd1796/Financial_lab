@@ -72,6 +72,9 @@ BROAD_UNIVERSE = NIFTY_50 + NIFTY_NEXT_50 + NIFTY_MIDCAP_50
 
 INITIAL_CAPITAL = 100_000
 
+# Set to True to run Priority 5 walk-forward validation (~20 extra backtest runs, slow).
+RUN_WALK_FORWARD = False
+
 # -----------------------------------------------------------------------
 # Regime sets — passed per-strategy to RiskAgent
 # -----------------------------------------------------------------------
@@ -232,14 +235,23 @@ class PeriodContext:
         # so CS can compute N-day lookback from day 1 of the period.
         self.price_feed = self.dynamic_universe_agent.get_price_feed()
 
-        # Timeline computed once from the DB for the period
-        self.historical_dates = self._build_timeline(repository)
+        # Timeline derived from the DynamicUniverseAgent cache — avoids a
+        # second round-trip to the DB (the bulk fetch above already loaded
+        # all 150 symbols, so re-querying 150× would double the bandwidth).
+        self.historical_dates = self._build_timeline_from_cache()
 
-    def _build_timeline(self, repository):
-        records = []
-        for symbol in BROAD_UNIVERSE:
-            records.extend(repository.get_ohlc(symbol, self.start_date, self.end_date))
-        return sorted({r.timestamp for r in records})
+    def _build_timeline_from_cache(self):
+        """
+        Extract the sorted list of trading-day timestamps from the already-loaded
+        DynamicUniverseAgent cache, filtered to [start_date, end_date].
+        No DB query — zero extra bandwidth.
+        """
+        timestamps = set()
+        for df in self.dynamic_universe_agent._cache.values():
+            for ts in df.index:
+                if self.start_date <= ts <= self.end_date:
+                    timestamps.add(ts)
+        return sorted(timestamps)
 
 
 # -----------------------------------------------------------------------
@@ -335,10 +347,346 @@ def _print_row(label, result):
 
 
 # -----------------------------------------------------------------------
+# In-process OHLC cache (eliminates duplicate DB fetches across periods)
+# -----------------------------------------------------------------------
+
+class OHLCCache:
+    """
+    In-process read-through cache for OHLC data.
+
+    Strategy
+    --------
+    Call warm_all() once at startup with a date range that covers every
+    period you intend to run (including walk-forward sub-periods and their
+    200–300-day warm-up buffers).  All subsequent get_ohlc / get_ohlc_bulk
+    calls are served from memory as list slices — zero DB round-trips.
+
+    Why not Redis?
+    --------------
+    The full dataset is ~200 MB in memory.  Redis adds a network hop and
+    serialisation overhead that is strictly slower than an in-process dict.
+    Redis would only help for cross-process or cross-session sharing, which
+    is unnecessary for a single daily batch run.
+    """
+
+    # Full history window — wide enough to cover all periods + their buffers.
+    _CACHE_START = datetime(2014, 1, 1)
+    _CACHE_END   = datetime(2026, 12, 31)   # far future; capped by actual DB data
+
+    def __init__(self, repository: MarketDataRepository):
+        self._repo  = repository
+        self._store: dict[str, list] = {}   # symbol → sorted list[MarketOHLC]
+        self._warm  = False
+
+    # ------------------------------------------------------------------
+    # Public API — drop-in replacement for MarketDataRepository
+    # ------------------------------------------------------------------
+
+    def warm_all(self, symbols: list[str]) -> None:
+        """
+        Load full history for every symbol in one bulk DB query.
+        Must be called once before any get_ohlc / get_ohlc_bulk calls.
+        """
+        print(f"\n  [Cache] Warming {len(symbols)} symbols from DB "
+              f"({self._CACHE_START.date()} → today)...")
+        records = self._repo.get_ohlc_bulk(symbols, self._CACHE_START, self._CACHE_END)
+        for symbol, recs in records.items():
+            self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+        total = sum(len(v) for v in self._store.values())
+        print(f"  [Cache] Loaded {total:,} records for {len(self._store)} symbols "
+              f"— all subsequent fetches served from memory.\n")
+        self._warm = True
+
+    def get_ohlc(self, symbol: str, start, end) -> list:
+        self._ensure_symbol(symbol)
+        return [r for r in self._store.get(symbol, [])
+                if start <= r.timestamp <= end]
+
+    def get_ohlc_bulk(self, symbols: list[str], start, end) -> dict:
+        missing = [s for s in symbols if s not in self._store]
+        if missing:
+            self._load_symbols(missing)
+        result = {}
+        for symbol in symbols:
+            sliced = [r for r in self._store.get(symbol, [])
+                      if start <= r.timestamp <= end]
+            if sliced:
+                result[symbol] = sliced
+        return result
+
+    # Delegate all other repository methods (bulk_upsert, log_decision, etc.)
+    def __getattr__(self, name):
+        return getattr(self._repo, name)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_symbol(self, symbol: str) -> None:
+        if symbol not in self._store:
+            self._load_symbols([symbol])
+
+    def _load_symbols(self, symbols: list[str]) -> None:
+        """Fallback: load symbols not yet in cache (shouldn't happen after warm_all)."""
+        records = self._repo.get_ohlc_bulk(symbols, self._CACHE_START, self._CACHE_END)
+        for sym, recs in records.items():
+            self._store[sym] = sorted(recs, key=lambda r: r.timestamp)
+        # Symbols with no data at all: store empty list so we don't retry
+        for sym in symbols:
+            if sym not in self._store:
+                self._store[sym] = []
+
+
+# -----------------------------------------------------------------------
+# Walk-forward validation helpers (Priority 5)
+# -----------------------------------------------------------------------
+
+# Regime sub-periods used to compute out-of-sample Sharpe for the LLM table.
+# Only periods whose END date falls within the training window are used.
+_WF_REGIME_PERIODS = {
+    "Bull/LowVol":   (datetime(2019, 1, 1), datetime(2020, 2,  1)),
+    "Crash/HighVol": (datetime(2020, 1, 1), datetime(2020, 12, 31)),
+    "Recovery":      (datetime(2020, 4, 1), datetime(2021, 12, 31)),
+    "Bear/Choppy":   (datetime(2022, 1, 1), datetime(2022, 12, 31)),
+}
+
+# Solo configs for the 5 strategies used in the adaptive run.
+_WF_SOLO_CFGS = [
+    {
+        "name":            "DualMA",
+        "factory":         lambda: DualMovingAverageStrategy(),
+        "universe_filter": lambda: DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        "max_pos_pct":     0.15,
+        "allowed_regimes": _UPTREND_ONLY,
+    },
+    {
+        "name":            "Breakout",
+        "factory":         lambda: BreakoutMomentumStrategy(),
+        "universe_filter": lambda: BreakoutUniverseFilter(top_n=20),
+        "max_pos_pct":     0.10,
+        "allowed_regimes": _TREND_AND_SIDEWAYS,
+    },
+    {
+        "name":            "QuietBrk",
+        "factory":         lambda: QuietBreakoutStrategy(),
+        "universe_filter": lambda: BreakoutUniverseFilter(
+                               vol_threshold=1.2, return_threshold=0.008, top_n=20),
+        "max_pos_pct":     0.10,
+        "allowed_regimes": _UPTREND_ONLY,
+    },
+    {
+        "name":            "TrendPB",
+        "factory":         lambda: TrendPullbackStrategy(pullback_threshold=0.05),
+        "universe_filter": lambda: PullbackUniverseFilter(top_n=20),
+        "max_pos_pct":     0.10,
+        "allowed_regimes": _TREND_AND_SIDEWAYS,
+    },
+    {
+        "name":                    "RSI-MR",
+        "factory":                 lambda: RSIMeanReversionStrategy(
+                                       rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+        "universe_filter":         lambda: MeanReversionUniverseFilter(top_n=20),
+        "max_pos_pct":             0.10,
+        "allowed_regimes":         _UPTREND_AND_SIDEWAYS,
+        "breadth_circuit_breaker": True,
+    },
+]
+
+
+def _compute_training_sharpes(repository) -> dict:
+    """
+    Run each of the 5 strategies in solo mode on each regime sub-period.
+    Returns {regime_col: {strategy_name: sharpe}}.
+    Called once; results are reused across all walk-forward folds.
+    """
+    print("\n  [WF] Pre-computing per-regime Sharpe on training sub-periods...")
+    results: dict[str, dict[str, float]] = {}
+
+    for regime_col, (start, end) in _WF_REGIME_PERIODS.items():
+        print(f"  [WF]   {regime_col}  ({start.date()} → {end.date()})")
+        ctx            = PeriodContext(repository, start, end)
+        regime_sharpes = {}
+        for cfg in _WF_SOLO_CFGS:
+            result = run_experiment(
+                repository, cfg["factory"](), ctx,
+                max_position_pct        = cfg["max_pos_pct"],
+                allowed_regimes         = cfg.get("allowed_regimes"),
+                breadth_circuit_breaker = cfg.get("breadth_circuit_breaker", False),
+                universe_filter         = cfg["universe_filter"](),
+            )
+            sharpe = (result["portfolio_metrics"].get("sharpe_ratio") or 0.0) if result else 0.0
+            regime_sharpes[cfg["name"]] = round(sharpe, 2)
+            print(f"  [WF]     {cfg['name']:<10} Sharpe={sharpe:.2f}")
+        results[regime_col] = regime_sharpes
+
+    return results
+
+
+def _format_wf_table(sharpe_data: dict, available: list[str]) -> str:
+    """
+    Format a walk-forward performance table string for injection into the LLM prompt.
+    Columns not in `available` are shown as N/A so the LLM knows no look-ahead was used.
+    """
+    col_order   = ["Bull/LowVol", "Crash/HighVol", "Recovery", "Bear/Choppy", "Mixed"]
+    strat_order = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+    col_w = 14
+
+    header = f"  {'Strategy':<20}" + "".join(f"{c:>{col_w}}" for c in col_order)
+    lines  = [
+        "Strategy Sharpe ratios by market regime (from training data only — no look-ahead):",
+        header,
+    ]
+    for strat in strat_order:
+        row = f"  {strat:<20}"
+        for col in col_order:
+            if col in available and col in sharpe_data and strat in sharpe_data[col]:
+                row += f"{sharpe_data[col][strat]:>{col_w}.2f}"
+            else:
+                row += f"{'N/A':>{col_w}}"
+        lines.append(row)
+    lines.append("\nN/A = regime not yet observed in training window.")
+    return "\n".join(lines)
+
+
+def _make_adaptive_components(strategy_names):
+    """Return a fresh (router, union_filter) pair for a walk-forward fold."""
+    router = MultiStrategyRouter(
+        strategies={
+            "DualMA":   DualMovingAverageStrategy(),
+            "Breakout": BreakoutMomentumStrategy(),
+            "QuietBrk": QuietBreakoutStrategy(),
+            "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+            "RSI-MR":   RSIMeanReversionStrategy(
+                            rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+        },
+        weights={n: 0.20 for n in strategy_names},
+        allowed_regimes={
+            "DualMA":   _UPTREND_ONLY,
+            "Breakout": _TREND_AND_SIDEWAYS,
+            "QuietBrk": _UPTREND_ONLY,
+            "TrendPB":  _TREND_AND_SIDEWAYS,
+            "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+        },
+    )
+    union_filter = UnionUniverseFilter([
+        BreakoutUniverseFilter(top_n=20),
+        BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+        PullbackUniverseFilter(top_n=20),
+        MeanReversionUniverseFilter(top_n=20),
+        DualMAUniverseFilter(max_cross_age=5, top_n=30),
+    ])
+    return router, union_filter
+
+
+def run_walk_forward(repository) -> None:
+    """
+    3-fold expanding-window walk-forward validation for AdaptiveStrategySelector.
+
+    Each fold tests the adaptive selector on a held-out year using ONLY
+    performance data from prior years in the LLM prompt (no look-ahead).
+
+    Fold 1: Train 2019–2021  →  Test 2022 (Bear period)
+    Fold 2: Train 2019–2022  →  Test 2023
+    Fold 3: Train 2019–2023  →  Test Jan–Jun 2024
+
+    Reports OOS Sharpe (out-of-sample table) vs IS Sharpe (hardcoded full table)
+    for each fold. Expected OOS/IS ratio: 0.80–0.90× per the doc.
+    """
+    _STRATEGY_NAMES = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+
+    # (fold_label, test_start, test_end, regime_cols_available_for_training)
+    FOLDS = [
+        ("Fold 1 — 2022 (Bear)", datetime(2022, 1, 1), datetime(2022, 12, 31),
+         ["Bull/LowVol", "Crash/HighVol", "Recovery"]),
+        ("Fold 2 — 2023",        datetime(2023, 1, 1), datetime(2023, 12, 31),
+         ["Bull/LowVol", "Crash/HighVol", "Recovery", "Bear/Choppy"]),
+        ("Fold 3 — 2024",        datetime(2024, 1, 1), datetime(2024, 6,  1),
+         ["Bull/LowVol", "Crash/HighVol", "Recovery", "Bear/Choppy"]),
+    ]
+
+    print(f"\n{'=' * (ROW_W + 2)}")
+    print(f"  Walk-Forward Validation — 3 Folds")
+    print(f"  OOS = out-of-sample table (training data only)")
+    print(f"  IS  = in-sample table (hardcoded full-history — upper bound)")
+    print(f"{'=' * (ROW_W + 2)}")
+
+    # Compute training Sharpes once — reused across all folds
+    training_sharpes = _compute_training_sharpes(repository)
+
+    wf_summary = []
+
+    for fold_label, test_start, test_end, available in FOLDS:
+        print(f"\n  {'─' * ROW_W}")
+        print(f"  {fold_label}  ({test_start.date()} → {test_end.date()})")
+        print(f"  Training regimes: {', '.join(available)}")
+        print(f"  {'─' * ROW_W}")
+        print(HEADER)
+
+        ctx      = PeriodContext(repository, test_start, test_end)
+        wf_table = _format_wf_table(training_sharpes, available)
+
+        # Out-of-sample: uses performance table computed from training data only
+        oos_selector = AdaptiveStrategySelector(
+            strategy_names=_STRATEGY_NAMES,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=False,
+            regime_stability_weeks=2,
+            performance_table=wf_table,
+        )
+        router_oos, filter_oos = _make_adaptive_components(_STRATEGY_NAMES)
+        result_oos = run_experiment(
+            repository, router_oos, ctx,
+            max_position_pct=0.10, allowed_regimes=None,
+            breadth_circuit_breaker=True, universe_filter=filter_oos,
+            adaptive_selector=oos_selector,
+            max_downtrend_pct=0.35, min_atr_cost_ratio=3.0,
+        )
+        _print_row("OOS-Adaptive", result_oos)
+
+        # In-sample: uses hardcoded full-history table (look-ahead upper bound)
+        is_selector = AdaptiveStrategySelector(
+            strategy_names=_STRATEGY_NAMES,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=False,
+            regime_stability_weeks=2,
+        )
+        router_is, filter_is = _make_adaptive_components(_STRATEGY_NAMES)
+        result_is = run_experiment(
+            repository, router_is, ctx,
+            max_position_pct=0.10, allowed_regimes=None,
+            breadth_circuit_breaker=True, universe_filter=filter_is,
+            adaptive_selector=is_selector,
+            max_downtrend_pct=0.35, min_atr_cost_ratio=3.0,
+        )
+        _print_row("IS-Adaptive ", result_is)
+
+        oos_sharpe = (result_oos["portfolio_metrics"].get("sharpe_ratio") or 0.0) if result_oos else 0.0
+        is_sharpe  = (result_is["portfolio_metrics"].get("sharpe_ratio")  or 0.0) if result_is  else 0.0
+        wf_summary.append((fold_label, oos_sharpe, is_sharpe))
+
+    # Final summary table
+    print(f"\n  {'─' * ROW_W}")
+    print(f"  {'Fold':<30} {'OOS Sharpe':>12} {'IS Sharpe':>10} {'OOS/IS':>8}")
+    print(f"  {'─' * ROW_W}")
+    for label, oos, is_ in wf_summary:
+        ratio = f"{oos / is_:.2f}×" if is_ else "N/A"
+        print(f"  {label:<30} {oos:>12.2f} {is_:>10.2f} {ratio:>8}")
+    print(f"  Target OOS/IS: 0.80–0.90× (doc prediction)")
+    print(f"{'=' * (ROW_W + 2)}\n")
+
+
+# -----------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------
 def main():
-    repository = MarketDataRepository()
+    # Warm the in-process cache once — every PeriodContext and observer preload
+    # in this run (including all walk-forward sub-periods) will be served from
+    # memory instead of making repeated round-trips to Supabase.
+    _base = MarketDataRepository()
+    repository = OHLCCache(_base)
+    repository.warm_all(BROAD_UNIVERSE)
 
     for period_label, (start_date, end_date) in PERIODS.items():
 
@@ -499,6 +847,9 @@ def main():
         print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
 
     print(f"\n{'=' * (ROW_W + 2)}\n")
+
+    if RUN_WALK_FORWARD:
+        run_walk_forward(repository)
 
 
 if __name__ == "__main__":
