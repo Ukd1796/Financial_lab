@@ -38,7 +38,7 @@ from app.data.models import SignalQueue
 from app.data.providers.yfinance_provider import YFinanceProvider
 from app.data.repository import MarketDataRepository
 from app.meta.adaptive_selector import AdaptiveStrategySelector
-from app.meta.regime_snapshot import build_regime_snapshot
+from app.meta.regime_context_agent import RegimeContextAgent
 from app.portfolio.models import Portfolio
 from app.risk.agent import RiskAgent
 from app.strategy.breakout_momentum import BreakoutMomentumStrategy
@@ -325,6 +325,7 @@ def main():
         top_n=80,
     )
     dynamic_agent.preload(start_dt, today_dt)
+    rca = RegimeContextAgent(dynamic_agent)
     broad_candidates = dynamic_agent.select_candidates(today_dt)
 
     union_filter = UnionUniverseFilter([
@@ -362,13 +363,22 @@ def main():
     # ------------------------------------------------------------------
     # Step 7: Build regime snapshot
     # ------------------------------------------------------------------
-    print(f"\n[5/8] Building regime snapshot...")
-    regime_snapshot = build_regime_snapshot(daily_symbol_states, today_dt)
+    print(f"\n[5/8] Building regime snapshot (RegimeContextAgent)...")
+    regime_snapshot = rca.build_snapshot(daily_symbol_states, today_dt)
+    broad_regime = regime_snapshot.get("broad_regime", "UNKNOWN")
+    trend        = regime_snapshot.get("trend", "STABLE")
+    pct_above    = regime_snapshot.get("pct_above_sma50_broad", 0.0)
+    adv_dec      = regime_snapshot.get("advance_decline_ratio", 0.0)
     print(
         f"    UP={regime_snapshot['pct_uptrend']:.1%}  "
         f"DOWN={regime_snapshot['pct_downtrend']:.1%}  "
         f"ATR={regime_snapshot['avg_atr_pct']:.2%}  "
         f"Universe={regime_snapshot['universe_size']}"
+    )
+    print(
+        f"    Broad regime: {broad_regime}  trend={trend}  "
+        f"above_SMA50={pct_above:.1%}  A/D={adv_dec:.1%}  "
+        f"broad_n={regime_snapshot.get('broad_universe_size', 0)}"
     )
 
     # ------------------------------------------------------------------
@@ -409,6 +419,16 @@ def main():
         and "DOWNTREND" in s.indicators["regime"]
     )
     market_downtrend_pct = downtrend_count / len(daily_symbol_states)
+
+    # CB relaxation: TRANSITION_UP → cap at 30%, BEAR_WATCH/BEAR_TRANSITION → cap at 38%
+    if broad_regime == "TRANSITION_UP":
+        effective_downtrend_pct = min(market_downtrend_pct, 0.30)
+        print(f"    [RCA] TRANSITION_UP — CB relaxed: raw={market_downtrend_pct:.0%} → effective={effective_downtrend_pct:.0%}")
+    elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
+        effective_downtrend_pct = min(market_downtrend_pct, 0.38)
+        print(f"    [RCA] {broad_regime} — CB slightly relaxed: raw={market_downtrend_pct:.0%} → effective={effective_downtrend_pct:.0%}")
+    else:
+        effective_downtrend_pct = market_downtrend_pct
 
     router = MultiStrategyRouter(
         strategies={
@@ -458,7 +478,7 @@ def main():
         risk_adj = risk_agent.evaluate(
             decision, portfolio, state,
             equity_prices={s: st.latest_price for s, st in daily_symbol_states.items()},
-            market_downtrend_pct=market_downtrend_pct,
+            market_downtrend_pct=effective_downtrend_pct,
         )
         final_decisions.append(risk_adj)
 
@@ -480,8 +500,10 @@ def main():
     print(f"  Signal Summary — {today}")
     print(f"{'='*70}")
     print(f"  Regime:          {regime_label}")
-    print(f"  Market breadth:  {market_downtrend_pct:.0%} DOWNTREND "
-          f"({'CB ACTIVE' if market_downtrend_pct >= 0.35 else 'CB clear'})")
+    print(f"  Broad regime:    {broad_regime}  (trend={trend}, above_SMA50={pct_above:.1%})")
+    print(f"  Market breadth:  {market_downtrend_pct:.0%} DOWNTREND raw  →  "
+          f"{effective_downtrend_pct:.0%} effective "
+          f"({'CB ACTIVE' if effective_downtrend_pct >= 0.35 else 'CB clear'})")
     print(f"  Universe:        {len(daily_symbol_states)} symbols")
     print(f"  Signals written: {written}  (BUY: {len(buys)}, SELL: {len(sells)})")
     print()
@@ -507,7 +529,7 @@ def main():
     # ------------------------------------------------------------------
     # Email summary
     # ------------------------------------------------------------------
-    cb_status = "ACTIVE — BUYs suppressed" if market_downtrend_pct >= 0.35 else "clear"
+    cb_status = "ACTIVE — BUYs suppressed" if effective_downtrend_pct >= 0.35 else "clear"
     buy_lines  = "\n".join(
         f"  BUY  {d.symbol:<14} qty={d.quantity}  @ ₹{daily_symbol_states[d.symbol].latest_price:.2f}  [{d.source}]"
         for d in buys if d.symbol in daily_symbol_states
@@ -519,8 +541,9 @@ def main():
 
     email_body = f"""Financial Lab — Signal Report {today}
 
-Regime:   {regime_label}
-Breadth:  {market_downtrend_pct:.0%} DOWNTREND  (CB {cb_status})
+Regime:        {regime_label}
+Broad regime:  {broad_regime}  (trend={trend}, above_SMA50={pct_above:.1%}, A/D={adv_dec:.1%})
+Breadth:       {market_downtrend_pct:.0%} DOWNTREND raw  →  {effective_downtrend_pct:.0%} effective  (CB {cb_status})
 Universe: {len(daily_symbol_states)} symbols
 Weights:  {' '.join(f'{k}={v:.2f}' for k, v in weights.items())}
 

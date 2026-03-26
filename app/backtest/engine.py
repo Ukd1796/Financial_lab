@@ -19,6 +19,7 @@ class BacktestEngine:
         dynamic_universe_agent=None,
         universe_agent=None,
         adaptive_selector=None,
+        regime_context_agent=None,
     ):
         self.observer                = observer
         self.strategy_router         = strategy_router
@@ -31,6 +32,7 @@ class BacktestEngine:
         # Optional: AdaptiveStrategySelector — calls LLM weekly to update weights.
         # When None, the router's weights stay constant (equal-weight baseline).
         self.adaptive_selector       = adaptive_selector
+        self.regime_context_agent    = regime_context_agent
 
     # ==================================================
     # MAIN RUN
@@ -144,14 +146,34 @@ class BacktestEngine:
                 downtrend_count / len(daily_symbol_states) if daily_symbol_states else 0.0
             )
 
+            # --- Regime snapshot: enhanced (RCA) or base ---
+            # RCA is built whenever present — not only when adaptive_selector is active,
+            # because its broad_regime drives the CB relaxation below.
+            regime_snapshot = None
+            if self.regime_context_agent:
+                regime_snapshot = self.regime_context_agent.build_snapshot(
+                    daily_symbol_states, current_date
+                )
+
             # --- Adaptive weight rebalance (weekly, LLM-driven) ---
-            # Only active when an AdaptiveStrategySelector is configured AND the
-            # router supports update_weights() (i.e. is a MultiStrategyRouter).
-            # All data used here (daily_symbol_states) is already populated above.
             if self.adaptive_selector and hasattr(self.strategy_router, "update_weights"):
-                regime_snapshot = build_regime_snapshot(daily_symbol_states, current_date)
+                if regime_snapshot is None:
+                    regime_snapshot = build_regime_snapshot(daily_symbol_states, current_date)
                 new_weights = self.adaptive_selector.rebalance(current_date, regime_snapshot)
                 self.strategy_router.update_weights(new_weights)
+
+            # --- CB relaxation during transition/recovery phases ---
+            # During TRANSITION_UP the market is recovering but pct_downtrend is still
+            # elevated (e.g. 50%). Without relaxation the CB (threshold=35%) would block
+            # ALL buys even as breadth genuinely improves. Cap effective downtrend to
+            # allow cautious re-entry before SMA_50-based rules catch the move.
+            effective_downtrend_pct = market_downtrend_pct
+            if regime_snapshot:
+                broad_regime = regime_snapshot.get("broad_regime")
+                if broad_regime == "TRANSITION_UP":
+                    effective_downtrend_pct = min(market_downtrend_pct, 0.30)
+                elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
+                    effective_downtrend_pct = min(market_downtrend_pct, 0.38)
 
             # --- Risk + execution ---
             for decision in proposed_decisions:
@@ -170,7 +192,7 @@ class BacktestEngine:
                     self.portfolio,
                     market_state,
                     equity_prices=equity_prices,
-                    market_downtrend_pct=market_downtrend_pct,
+                    market_downtrend_pct=effective_downtrend_pct,
                 )
                 execution_result = self.execution_agent.execute(risk_adjusted, market_state, self.portfolio)
 

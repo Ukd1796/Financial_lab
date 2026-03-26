@@ -51,6 +51,10 @@ is heavily filtered. RSI-MR is the only strategy with negative Sharpe in Mixed/R
 # ---------------------------------------------------------------------------
 _REGIME_RULES = [
     # (label, description, condition_fn, confidence)
+    ("TRANSITION_UP",
+     "Breadth recovering — 5-day trend IMPROVING with declining downtrend",
+     lambda s: s.get("broad_regime") == "TRANSITION_UP",
+     "MEDIUM"),
     ("BEAR_CONFIRMED",
      "Sustained downtrend — >45% stocks in DOWNTREND",
      lambda s: s["pct_downtrend"] > 0.45,
@@ -88,6 +92,12 @@ _REGIME_RULES = [
 # Per-regime HARD allocation constraints passed into the LLM prompt.
 # "MUST be" language is intentional — prevents hedging.
 _REGIME_ALLOCATION_RULES = {
+    "TRANSITION_UP": (
+        "TRANSITION / EARLY RECOVERY (breadth improving, downtrend declining). "
+        "Market moving from bear to recovery. Early breakout and mean-reversion catch "
+        "the first moves. Breakout MUST be ≥ 0.30. RSI-MR can be 0.10–0.20. "
+        "DualMA MUST be ≥ 0.20. QuietBrk can be 0.15–0.20. TrendPB MUST be ≤ 0.15."
+    ),
     "BEAR_CONFIRMED": (
         "BEAR CONFIRMED (>45% DOWNTREND). DualMA is the ONLY strategy with positive "
         "Bear Sharpe. DualMA MUST be ≥ 0.55. RSI-MR MUST be ≤ 0.05. "
@@ -399,6 +409,18 @@ class AdaptiveStrategySelector:
             + "}"
         )
 
+        # Broad breadth block (only when RegimeContextAgent is active)
+        broad_regime = snapshot.get("broad_regime")
+        broad_block = ""
+        if broad_regime:
+            broad_block = (
+                f"\nBROAD MARKET BREADTH (150-symbol universe):\n"
+                f"  Broad regime:    {broad_regime}\n"
+                f"  Trend direction: {snapshot.get('trend', 'N/A')}\n"
+                f"  % above SMA_50:  {snapshot.get('pct_above_sma50_broad', 0):.1%}\n"
+                f"  Adv/Dec ratio:   {snapshot.get('advance_decline_ratio', 0):.1%}\n"
+            )
+
         return f"""You are allocating capital across five NSE Indian equity trading strategies for the next week.
 
 CURRENT REGIME (Python-classified, confidence {confidence}):
@@ -409,7 +431,7 @@ CURRENT REGIME (Python-classified, confidence {confidence}):
   % SIDEWAYS:  {snapshot.get('pct_sideways', 0):.1%}
   % HIGH_VOL:  {snapshot.get('pct_high_vol', 0):.1%}
   Avg ATR%:    {snapshot.get('avg_atr_pct', 0):.2%}
-
+{broad_block}
 {history_block}
 
 {self._performance_table}

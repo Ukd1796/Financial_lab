@@ -17,6 +17,7 @@ from app.strategy.trend_pullback import TrendPullbackStrategy
 from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.meta.adaptive_selector import AdaptiveStrategySelector
+from app.meta.regime_context_agent import RegimeContextAgent
 from app.universe.filters import (
     BreakoutUniverseFilter,
     DualMAUniverseFilter,
@@ -109,6 +110,7 @@ PERIODS = {
     "Recov 2020–2021": (datetime(2020, 4, 1),  datetime(2021, 12, 31)),
     "Bear  2022     ": (datetime(2022, 1, 1),  datetime(2022, 12, 31)),
     "Recent2022–2024": (datetime(2022, 1, 1),  datetime(2024, 6, 1)),
+    "Live  2025–2026": (datetime(2025, 1, 1),  datetime(2026, 3, 24)),
 }
 
 # -----------------------------------------------------------------------
@@ -235,6 +237,10 @@ class PeriodContext:
         # so CS can compute N-day lookback from day 1 of the period.
         self.price_feed = self.dynamic_universe_agent.get_price_feed()
 
+        # RegimeContextAgent — enhanced regime snapshot with broad breadth signals.
+        # Uses the DynamicUniverseAgent cache (already loaded) — zero extra DB queries.
+        self.regime_context_agent = RegimeContextAgent(self.dynamic_universe_agent)
+
         # Timeline derived from the DynamicUniverseAgent cache — avoids a
         # second round-trip to the DB (the bulk fetch above already loaded
         # all 150 symbols, so re-querying 150× would double the bandwidth).
@@ -257,7 +263,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0, regime_context_agent=None):
 
     if not ctx.historical_dates:
         return None
@@ -300,6 +306,7 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         dynamic_universe_agent=ctx.dynamic_universe_agent,
         universe_agent=active_universe_agent,
         adaptive_selector=adaptive_selector,
+        regime_context_agent=regime_context_agent,   # ← new
     )
 
     results, trades = engine.run(BROAD_UNIVERSE, ctx.historical_dates)
@@ -360,13 +367,6 @@ class OHLCCache:
     period you intend to run (including walk-forward sub-periods and their
     200–300-day warm-up buffers).  All subsequent get_ohlc / get_ohlc_bulk
     calls are served from memory as list slices — zero DB round-trips.
-
-    Why not Redis?
-    --------------
-    The full dataset is ~200 MB in memory.  Redis adds a network hop and
-    serialisation overhead that is strictly slower than an in-process dict.
-    Redis would only help for cross-process or cross-session sharing, which
-    is unnecessary for a single daily batch run.
     """
 
     # Full history window — wide enough to cover all periods + their buffers.
@@ -382,14 +382,22 @@ class OHLCCache:
     # Public API — drop-in replacement for MarketDataRepository
     # ------------------------------------------------------------------
 
-    def warm_all(self, symbols: list[str]) -> None:
+    def warm_all(self, symbols: list[str],
+                 start: datetime | None = None,
+                 end:   datetime | None = None) -> None:
         """
-        Load full history for every symbol in one bulk DB query.
-        Must be called once before any get_ohlc / get_ohlc_bulk calls.
+        Load history for every symbol in one bulk DB query.
+
+        start / end  — optional window override.  When omitted the class-level
+                       _CACHE_START / _CACHE_END constants are used (full history).
+                       Pass explicit dates for shorter diagnostic runs to avoid
+                       pulling 12 years of data when only 8 months are needed.
         """
+        cache_start = start or self._CACHE_START
+        cache_end   = end   or self._CACHE_END
         print(f"\n  [Cache] Warming {len(symbols)} symbols from DB "
-              f"({self._CACHE_START.date()} → today)...")
-        records = self._repo.get_ohlc_bulk(symbols, self._CACHE_START, self._CACHE_END)
+              f"({cache_start.date()} → {cache_end.date()})...")
+        records = self._repo.get_ohlc_bulk(symbols, cache_start, cache_end)
         for symbol, recs in records.items():
             self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
         total = sum(len(v) for v in self._store.values())
@@ -680,14 +688,9 @@ def run_walk_forward(repository) -> None:
 # -----------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------
-def main():
-    # Warm the in-process cache once — every PeriodContext and observer preload
-    # in this run (including all walk-forward sub-periods) will be served from
-    # memory instead of making repeated round-trips to Supabase.
-    _base = MarketDataRepository()
-    repository = OHLCCache(_base)
-    repository.warm_all(BROAD_UNIVERSE)
-
+def _run_full_periods(repository):
+    """Full historical backtest suite. Called from main() when RUN_FULL=True."""
+    repository.warm_all(BROAD_UNIVERSE)   # full 2014–2026 window
     for period_label, (start_date, end_date) in PERIODS.items():
 
         # Build shared context once — single DB fetch for all 150 symbols
@@ -840,16 +843,299 @@ def main():
             breadth_circuit_breaker=True,
             universe_filter=adaptive_union_filter,
             adaptive_selector=selector,
-            max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
-            min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
+            max_downtrend_pct=0.35,
+            min_atr_cost_ratio=3.0,
         )
         _print_row("Adaptive  (5-strat)", result_adaptive)
         print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
+
+        # ------------------------------------------------------------------
+        # Step 16: Adaptive + RegimeContextAgent
+        #
+        # Identical to Step 15 except the BacktestEngine receives the
+        # RegimeContextAgent built from this period's DynamicUniverseAgent
+        # cache. The RCA:
+        #   1. Builds a richer regime snapshot (150-symbol breadth signals)
+        #   2. Synthesises a broad_regime label fed to the LLM prompt
+        #   3. Relaxes the CB effective threshold during TRANSITION_UP
+        #
+        # Comparison vs Step 15 isolates the pure RCA contribution.
+        # Expected improvement: Recovery and Crash periods (earlier re-entry);
+        # neutral or slightly better in Bear (BEAR_TRANSITION awareness).
+        # ------------------------------------------------------------------
+        print(f"{DIVIDER}  [Multi-strategy adaptive + RegimeContextAgent]")
+
+        rca_router = MultiStrategyRouter(
+            strategies={
+                "DualMA":   DualMovingAverageStrategy(),
+                "Breakout": BreakoutMomentumStrategy(),
+                "QuietBrk": QuietBreakoutStrategy(),
+                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                "RSI-MR":   RSIMeanReversionStrategy(
+                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+            },
+            weights={n: 0.20 for n in _STRATEGY_NAMES},
+            allowed_regimes={
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        )
+        rca_selector = AdaptiveStrategySelector(
+            strategy_names=_STRATEGY_NAMES,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=False,
+        )
+        rca_filter = UnionUniverseFilter([
+            BreakoutUniverseFilter(top_n=20),
+            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+            PullbackUniverseFilter(top_n=20),
+            MeanReversionUniverseFilter(top_n=20),
+            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ])
+        result_rca = run_experiment(
+            repository, rca_router, ctx,
+            max_position_pct=0.10,
+            allowed_regimes=None,
+            breadth_circuit_breaker=True,
+            universe_filter=rca_filter,
+            adaptive_selector=rca_selector,
+            max_downtrend_pct=0.35,
+            min_atr_cost_ratio=3.0,
+            regime_context_agent=ctx.regime_context_agent,
+        )
+        _print_row("Adaptive+RCA (5-strat)", result_rca)
+        print(f"  {'':>{COL_W}} (LLM calls: {rca_selector.call_count})")
+
+        # Delta row: show RCA improvement at a glance
+        if result_adaptive and result_rca:
+            base_sharpe = result_adaptive["portfolio_metrics"].get("sharpe_ratio") or 0.0
+            rca_sharpe  = result_rca["portfolio_metrics"].get("sharpe_ratio")       or 0.0
+            base_ret    = result_adaptive["portfolio_metrics"].get("total_return")  or 0.0
+            rca_ret     = result_rca["portfolio_metrics"].get("total_return")       or 0.0
+            delta_s = rca_sharpe - base_sharpe
+            delta_r = (rca_ret - base_ret) * 100
+            sign_s  = "+" if delta_s >= 0 else ""
+            sign_r  = "+" if delta_r >= 0 else ""
+            print(f"  {'RCA delta':<{COL_W}} {sign_s}{delta_s:>5.2f}  {sign_r}{delta_r:>7.2f}%")
 
     print(f"\n{'=' * (ROW_W + 2)}\n")
 
     if RUN_WALK_FORWARD:
         run_walk_forward(repository)
+
+    if RUN_WALK_FORWARD:
+        run_walk_forward(repository)
+
+
+def main():
+    _base = MarketDataRepository()
+    repository = OHLCCache(_base)
+
+    # Full historical periods — all PERIODS including "Live 2025-2026".
+    # Each period shows: solo strategies + EqualWeight + Adaptive + Adaptive+RCA
+    # Switch to _run_recent_diagnostic(repository) for a quick 30-day smoke-test.
+    _run_full_periods(repository)
+
+
+def _run_recent_diagnostic(repository) -> None:
+    from datetime import datetime as _dt, timedelta as _td
+
+    DIAG_START = _dt(2026, 2, 1)   # ~50 days back so indicators are warm by Feb 24
+    DIAG_END   = _dt(2026, 3, 24)
+    _STRAT_NAMES = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+
+    # Warm only the data window this diagnostic needs.
+    # MarketObserverAgent.preload() adds a 300-day buffer internally, so we
+    # cover that by going 350 days before DIAG_START — ~8 months total vs 12 years.
+    repository.warm_all(
+        list({s for s in BROAD_UNIVERSE}),
+        start = DIAG_START - _td(days=350),
+        end   = DIAG_END,
+    )
+
+    print(f"\n{'=' * (ROW_W + 2)}")
+    print(f"  Diagnostic: Recent 30-day run — relaxed guardrails (2026-02-24 → 2026-03-24)")
+    print(f"  Purpose: see what signals would have fired under looser risk settings")
+    print(f"  NOT deployed — Railway config unchanged")
+    print(f"{'=' * (ROW_W + 2)}")
+    print(HEADER)
+
+    ctx = PeriodContext(repository, DIAG_START, DIAG_END)
+    rca = RegimeContextAgent(ctx.dynamic_universe_agent)
+
+    _CONFIGS = [
+        {
+            "label":               "[A] Production  (CB=35%, regimes=UP/SIDE)",
+            "max_downtrend_pct":   0.35,
+            "breadth_cb":          True,
+            "allowed_regimes":     {
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        },
+        {
+            "label":               "[B] Relaxed CB  (CB=70%, regimes=UP/SIDE)",
+            "max_downtrend_pct":   0.70,
+            "breadth_cb":          True,
+            "allowed_regimes":     {
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        },
+        {
+            "label":               "[C] No gates    (CB=off, all regimes open)",
+            "max_downtrend_pct":   1.00,
+            "breadth_cb":          False,
+            "allowed_regimes":     {k: None for k in _STRAT_NAMES},
+        },
+        {
+            "label":               "[A+RCA] Production  (CB=35%, +RegimeContext)",
+            "max_downtrend_pct":   0.35,
+            "breadth_cb":          True,
+            "allowed_regimes":     {
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+            "rca": rca,   # ← pass the RCA instance
+        },
+    ]
+
+    for cfg in _CONFIGS:
+        print(f"{DIVIDER}")
+        router = MultiStrategyRouter(
+            strategies={
+                "DualMA":   DualMovingAverageStrategy(),
+                "Breakout": BreakoutMomentumStrategy(),
+                "QuietBrk": QuietBreakoutStrategy(),
+                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                "RSI-MR":   RSIMeanReversionStrategy(
+                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+            },
+            weights={n: 0.20 for n in _STRAT_NAMES},
+            allowed_regimes=cfg["allowed_regimes"],
+        )
+        union_filter = UnionUniverseFilter([
+            BreakoutUniverseFilter(top_n=20),
+            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+            PullbackUniverseFilter(top_n=20),
+            MeanReversionUniverseFilter(top_n=20),
+            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ])
+        selector = AdaptiveStrategySelector(
+            strategy_names=_STRAT_NAMES,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=False,
+            regime_stability_weeks=2,
+        )
+        result = run_experiment(
+            repository, router, ctx,
+            max_position_pct=0.10,
+            allowed_regimes=None,          # router handles per-strategy gating
+            breadth_circuit_breaker=cfg["breadth_cb"],
+            universe_filter=union_filter,
+            adaptive_selector=selector,
+            max_downtrend_pct=cfg["max_downtrend_pct"],
+            min_atr_cost_ratio=3.0,
+            regime_context_agent=cfg.get("rca"),
+        )
+        _print_row(cfg["label"], result)
+
+    print(f"\n{'=' * (ROW_W + 2)}")
+    print(f"  Decision guide:")
+    print(f"    [A] = 0 trades → confirmed production behaviour")
+    print(f"    [B] trades > 0 → relaxing CB alone is enough to unlock signals")
+    print(f"    [C] trades > 0 → regime filter is the primary blocker")
+    print(f"    Raise CB threshold in Railway ONLY if [B] drawdown < [A] full-period drawdown")
+    print(f"{'=' * (ROW_W + 2)}\n")
+
+    # ------------------------------------------------------------------
+    # Historical recovery test — 2020 recovery period
+    # RCA should catch TRANSITION_UP earlier than base regime detection,
+    # allowing re-entry weeks before the SMA_50-based rules confirm the move.
+    # ------------------------------------------------------------------
+    print(f"\n{'─' * (ROW_W + 2)}")
+    print(f"  Historical Recovery Test — 2020 recovery (2020-04-01 → 2021-12-31)")
+    print(f"  Key question: does RCA catch TRANSITION_UP earlier → better returns?")
+    print(f"{'─' * (ROW_W + 2)}")
+    print(HEADER)
+
+    from datetime import datetime as _dt2
+    RECOV_START = _dt2(2020, 4, 1)
+    RECOV_END   = _dt2(2021, 12, 31)
+
+    repository.warm_all(
+        list({s for s in BROAD_UNIVERSE}),
+        start = RECOV_START - _td(days=350),
+        end   = RECOV_END,
+    )
+
+    ctx_recov = PeriodContext(repository, RECOV_START, RECOV_END)
+    rca_recov = RegimeContextAgent(ctx_recov.dynamic_universe_agent)
+
+    _STRAT_NAMES_R = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+
+    for label_r, use_rca in [
+        ("Adaptive  (no RCA)", False),
+        ("Adaptive  (+RCA)  ", True),
+    ]:
+        router_r = MultiStrategyRouter(
+            strategies={
+                "DualMA":   DualMovingAverageStrategy(),
+                "Breakout": BreakoutMomentumStrategy(),
+                "QuietBrk": QuietBreakoutStrategy(),
+                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                "RSI-MR":   RSIMeanReversionStrategy(
+                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+            },
+            weights={n: 0.20 for n in _STRAT_NAMES_R},
+            allowed_regimes={
+                "DualMA":   _UPTREND_ONLY,
+                "Breakout": _TREND_AND_SIDEWAYS,
+                "QuietBrk": _UPTREND_ONLY,
+                "TrendPB":  _TREND_AND_SIDEWAYS,
+                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+            },
+        )
+        uf_r = UnionUniverseFilter([
+            BreakoutUniverseFilter(top_n=20),
+            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+            PullbackUniverseFilter(top_n=20),
+            MeanReversionUniverseFilter(top_n=20),
+            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ])
+        sel_r = AdaptiveStrategySelector(
+            strategy_names=_STRAT_NAMES_R,
+            rebalance_frequency_days=5,
+            model="gpt-4o-mini",
+            verbose=False,
+            regime_stability_weeks=2,
+        )
+        result_r = run_experiment(
+            repository, router_r, ctx_recov,
+            max_position_pct=0.10,
+            allowed_regimes=None,
+            breadth_circuit_breaker=True,
+            universe_filter=uf_r,
+            adaptive_selector=sel_r,
+            max_downtrend_pct=0.35,
+            min_atr_cost_ratio=3.0,
+            regime_context_agent=rca_recov if use_rca else None,
+        )
+        _print_row(label_r, result_r)
 
 
 if __name__ == "__main__":
