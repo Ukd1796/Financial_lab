@@ -4,6 +4,7 @@
 
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from datetime import date
 
 
 class StrategyEntry(BaseModel):
@@ -24,6 +25,8 @@ class StrategyConfigRequest(BaseModel):
     universe: str = "nifty100"            # nifty50 | nifty100 | broad150
     strategies: List[StrategyEntry]
     risk: RiskConfig
+    backtest_start: Optional[date] = None
+    backtest_end: Optional[date] = None
 
 
 class BacktestRunRequest(BaseModel):

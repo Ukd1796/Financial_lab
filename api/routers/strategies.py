@@ -22,7 +22,7 @@ def create_strategy(body: StrategyConfigRequest):
     The returned `id` is used as the URL param for backtest runs and paper trade sessions.
     """
     strategy_id = f"strat_{uuid.uuid4().hex[:6]}"
-    config_dict = body.model_dump()
+    config_dict = body.model_dump(mode="json")
 
     store.save_strategy(strategy_id, body.name, config_dict)
 
