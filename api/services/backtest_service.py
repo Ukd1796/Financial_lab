@@ -255,10 +255,20 @@ def execute_backtest(run_id: str, config: dict) -> None:
             raise ValueError("No enabled strategies in config.")
 
         # ------------------------------------------------------------------
-        # Date range: full run from 2019-01-01 to today
+        # Date range: use config dates if provided, else fall back to defaults
         # ------------------------------------------------------------------
-        today_dt  = datetime.combine(datetime.utcnow().date(), datetime.min.time())
-        start_dt  = datetime(2019, 1, 1)
+        today_dt = datetime.combine(datetime.utcnow().date(), datetime.min.time())
+        start_dt = (
+            datetime.fromisoformat(config["backtest_start"])
+            if config.get("backtest_start")
+            else datetime(2019, 1, 1)
+        )
+        end_dt = (
+            datetime.fromisoformat(config["backtest_end"])
+            if config.get("backtest_end")
+            else today_dt
+        )
+        today_dt  = min(end_dt, today_dt)   # never exceed today
         buffer_dt = start_dt - timedelta(days=220)   # warm-up buffer
 
         store.update_run_progress(run_id, 10)
@@ -292,7 +302,7 @@ def execute_backtest(run_id: str, config: dict) -> None:
         timestamps = set()
         for df in dynamic_agent._cache.values():
             for ts in df.index:
-                if start_dt <= ts <= today_dt:
+                if start_dt <= ts <= today_dt:  # today_dt already capped to end_dt
                     timestamps.add(ts)
         historical_dates = sorted(timestamps)
 

@@ -41,7 +41,7 @@ async def run_backtest(body: BacktestRunRequest):
         config["strategy_id"] = body.strategy_id
 
     elif body.config:
-        config = body.config.model_dump()
+        config = body.config.model_dump(mode="json")
     else:
         raise HTTPException(
             status_code=422,
@@ -52,7 +52,7 @@ async def run_backtest(body: BacktestRunRequest):
     store.create_run(run_id, body.strategy_id, config)
 
     # Kick off the heavy computation in a thread so the event loop stays free.
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, execute_backtest, run_id, config
     )
 
@@ -88,10 +88,11 @@ def get_backtest(run_id: str):
         }
 
     if status == "failed":
-        raise HTTPException(
-            status_code=500,
-            detail=f"Backtest failed: {record.get('error_msg', 'unknown error')}",
-        )
+        return {
+            "run_id":     run_id,
+            "status":     "failed",
+            "error_msg":  record.get("error_msg", "unknown error"),
+        }
 
     # status == "complete"
     result = record.get("result", {})
