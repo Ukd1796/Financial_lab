@@ -78,7 +78,8 @@ class BacktestEngine:
                 broad_candidates = self.dynamic_universe_agent.select_candidates(current_date)
                 active_symbols   = self.universe_agent.select_symbols(broad_candidates)
                 if not active_symbols:
-                    active_symbols = [c.symbol for c in broad_candidates[: self.universe_agent.top_n]]
+                    fallback_n = getattr(self.universe_agent, "top_n", len(broad_candidates))
+                    active_symbols = [c.symbol for c in broad_candidates[:fallback_n]]
             elif self.dynamic_universe_agent:
                 active_symbols = self.dynamic_universe_agent.select_symbols(current_date)
             else:

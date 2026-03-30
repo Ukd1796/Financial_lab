@@ -249,6 +249,7 @@ class UnionUniverseFilter:
 
     def __init__(self, filters: list):
         self.filters = filters
+        self.top_n   = sum(getattr(f, "top_n", 20) for f in filters)
 
     def select_universe(
         self, candidates: list[UniverseCandidate]
