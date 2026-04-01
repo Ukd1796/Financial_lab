@@ -497,7 +497,7 @@ def main():
         risk_per_trade_pct=0.005,
         use_vol_sizing=True,
         breadth_circuit_breaker=True,
-        max_downtrend_pct=0.35,
+        max_downtrend_pct=0.50,
         min_atr_cost_ratio=3.0,
     )
 
