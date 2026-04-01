@@ -27,6 +27,7 @@
 
 import json
 import os
+import sqlite3
 import sys
 import uuid
 from datetime import date, datetime, timedelta
@@ -189,18 +190,53 @@ def _save_selector_state(selector: AdaptiveStrategySelector, rebalanced_today: b
         session.close()
 
 # ---------------------------------------------------------------------------
+# Paper trading capital helpers
+# ---------------------------------------------------------------------------
+
+_API_STATE_DB = os.path.join(os.path.dirname(__file__), "api_state.db")
+
+def _get_paper_starting_capital() -> float:
+    """
+    Read starting_capital from the most-recent paper_sessions row in api_state.db.
+    Falls back to PAPER_CAPITAL env var, then to 500_000.
+    """
+    default = float(os.environ.get("PAPER_CAPITAL", 500_000))
+    try:
+        if not os.path.exists(_API_STATE_DB):
+            return default
+        conn = sqlite3.connect(_API_STATE_DB)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT starting_capital FROM paper_sessions ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        if row:
+            return float(row["starting_capital"])
+    except Exception as exc:
+        print(f"  [Portfolio] Could not read paper_sessions ({exc}) — using default ₹{default:,.0f}")
+    return default
+
+
+# ---------------------------------------------------------------------------
 # Position sync from broker → Portfolio
 # ---------------------------------------------------------------------------
 
 def _build_portfolio_from_broker(broker: PaperAdapter) -> tuple[Portfolio, dict]:
     """
     Read live_positions from broker adapter and build a Portfolio object.
+    Cash = starting_capital (from paper_sessions) minus deployed capital
+    (sum of quantity × average_price for all open positions).
     Returns (Portfolio, position_owners_dict).
     """
-    portfolio = Portfolio(cash=0.0)   # cash unknown without broker equity — set to 0
-    position_owners = {}
+    starting_capital = _get_paper_starting_capital()
+    position_owners  = {}
+    positions        = broker.get_positions()
 
-    for pos in broker.get_positions():
+    deployed_capital = sum(p.quantity * p.average_price for p in positions)
+    cash             = max(starting_capital - deployed_capital, 0.0)
+
+    portfolio = Portfolio(cash=cash)
+    for pos in positions:
         portfolio.positions[pos.symbol] = type(
             "Position", (), {
                 "quantity":      pos.quantity,
@@ -209,6 +245,8 @@ def _build_portfolio_from_broker(broker: PaperAdapter) -> tuple[Portfolio, dict]
         )()
         position_owners[pos.symbol] = pos.strategy
 
+    print(f"    Starting capital: ₹{starting_capital:,.0f}  |  "
+          f"Deployed: ₹{deployed_capital:,.0f}  |  Cash: ₹{cash:,.0f}")
     return portfolio, position_owners
 
 
