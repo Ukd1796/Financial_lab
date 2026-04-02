@@ -115,17 +115,19 @@ def main():
                     f"[{row.strategy}]{pnl_str}"
                 )
 
+        # Build email strings while session is still open
+        fill_lines = "\n".join(
+            f"  {row.action:<4} {row.symbol:<14} qty={order.fill_qty}  fill=₹{order.fill_price:.2f}  [{row.strategy}]"
+            for row, order in fills
+        ) or "  (none)"
+        pending_lines = "\n".join(f"  {r.symbol}" for r in pending) or "  (none)"
+
     finally:
         session.close()
 
     # ------------------------------------------------------------------
     # Email summary
     # ------------------------------------------------------------------
-    fill_lines = "\n".join(
-        f"  {row.action:<4} {row.symbol:<14} qty={order.fill_qty}  fill=₹{order.fill_price:.2f}  [{row.strategy}]"
-        for row, order in fills
-    ) or "  (none)"
-
     email_body = f"""Financial Lab — Order Fill Report {today}
 
 Fills:   {len(fills)}
@@ -135,7 +137,7 @@ Filled orders:
 {fill_lines}
 
 Pending (will retry tomorrow):
-{chr(10).join('  ' + r.symbol for r in pending) or '  (none)'}
+{pending_lines}
 """
     send_email(
         subject=f"[FinLab] Orders {today} — {len(fills)} filled, {len(pending)} pending",
