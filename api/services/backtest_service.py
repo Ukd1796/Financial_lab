@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 import traceback
 from datetime import datetime, timedelta
 from typing import Any
@@ -25,6 +26,7 @@ from app.backtest.observer import MarketObserverAgent
 from app.data.repository import MarketDataRepository
 from app.evaluation.agent import EvaluationAgent
 from app.execution.agent import ExecutionAgent
+from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.meta.regime_context_agent import RegimeContextAgent
 from app.portfolio.engine import PortfolioEngine
 from app.portfolio.models import Portfolio
@@ -345,8 +347,38 @@ def execute_backtest(run_id: str, config: dict) -> None:
             risk_per_trade_pct=float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0,
             use_vol_sizing=True,
             breadth_circuit_breaker=True,
-            max_downtrend_pct=0.72,
-            min_atr_cost_ratio=0.0,
+            max_downtrend_pct=0.35,    # matches run_experiments.py production config
+            min_atr_cost_ratio=3.0,    # ATR must cover ≥ 3× round-trip cost
+        )
+
+        # LLM-driven weekly rebalance — mirrors run_experiments.py Step 15.
+        # Only instantiated when OPENAI_API_KEY is present; otherwise the router
+        # holds its initial weights for the full backtest duration.
+        def _llm_decision_callback(decided_at, regime, confidence, weights,
+                                   snapshot, raw_response, model):
+            store.log_llm_decision(
+                decided_at=decided_at.isoformat(),
+                regime=regime,
+                confidence=confidence,
+                weights=weights,
+                snapshot=snapshot,
+                raw_llm_response=raw_response,
+                model=model,
+                call_seq=adaptive_selector.call_count if adaptive_selector else 0,
+                run_id=run_id,
+                source="backtest",
+            )
+
+        adaptive_selector = (
+            AdaptiveStrategySelector(
+                strategy_names=active_internals,
+                rebalance_frequency_days=5,
+                model="gpt-4o-mini",
+                verbose=False,
+                on_rebalance=_llm_decision_callback,
+            )
+            if os.environ.get("OPENAI_API_KEY")
+            else None
         )
 
         engine = BacktestEngine(
@@ -358,20 +390,71 @@ def execute_backtest(run_id: str, config: dict) -> None:
             repository=None,
             dynamic_universe_agent=dynamic_agent,
             universe_agent=union_filter,
+            adaptive_selector=adaptive_selector,
             regime_context_agent=rca,
         )
 
         store.update_run_progress(run_id, 40)
 
         # ------------------------------------------------------------------
-        # Run backtest
+        # Run adaptive backtest (LLM-driven weights)
         # ------------------------------------------------------------------
         results, trades = engine.run(universe_symbols, historical_dates)
+
+        store.update_run_progress(run_id, 65)
+
+        # ------------------------------------------------------------------
+        # Baseline pass: same setup but fixed weights, no LLM rebalancing.
+        # Reuses already-preloaded dynamic_agent + observer — no extra DB queries.
+        # Only run when the adaptive selector was active (key present).
+        # ------------------------------------------------------------------
+        baseline_summary: dict | None = None
+        if adaptive_selector is not None:
+            baseline_router = MultiStrategyRouter(
+                strategies={name: _STRATEGY_REGISTRY[name]["factory"]() for name in active_internals},
+                weights=weights,
+                allowed_regimes=allowed_regimes,
+            )
+            baseline_portfolio = Portfolio(cash=capital)
+            baseline_engine = BacktestEngine(
+                observer=observer,
+                strategy_router=baseline_router,
+                risk_agent=RiskAgent(
+                    max_position_pct=max_pos_pct,
+                    atr_multiplier=2.0,
+                    risk_per_trade_pct=float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0,
+                    use_vol_sizing=True,
+                    breadth_circuit_breaker=True,
+                    max_downtrend_pct=0.35,
+                    min_atr_cost_ratio=3.0,
+                ),
+                execution_agent=ExecutionAgent(
+                    PortfolioEngine(baseline_portfolio),
+                    commission_pct=0.001,
+                    slippage_pct=0.0005,
+                ),
+                portfolio=baseline_portfolio,
+                repository=None,
+                dynamic_universe_agent=dynamic_agent,
+                universe_agent=union_filter,
+                adaptive_selector=None,
+                regime_context_agent=rca,
+            )
+            b_results, b_trades = baseline_engine.run(universe_symbols, historical_dates)
+            evaluator_b    = EvaluationAgent()
+            b_port_metrics = evaluator_b.evaluate(b_results, capital)
+            b_trade_metrics = evaluator_b.evaluate_trades(b_trades)
+            baseline_summary = {
+                "return_pct":  round(b_port_metrics.get("total_return", 0) * 100, 2),
+                "sharpe":      round(b_port_metrics.get("sharpe_ratio", 0), 2),
+                "max_dd_pct":  round(-abs(b_port_metrics.get("max_drawdown", 0)) * 100, 2),
+                "num_trades":  b_trade_metrics.get("num_trades", 0),
+            }
 
         store.update_run_progress(run_id, 75)
 
         # ------------------------------------------------------------------
-        # Compute metrics
+        # Compute adaptive metrics
         # ------------------------------------------------------------------
         evaluator         = EvaluationAgent()
         port_metrics      = evaluator.evaluate(results, capital)
@@ -396,7 +479,7 @@ def execute_backtest(run_id: str, config: dict) -> None:
             "total_trades":        trade_metrics.get("num_trades", 0),
             "benchmark_return_pct": benchmark_return,
             "benchmark_max_dd_pct": round(benchmark_dd, 2),
-            "benchmark_sharpe":    0.0,   # would require daily benchmark returns
+            "benchmark_sharpe":    0.0,
         }
 
         # Equity curve (monthly sampling for UI)
@@ -410,12 +493,30 @@ def execute_backtest(run_id: str, config: dict) -> None:
 
         store.update_run_progress(run_id, 90)
 
+        # ------------------------------------------------------------------
+        # Save A/B comparison if adaptive run happened
+        # ------------------------------------------------------------------
+        if adaptive_selector is not None and baseline_summary is not None:
+            store.save_ab_result(
+                run_id=run_id,
+                adaptive={
+                    "return_pct": total_return_pct,
+                    "sharpe":     summary["sharpe_ratio"],
+                    "max_dd_pct": max_dd_pct,
+                    "num_trades": summary["total_trades"],
+                },
+                baseline=baseline_summary,
+                llm_call_count=adaptive_selector.call_count,
+            )
+
         # AI narrative (non-blocking — generated after results are ready)
         ai_narrative = generate_narrative(summary, period_breakdown)
 
         # ------------------------------------------------------------------
         # Store complete result
         # ------------------------------------------------------------------
+        ab_result = store.get_ab_result(run_id)
+
         result_payload = {
             "summary":          summary,
             "equity_curve":     equity_curve,
@@ -423,6 +524,7 @@ def execute_backtest(run_id: str, config: dict) -> None:
             "trade_log":        trade_log,
             "ai_narrative":     ai_narrative,
             "config_snapshot":  config,
+            "llm_comparison":   ab_result,   # None if no LLM key / baseline not run
         }
 
         complete_run_record = {
