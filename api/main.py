@@ -11,6 +11,12 @@
 
 import os
 
+from dotenv import load_dotenv
+
+# Load .env before any service/router imports so OPENAI_API_KEY and other
+# variables are available when module-level code runs (e.g. OpenAI client init).
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -19,6 +19,7 @@
 import json
 import os
 from datetime import datetime
+from typing import Callable, Optional
 
 from openai import OpenAI
 
@@ -193,6 +194,7 @@ class AdaptiveStrategySelector:
         history_weeks: int = 4,
         regime_stability_weeks: int = 2,
         performance_table: str | None = None,
+        on_rebalance: Optional[Callable] = None,
     ):
         self.client                   = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.strategy_names           = strategy_names
@@ -206,6 +208,9 @@ class AdaptiveStrategySelector:
         # Injectable performance table — None means use the hardcoded full-history table.
         # Walk-forward validation injects a table computed from training data only.
         self._performance_table       = performance_table if performance_table is not None else _STRATEGY_REGIME_PERFORMANCE
+        # Optional callback fired after each successful LLM rebalance.
+        # Signature: on_rebalance(decided_at, regime, confidence, weights, snapshot, raw_response, model)
+        self.on_rebalance             = on_rebalance
 
         n = max(len(strategy_names), 1)
         self.weights: dict[str, float]      = {s: 1.0 / n for s in strategy_names}
@@ -217,6 +222,8 @@ class AdaptiveStrategySelector:
         self._confirmed_regime: str | None  = None   # last regime confirmed for ≥ stability_weeks
         self._pending_regime: str | None    = None   # candidate not yet confirmed
         self._pending_count: int            = 0      # consecutive weeks seen for pending
+        # Last raw LLM text response — captured in _call_llm, read by rebalance()
+        self._last_raw_response: str | None = None
 
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -289,6 +296,7 @@ class AdaptiveStrategySelector:
                     break
             label = effective_label
 
+        self._last_raw_response = None
         new_weights = self._call_llm(regime_snapshot, label, desc, confidence)
         if new_weights:
             self.weights = new_weights
@@ -299,6 +307,19 @@ class AdaptiveStrategySelector:
                     f"  [AdaptiveSelector] {current_date.date()}"
                     f" [{label}/{confidence}] → {w_str}"
                 )
+            if self.on_rebalance is not None:
+                try:
+                    self.on_rebalance(
+                        decided_at=current_date,
+                        regime=label,
+                        confidence=confidence,
+                        weights=dict(self.weights),
+                        snapshot=regime_snapshot,
+                        raw_response=self._last_raw_response or "",
+                        model=self.model,
+                    )
+                except Exception:
+                    pass  # never let a logging callback break the backtest
 
         # Append this snapshot to rolling history (keep last history_weeks entries)
         self._snapshot_history.append({
@@ -340,6 +361,7 @@ class AdaptiveStrategySelector:
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = response.choices[0].message.content.strip()
+            self._last_raw_response = raw   # store before any stripping
             if raw.startswith("```"):
                 parts = raw.split("```")
                 raw = parts[1] if len(parts) > 1 else raw

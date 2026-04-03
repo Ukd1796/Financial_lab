@@ -10,7 +10,7 @@
 import json
 import os
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 _DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "api_state.db")
@@ -55,6 +55,39 @@ def init_db() -> None:
                 start_date       TEXT NOT NULL,
                 unlock_live_date TEXT NOT NULL,
                 created_at       TEXT NOT NULL
+            );
+
+            -- Every LLM rebalance decision: regime, chosen weights, raw response.
+            -- run_id is NULL for live market-API calls (not tied to a backtest).
+            CREATE TABLE IF NOT EXISTS llm_weight_decisions (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id           TEXT,
+                source           TEXT NOT NULL DEFAULT 'backtest',
+                decided_at       TEXT NOT NULL,
+                regime           TEXT NOT NULL,
+                confidence       TEXT,
+                weights_json     TEXT NOT NULL,
+                snapshot_json    TEXT,
+                raw_llm_response TEXT,
+                model            TEXT,
+                call_seq         INTEGER NOT NULL DEFAULT 0
+            );
+
+            -- Side-by-side LLM-adaptive vs fixed-weight baseline for each backtest.
+            CREATE TABLE IF NOT EXISTS backtest_ab_results (
+                run_id                TEXT PRIMARY KEY,
+                adaptive_return_pct   REAL,
+                adaptive_sharpe       REAL,
+                adaptive_max_dd_pct   REAL,
+                adaptive_num_trades   INTEGER,
+                baseline_return_pct   REAL,
+                baseline_sharpe       REAL,
+                baseline_max_dd_pct   REAL,
+                baseline_num_trades   INTEGER,
+                alpha_return_pct      REAL,
+                alpha_sharpe          REAL,
+                llm_call_count        INTEGER NOT NULL DEFAULT 0,
+                created_at            TEXT NOT NULL
             );
         """)
 
@@ -183,5 +216,115 @@ def get_paper_session(session_id: str) -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM paper_sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# LLM weight decisions
+# ---------------------------------------------------------------------------
+
+def log_llm_decision(
+    decided_at: str,
+    regime: str,
+    confidence: str,
+    weights: dict,
+    snapshot: dict,
+    raw_llm_response: str,
+    model: str,
+    call_seq: int,
+    run_id: Optional[str] = None,
+    source: str = "backtest",
+) -> None:
+    """Record one LLM rebalance event."""
+    # Only store the market-relevant subset of the snapshot to keep rows small.
+    snapshot_slim = {
+        k: snapshot.get(k)
+        for k in ("pct_uptrend", "pct_downtrend", "avg_atr_pct", "broad_regime", "trend")
+        if snapshot.get(k) is not None
+    }
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO llm_weight_decisions "
+            "(run_id, source, decided_at, regime, confidence, weights_json, "
+            " snapshot_json, raw_llm_response, model, call_seq) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                run_id, source, decided_at, regime, confidence,
+                json.dumps(weights), json.dumps(snapshot_slim),
+                raw_llm_response, model, call_seq,
+            ),
+        )
+
+
+def get_llm_decisions(run_id: Optional[str] = None, limit: int = 100) -> list[dict]:
+    """Fetch LLM decisions, optionally filtered by run_id."""
+    with _connect() as conn:
+        if run_id:
+            rows = conn.execute(
+                "SELECT * FROM llm_weight_decisions WHERE run_id = ? ORDER BY id DESC LIMIT ?",
+                (run_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM llm_weight_decisions ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    results = []
+    for row in rows:
+        r = dict(row)
+        r["weights"]  = json.loads(r.pop("weights_json"))
+        r["snapshot"] = json.loads(r.pop("snapshot_json") or "{}")
+        results.append(r)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Backtest A/B comparison (LLM-adaptive vs fixed-weight baseline)
+# ---------------------------------------------------------------------------
+
+def save_ab_result(
+    run_id: str,
+    adaptive: dict,
+    baseline: dict,
+    llm_call_count: int,
+) -> None:
+    """
+    Store side-by-side metrics.
+
+    adaptive / baseline dicts expected keys:
+        return_pct, sharpe, max_dd_pct, num_trades
+    """
+    alpha_return = round(
+        (adaptive.get("return_pct") or 0) - (baseline.get("return_pct") or 0), 4
+    )
+    alpha_sharpe = round(
+        (adaptive.get("sharpe") or 0) - (baseline.get("sharpe") or 0), 4
+    )
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO backtest_ab_results "
+            "(run_id, adaptive_return_pct, adaptive_sharpe, adaptive_max_dd_pct, "
+            " adaptive_num_trades, baseline_return_pct, baseline_sharpe, "
+            " baseline_max_dd_pct, baseline_num_trades, "
+            " alpha_return_pct, alpha_sharpe, llm_call_count, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                run_id,
+                adaptive.get("return_pct"), adaptive.get("sharpe"),
+                adaptive.get("max_dd_pct"), adaptive.get("num_trades"),
+                baseline.get("return_pct"), baseline.get("sharpe"),
+                baseline.get("max_dd_pct"), baseline.get("num_trades"),
+                alpha_return, alpha_sharpe,
+                llm_call_count,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+
+
+def get_ab_result(run_id: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM backtest_ab_results WHERE run_id = ?", (run_id,)
         ).fetchone()
     return dict(row) if row else None

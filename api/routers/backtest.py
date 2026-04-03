@@ -97,13 +97,25 @@ def get_backtest(run_id: str):
     # status == "complete"
     result = record.get("result", {})
     return {
-        "run_id":          run_id,
-        "status":          "complete",
-        "strategy_id":     result.get("strategy_id"),
-        "config_snapshot": result.get("config_snapshot", {}),
-        "summary":         result.get("summary", {}),
-        "equity_curve":    result.get("equity_curve", []),
+        "run_id":           run_id,
+        "status":           "complete",
+        "strategy_id":      result.get("strategy_id"),
+        "config_snapshot":  result.get("config_snapshot", {}),
+        "summary":          result.get("summary", {}),
+        "equity_curve":     result.get("equity_curve", []),
         "period_breakdown": result.get("period_breakdown", []),
         "trade_log":        result.get("trade_log", []),
         "ai_narrative":     result.get("ai_narrative", {}),
+        "llm_comparison":   result.get("llm_comparison"),   # None if no OPENAI_API_KEY
     }
+
+
+@router.get("/{run_id}/llm-decisions")
+def get_llm_decisions(run_id: str):
+    """
+    LLM weight decisions recorded during this backtest run.
+    Returns an empty list if the run used fixed weights (no OPENAI_API_KEY).
+    """
+    if store.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
+    return {"run_id": run_id, "decisions": store.get_llm_decisions(run_id=run_id)}
