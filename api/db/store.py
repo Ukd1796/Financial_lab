@@ -220,6 +220,35 @@ def get_paper_session(session_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def delete_strategy_cascade(strategy_id: str) -> None:
+    """
+    Delete a strategy and all related SQLite rows in dependency order:
+      backtest_runs → llm_weight_decisions, backtest_ab_results
+      paper_sessions
+      strategies
+    """
+    with _connect() as conn:
+        # Collect run IDs so we can cascade into llm/ab tables.
+        run_ids = [
+            row[0] for row in conn.execute(
+                "SELECT run_id FROM backtest_runs WHERE strategy_id = ?", (strategy_id,)
+            ).fetchall()
+        ]
+        if run_ids:
+            placeholders = ",".join("?" * len(run_ids))
+            conn.execute(
+                f"DELETE FROM llm_weight_decisions WHERE run_id IN ({placeholders})", run_ids
+            )
+            conn.execute(
+                f"DELETE FROM backtest_ab_results WHERE run_id IN ({placeholders})", run_ids
+            )
+            conn.execute(
+                f"DELETE FROM backtest_runs WHERE run_id IN ({placeholders})", run_ids
+            )
+        conn.execute("DELETE FROM paper_sessions WHERE strategy_id = ?", (strategy_id,))
+        conn.execute("DELETE FROM strategies WHERE id = ?", (strategy_id,))
+
+
 # ---------------------------------------------------------------------------
 # LLM weight decisions
 # ---------------------------------------------------------------------------
