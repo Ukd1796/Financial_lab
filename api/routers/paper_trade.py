@@ -48,12 +48,17 @@ def _get_live_positions() -> list[dict]:
         session.close()
 
 
-def _get_signals_for_date(signal_date: date) -> list[dict]:
-    """Read signal_queue rows for a specific date."""
+def _get_signals_for_date(signal_date: date, session_id: str) -> list[dict]:
+    """Read signal_queue rows for a specific date and paper session."""
     session = SessionLocal()
     try:
         rows = session.execute(
-            select(SignalQueue).where(SignalQueue.signal_date == signal_date)
+            select(SignalQueue).where(
+                and_(
+                    SignalQueue.signal_date == signal_date,
+                    SignalQueue.session_id  == session_id,
+                )
+            )
         ).scalars().all()
         return [
             {
@@ -73,8 +78,8 @@ def _get_signals_for_date(signal_date: date) -> list[dict]:
         session.close()
 
 
-def _get_signals_range(start_date: date, end_date: date) -> list[dict]:
-    """Read signal_queue rows between two dates (inclusive)."""
+def _get_signals_range(start_date: date, end_date: date, session_id: str) -> list[dict]:
+    """Read signal_queue rows between two dates (inclusive) for a paper session."""
     session = SessionLocal()
     try:
         rows = session.execute(
@@ -82,6 +87,7 @@ def _get_signals_range(start_date: date, end_date: date) -> list[dict]:
                 and_(
                     SignalQueue.signal_date >= start_date,
                     SignalQueue.signal_date <= end_date,
+                    SignalQueue.session_id  == session_id,
                 )
             )
         ).scalars().all()
@@ -185,7 +191,7 @@ def get_dashboard(session_id: str):
     day_count = (date.today() - start_dt.date()).days + 1
 
     positions = _get_live_positions()
-    today_signals = _get_signals_for_date(date.today())
+    today_signals = _get_signals_for_date(date.today(), session_id)
 
     # Best-effort portfolio value: starting capital + unrealised PnL from positions
     portfolio_value = paper_session["starting_capital"]
@@ -240,7 +246,7 @@ def get_signals(session_id: str):
     Today's generated signals (BUY / SELL / PENDING / FILLED / CANCELLED) with reason.
     """
     _resolve_session(session_id)
-    signals = _get_signals_for_date(date.today())
+    signals = _get_signals_for_date(date.today(), session_id)
     return {"session_id": session_id, "date": str(date.today()), "signals": signals}
 
 
@@ -253,7 +259,7 @@ def get_weekly_report(session_id: str):
     end_date   = date.today()
     start_date = end_date - timedelta(days=7)
 
-    signals = _get_signals_range(start_date, end_date)
+    signals = _get_signals_range(start_date, end_date, session_id)
 
     buys_filled  = [s for s in signals if s["action"] == "BUY"  and s["status"] == "FILLED"]
     sells_filled = [s for s in signals if s["action"] == "SELL" and s["status"] == "FILLED"]

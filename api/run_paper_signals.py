@@ -15,9 +15,7 @@
 #   - Does NOT save/restore AdaptiveStrategySelector state (uses live market API
 #     singleton instead, so state is shared with the API endpoints).
 
-import json
 import os
-import sqlite3
 import sys
 import uuid
 from datetime import date, datetime, timedelta
@@ -94,42 +92,50 @@ _ALLOWED_REGIMES = {
     "RSI-MR":   _UPTREND_AND_SIDEWAYS,
 }
 
-_API_STATE_DB = os.path.join(os.path.dirname(__file__), "..", "api_state.db")
-_API_STATE_DB = os.path.abspath(_API_STATE_DB)
-
-
 # ---------------------------------------------------------------------------
-# Config loaders from api_state.db
+# Config loaders from Supabase B
 # ---------------------------------------------------------------------------
 
-def _load_active_session() -> dict | None:
-    """Return the most-recent paper_sessions row, or None."""
+def _load_active_sessions() -> list[dict]:
+    """Return all active paper sessions from Supabase B paper_trade_sessions."""
+    from sqlalchemy import text as _text
+    db = SessionLocal()
     try:
-        conn = sqlite3.connect(_API_STATE_DB)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM paper_sessions ORDER BY created_at DESC LIMIT 1"
-        ).fetchone()
-        conn.close()
-        return dict(row) if row else None
+        rows = db.execute(_text(
+            "SELECT session_id, strategy_id, strategy_name, starting_capital "
+            "FROM paper_trade_sessions WHERE status = 'active'"
+        )).fetchall()
+        return [dict(r._mapping) for r in rows]
     except Exception as exc:
-        print(f"  [Config] Could not read paper_sessions ({exc})")
-        return None
+        print(f"  [Config] Could not read paper_trade_sessions ({exc})")
+        return []
+    finally:
+        db.close()
 
 
 def _load_strategy_config(strategy_id: str) -> dict | None:
-    """Return the parsed config dict for the given strategy_id, or None."""
+    """Return strategy config from Supabase B user_strategies (universe, strategies, risk)."""
+    from sqlalchemy import text as _text
+    db = SessionLocal()
     try:
-        conn = sqlite3.connect(_API_STATE_DB)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT config_json FROM strategies WHERE id = ?", (strategy_id,)
-        ).fetchone()
-        conn.close()
-        return json.loads(row["config_json"]) if row else None
+        row = db.execute(_text(
+            "SELECT name, universe, strategies, risk "
+            "FROM user_strategies WHERE id = :sid"
+        ), {"sid": strategy_id}).fetchone()
+        if row is None:
+            return None
+        # strategies and risk are JSONB — already dicts when fetched via psycopg2
+        return {
+            "name":       row.name,
+            "universe":   row.universe,
+            "strategies": row.strategies,
+            "risk":       row.risk,
+        }
     except Exception as exc:
         print(f"  [Config] Could not load strategy config ({exc})")
         return None
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +166,8 @@ def _build_portfolio(broker: PaperAdapter, starting_capital: float) -> tuple:
 # Signal writer
 # ---------------------------------------------------------------------------
 
-def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal_date) -> int:
+def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal_date,
+                   paper_session_id: str) -> int:
     session = SessionLocal()
     count = 0
     now = datetime.utcnow()
@@ -186,6 +193,7 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
                 target_qty   = int(decision.quantity),
                 status       = "PENDING",
                 notes        = decision.reasoning[:200] if decision.reasoning else None,
+                session_id   = paper_session_id,
             ))
             count += 1
         session.commit()
@@ -198,161 +206,54 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
 # MAIN
 # ---------------------------------------------------------------------------
 
-def main():
-    today    = date.today()
-    today_dt = datetime.combine(today, datetime.min.time())
-    calendar = NSECalendar()
+def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
+                 broad_regime: str, trend: str, suppress_buys: bool, today: date,
+                 today_dt: datetime) -> None:
+    """Run signal generation for a single paper session and write results."""
+    sid       = sess["session_id"]
+    strat_id  = sess["strategy_id"]
 
-    if not calendar.is_trading_day(today):
-        print(f"[paper_signals] {today} is not a trading day — exiting.")
-        sys.exit(0)
+    config = _load_strategy_config(strat_id)
+    if config is None:
+        print(f"  [SKIP] {sid} — strategy '{strat_id}' not found in user_strategies")
+        return
 
-    print(f"\n{'='*70}")
-    print(f"  api/run_paper_signals.py — {today}")
-    print(f"{'='*70}")
+    risk_cfg       = config.get("risk") or {}
+    strategies_cfg = config.get("strategies") or []
 
-    # ------------------------------------------------------------------
-    # Load active session + strategy config
-    # ------------------------------------------------------------------
-    session = _load_active_session()
-    if session is None:
-        print("  No active paper session found — start one via POST /api/paper-trade/start")
-        sys.exit(1)
-
-    strategy_config = _load_strategy_config(session["strategy_id"])
-    if strategy_config is None:
-        print(f"  Strategy '{session['strategy_id']}' not found in DB — exiting.")
-        sys.exit(1)
-
-    risk_cfg       = strategy_config.get("risk", {})
-    strategies_cfg = strategy_config.get("strategies", [])
-
-    starting_capital = float(session["starting_capital"])
+    starting_capital = float(sess["starting_capital"])
     max_pos_pct      = float(risk_cfg.get("max_position_pct", 10.0)) / 100.0
     risk_per_trade   = float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0
     pause_pct        = float(risk_cfg.get("pause_threshold_pct", 35.0)) / 100.0
 
-    # Resolve enabled strategies
     enabled_internals = [
         _UI_TO_INTERNAL[s["id"]]
         for s in strategies_cfg
         if s.get("enabled") and s["id"] in _UI_TO_INTERNAL
     ]
     if not enabled_internals:
-        print("  No enabled strategies in config — falling back to all 5")
         enabled_internals = list(_STRATEGY_FACTORIES.keys())
 
-    print(f"  Session:    {session['session_id']}  (strategy: {session['strategy_id']})")
-    print(f"  Capital:    ₹{starting_capital:,.0f}")
-    print(f"  Strategies: {enabled_internals}")
-    print(f"  Risk:       max_pos={max_pos_pct:.0%}  risk_per_trade={risk_per_trade:.3%}  pause_at={pause_pct:.0%} downtrend")
+    print(f"\n  ── Session {sid} ─────────────────────────────────────────")
+    print(f"     Strategy: {sess.get('strategy_name', strat_id)}")
+    print(f"     Capital:  ₹{starting_capital:,.0f}  |  Strategies: {enabled_internals}")
+    print(f"     Risk:     max_pos={max_pos_pct:.0%}  rpt={risk_per_trade:.3%}  pause@{pause_pct:.0%}")
 
-    suppress_buys = os.environ.get("SUPPRESS_NEW_BUYS", "0") == "1"
-    if suppress_buys:
-        print("  *** SUPPRESS_NEW_BUYS=1 — no new BUY signals ***")
-
-    # ------------------------------------------------------------------
-    # Fetch today's EOD data
-    # ------------------------------------------------------------------
-    print(f"\n[1/7] Fetching today's EOD data...")
-    provider   = YFinanceProvider()
-    repository = MarketDataRepository()
-    fetched = 0
-    for symbol in BROAD_UNIVERSE:
-        try:
-            records = provider.fetch_ohlc(symbol, start=today, end=today + timedelta(days=1))
-            if records:
-                repository.bulk_upsert(records)
-                fetched += 1
-        except Exception:
-            pass
-    print(f"    Fetched: {fetched} symbols")
-
-    # ------------------------------------------------------------------
-    # Universe + regime
-    # ------------------------------------------------------------------
-    print(f"\n[2/7] Building universe + regime snapshot...")
-    warmup_start = today - timedelta(days=300)
-    start_dt     = datetime.combine(warmup_start, datetime.min.time())
-
-    dynamic_agent = DynamicUniverseAgent(repository=repository, symbols=BROAD_UNIVERSE, top_n=80)
-    dynamic_agent.preload(start_dt, today_dt)
-    rca = RegimeContextAgent(dynamic_agent)
-
-    union_filter = UnionUniverseFilter([
-        BreakoutUniverseFilter(top_n=20),
-        BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-        PullbackUniverseFilter(top_n=20),
-        MeanReversionUniverseFilter(top_n=20),
-        DualMAUniverseFilter(max_cross_age=5, top_n=30),
-    ])
-    active_symbols = union_filter.select_symbols(dynamic_agent.select_candidates(today_dt))
-    print(f"    Active symbols: {len(active_symbols)}")
-
-    # ------------------------------------------------------------------
-    # Market states
-    # ------------------------------------------------------------------
-    print(f"\n[3/7] Computing market states...")
-    observer = MarketObserverAgent(repository)
-    for symbol in active_symbols:
-        try:
-            observer.preload(symbol, start_dt, today_dt)
-        except Exception:
-            pass
-
-    daily_symbol_states = {}
-    for symbol in active_symbols:
-        state = observer.run_for_day(symbol, today_dt)
-        if state:
-            daily_symbol_states[symbol] = state
-
-    if not daily_symbol_states:
-        print("    No market states — exiting.")
-        sys.exit(1)
-    print(f"    States: {len(daily_symbol_states)} symbols")
-
-    # ------------------------------------------------------------------
-    # Regime snapshot
-    # ------------------------------------------------------------------
-    print(f"\n[4/7] Regime snapshot...")
-    regime_snapshot = rca.build_snapshot(daily_symbol_states, today_dt)
-    broad_regime = regime_snapshot.get("broad_regime", "UNKNOWN")
-    trend        = regime_snapshot.get("trend", "STABLE")
-    print(
-        f"    UP={regime_snapshot['pct_uptrend']:.1%}  "
-        f"DOWN={regime_snapshot['pct_downtrend']:.1%}  "
-        f"ATR={regime_snapshot['avg_atr_pct']:.2%}  "
-        f"Broad={broad_regime}  trend={trend}"
-    )
-
-    # ------------------------------------------------------------------
-    # Adaptive selector (fresh instance — no state persistence here;
-    # the API singleton in adaptive_weights_service owns persistent state)
-    # ------------------------------------------------------------------
-    print(f"\n[5/7] AdaptiveStrategySelector...")
+    # Adaptive weights for this session's enabled strategies
     selector = AdaptiveStrategySelector(
         strategy_names=enabled_internals,
         rebalance_frequency_days=5,
         model="gpt-4o-mini",
-        verbose=True,
+        verbose=False,
         regime_stability_weeks=2,
     )
     weights = selector.rebalance(today_dt, regime_snapshot)
     regime_label = selector._confirmed_regime or broad_regime
-    print(f"    Regime: {regime_label} | Weights: " +
+    print(f"     Regime: {regime_label} | Weights: " +
           "  ".join(f"{k}={v:.2f}" for k, v in weights.items()))
 
-    # ------------------------------------------------------------------
-    # Portfolio from broker
-    # ------------------------------------------------------------------
-    print(f"\n[6/7] Syncing positions...")
     broker = PaperAdapter()
     portfolio, position_owners = _build_portfolio(broker, starting_capital)
-
-    # ------------------------------------------------------------------
-    # Signal generation
-    # ------------------------------------------------------------------
-    print(f"\n[7/7] Generating signals...")
 
     downtrend_count = sum(
         1 for s in daily_symbol_states.values()
@@ -360,7 +261,6 @@ def main():
         and "DOWNTREND" in s.indicators["regime"]
     )
     market_downtrend_pct = downtrend_count / len(daily_symbol_states)
-
     if broad_regime == "TRANSITION_UP":
         effective_downtrend_pct = min(market_downtrend_pct, 0.30)
     elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
@@ -374,7 +274,6 @@ def main():
         allowed_regimes={name: _ALLOWED_REGIMES[name] for name in enabled_internals},
     )
     router.position_owners = position_owners
-
     proposed = router.decide(today_dt, daily_symbol_states, portfolio)
 
     risk_agent = RiskAgent(
@@ -396,51 +295,26 @@ def main():
             continue
         if suppress_buys and decision.action == "BUY":
             continue
-        risk_adj = risk_agent.evaluate(
+        final_decisions.append(risk_agent.evaluate(
             decision, portfolio, state,
             equity_prices={s: st.latest_price for s, st in daily_symbol_states.items()},
             market_downtrend_pct=effective_downtrend_pct,
-        )
-        final_decisions.append(risk_adj)
+        ))
 
     buys  = [d for d in final_decisions if d.action == "BUY"]
     sells = [d for d in final_decisions if d.action == "SELL"]
+    written = _write_signals(final_decisions, daily_symbol_states, regime_label, weights,
+                             today, paper_session_id=sid)
 
-    written = _write_signals(final_decisions, daily_symbol_states, regime_label, weights, today)
-
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
     cb_active = effective_downtrend_pct >= pause_pct
-    print(f"\n{'='*70}")
-    print(f"  Paper Signal Summary — {today}")
-    print(f"{'='*70}")
-    print(f"  Session:         {session['session_id']}")
-    print(f"  Regime:          {regime_label}  (broad={broad_regime}, trend={trend})")
-    print(f"  Market breadth:  {market_downtrend_pct:.0%} raw → {effective_downtrend_pct:.0%} effective  "
-          f"({'CB ACTIVE' if cb_active else 'CB clear'})")
-    print(f"  Universe:        {len(daily_symbol_states)} symbols")
-    print(f"  Signals written: {written}  (BUY: {len(buys)}, SELL: {len(sells)})")
-
-    if buys:
-        print("\n  BUY signals:")
-        for d in buys:
-            st = daily_symbol_states.get(d.symbol)
-            print(f"    {d.symbol:<14} qty={d.quantity}  @ ₹{st.latest_price:.2f}  [{d.source}]")
-    if sells:
-        print("\n  SELL signals:")
-        for d in sells:
-            st = daily_symbol_states.get(d.symbol)
-            print(f"    {d.symbol:<14} qty={d.quantity}  @ ₹{st.latest_price:.2f}  [{d.source}]")
-
-    print(f"\n  Run run_orders.py tomorrow at 9:15 AM IST to place paper orders.")
-    print(f"{'='*70}\n")
+    print(f"     Signals: {written} written  (BUY: {len(buys)}, SELL: {len(sells)})  "
+          f"CB={'ACTIVE' if cb_active else 'clear'}")
 
     send_email(
-        subject=f"[FinLab Paper] Signals {today} — {regime_label} | BUY:{len(buys)} SELL:{len(sells)}",
+        subject=f"[FinLab Paper] {sid} — {today} | {regime_label} | BUY:{len(buys)} SELL:{len(sells)}",
         body=(
             f"Paper Trade Signal Report — {today}\n\n"
-            f"Session:   {session['session_id']}\n"
+            f"Session:   {sid}  ({sess.get('strategy_name', strat_id)})\n"
             f"Regime:    {regime_label}  (broad={broad_regime})\n"
             f"Breadth:   {market_downtrend_pct:.0%} raw → {effective_downtrend_pct:.0%} effective  "
             f"(CB {'ACTIVE' if cb_active else 'clear'})\n"
@@ -457,6 +331,117 @@ def main():
             ) or "  (none)")
         ),
     )
+
+
+def main():
+    today    = date.today()
+    today_dt = datetime.combine(today, datetime.min.time())
+    calendar = NSECalendar()
+
+    if not calendar.is_trading_day(today):
+        print(f"[paper_signals] {today} is not a trading day — exiting.")
+        sys.exit(0)
+
+    print(f"\n{'='*70}")
+    print(f"  api/run_paper_signals.py — {today}")
+    print(f"{'='*70}")
+
+    # ------------------------------------------------------------------
+    # Load all active sessions — exit cleanly if none
+    # ------------------------------------------------------------------
+    active_sessions = _load_active_sessions()
+    if not active_sessions:
+        print("  No active paper sessions — exiting.")
+        sys.exit(0)
+    print(f"  Active sessions: {len(active_sessions)}")
+
+    suppress_buys = os.environ.get("SUPPRESS_NEW_BUYS", "0") == "1"
+    if suppress_buys:
+        print("  *** SUPPRESS_NEW_BUYS=1 — no new BUY signals ***")
+
+    # ------------------------------------------------------------------
+    # Fetch today's EOD data (once, shared across all sessions)
+    # ------------------------------------------------------------------
+    print(f"\n[1/4] Fetching today's EOD data...")
+    provider   = YFinanceProvider()
+    repository = MarketDataRepository()
+    fetched = 0
+    for symbol in BROAD_UNIVERSE:
+        try:
+            records = provider.fetch_ohlc(symbol, start=today, end=today + timedelta(days=1))
+            if records:
+                repository.bulk_upsert(records)
+                fetched += 1
+        except Exception:
+            pass
+    print(f"    Fetched: {fetched} symbols")
+
+    # ------------------------------------------------------------------
+    # Universe + market states + regime (once, shared across all sessions)
+    # ------------------------------------------------------------------
+    print(f"\n[2/4] Building universe + market states...")
+    warmup_start = today - timedelta(days=300)
+    start_dt     = datetime.combine(warmup_start, datetime.min.time())
+
+    dynamic_agent = DynamicUniverseAgent(repository=repository, symbols=BROAD_UNIVERSE, top_n=80)
+    dynamic_agent.preload(start_dt, today_dt)
+    rca = RegimeContextAgent(dynamic_agent)
+
+    union_filter = UnionUniverseFilter([
+        BreakoutUniverseFilter(top_n=20),
+        BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
+        PullbackUniverseFilter(top_n=20),
+        MeanReversionUniverseFilter(top_n=20),
+        DualMAUniverseFilter(max_cross_age=5, top_n=30),
+    ])
+    active_symbols = union_filter.select_symbols(dynamic_agent.select_candidates(today_dt))
+
+    observer = MarketObserverAgent(repository)
+    for symbol in active_symbols:
+        try:
+            observer.preload(symbol, start_dt, today_dt)
+        except Exception:
+            pass
+
+    daily_symbol_states = {}
+    for symbol in active_symbols:
+        state = observer.run_for_day(symbol, today_dt)
+        if state:
+            daily_symbol_states[symbol] = state
+
+    if not daily_symbol_states:
+        print("    No market states — exiting.")
+        sys.exit(1)
+    print(f"    Active symbols: {len(active_symbols)}  |  States: {len(daily_symbol_states)}")
+
+    # ------------------------------------------------------------------
+    # Regime snapshot (once, shared)
+    # ------------------------------------------------------------------
+    print(f"\n[3/4] Regime snapshot...")
+    regime_snapshot = rca.build_snapshot(daily_symbol_states, today_dt)
+    broad_regime = regime_snapshot.get("broad_regime", "UNKNOWN")
+    trend        = regime_snapshot.get("trend", "STABLE")
+    print(
+        f"    UP={regime_snapshot['pct_uptrend']:.1%}  "
+        f"DOWN={regime_snapshot['pct_downtrend']:.1%}  "
+        f"ATR={regime_snapshot['avg_atr_pct']:.2%}  "
+        f"Broad={broad_regime}  trend={trend}"
+    )
+
+    # ------------------------------------------------------------------
+    # Per-session signal generation
+    # ------------------------------------------------------------------
+    print(f"\n[4/4] Generating signals for {len(active_sessions)} session(s)...")
+    for sess in active_sessions:
+        try:
+            _run_session(sess, daily_symbol_states, regime_snapshot,
+                         broad_regime, trend, suppress_buys, today, today_dt)
+        except Exception as exc:
+            print(f"  [ERROR] Session {sess['session_id']}: {exc}")
+
+    print(f"\n{'='*70}")
+    print(f"  Done — {today}")
+    print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":

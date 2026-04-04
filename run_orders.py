@@ -15,6 +15,9 @@
 import sys
 from datetime import date, datetime, timedelta
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.broker.paper_adapter import PaperAdapter
 from app.core.database import SessionLocal
 from app.core.notify import send_email
