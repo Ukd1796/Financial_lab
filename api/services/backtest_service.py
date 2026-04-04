@@ -341,14 +341,16 @@ def execute_backtest(run_id: str, config: dict) -> None:
             commission_pct=0.001,
             slippage_pct=0.0005,
         )
+        max_downtrend_pct = float(risk_cfg.get("pause_threshold_pct", 35.0)) / 100.0
+
         risk_agent = RiskAgent(
             max_position_pct=max_pos_pct,
             atr_multiplier=2.0,
             risk_per_trade_pct=float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0,
             use_vol_sizing=True,
             breadth_circuit_breaker=True,
-            max_downtrend_pct=0.35,    # matches run_experiments.py production config
-            min_atr_cost_ratio=3.0,    # ATR must cover ≥ 3× round-trip cost
+            max_downtrend_pct=max_downtrend_pct,
+            min_atr_cost_ratio=3.0,
         )
 
         # LLM-driven weekly rebalance — mirrors run_experiments.py Step 15.
@@ -425,7 +427,7 @@ def execute_backtest(run_id: str, config: dict) -> None:
                     risk_per_trade_pct=float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0,
                     use_vol_sizing=True,
                     breadth_circuit_breaker=True,
-                    max_downtrend_pct=0.35,
+                    max_downtrend_pct=max_downtrend_pct,
                     min_atr_cost_ratio=3.0,
                 ),
                 execution_agent=ExecutionAgent(

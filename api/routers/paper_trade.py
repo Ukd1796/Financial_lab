@@ -139,15 +139,24 @@ def start_paper_trade(
     Requires the strategy to exist (must have run at least one backtest first
     — enforced at the UI level; not enforced here to keep the API stateless).
     """
-    if not store.get_strategy(body.strategy_id):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Strategy '{body.strategy_id}' not found. Save it first.",
-        )
+    # Strategy validation: try SQLite (API-created IDs like strat_xxxx).
+    # Frontend-saved strategies live in a separate Supabase project and cannot be
+    # validated here — the frontend passes strategy_name explicitly in that case.
+    saved_strategy = store.get_strategy(body.strategy_id)
 
     session_id = f"pt_{uuid.uuid4().hex[:6]}"
     start_date = date.today().isoformat()
 
+    unlock_date = (date.today() + timedelta(days=44)).isoformat()
+
+    # Resolve strategy display name: body override → SQLite name → strategy_id fallback.
+    strategy_name = (
+        body.strategy_name
+        or (saved_strategy.get("name") if saved_strategy else None)
+        or body.strategy_id
+    )
+
+    # SQLite: persist session so /dashboard, /positions, /signals can resolve it.
     store.create_paper_session(
         session_id=session_id,
         strategy_id=body.strategy_id,
@@ -155,7 +164,8 @@ def start_paper_trade(
         start_date=start_date,
     )
 
-    unlock_date = (date.today() + timedelta(days=44)).isoformat()
+    # paper_trade_sessions in Supabase is written by the frontend directly via
+    # the Supabase JS client (useCreatePaperSession) — no mirror write needed here.
 
     return {
         "session_id":       session_id,
