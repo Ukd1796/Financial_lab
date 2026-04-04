@@ -90,6 +90,7 @@ class SignalQueue(Base):
     fill_price   = Column(Float,  nullable=True)
     fill_qty     = Column(Integer, nullable=True)
     notes        = Column(Text,   nullable=True)
+    session_id   = Column(String, nullable=True)    # paper session that generated this signal
 
 
 class LivePosition(Base):
