@@ -1,6 +1,6 @@
 # app/data/models.py
 
-from sqlalchemy import Column, String, Float, DateTime, UniqueConstraint, Integer, Date, Text
+from sqlalchemy import Column, String, Float, DateTime, UniqueConstraint, Integer, Date, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base
 import uuid
@@ -106,6 +106,33 @@ class LivePosition(Base):
     entry_date     = Column(Date,    nullable=False)
     strategy       = Column(String,  nullable=False)   # owning sub-strategy
     last_synced_at = Column(DateTime, nullable=False)
+
+
+class BrokerConnection(Base):
+    """
+    Stores a user's broker credentials (encrypted) and OAuth token.
+    One row per (user_id, broker) pair.
+
+    Supported brokers: 'zerodha'  — extend CHECK constraint in DB when adding more.
+    """
+    __tablename__ = "broker_connections"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id          = Column(UUID(as_uuid=True), nullable=False)
+    broker           = Column(String, nullable=False)              # 'zerodha'
+    api_key          = Column(String, nullable=False)
+    api_secret_enc   = Column(Text,   nullable=False)              # Fernet-encrypted
+    access_token_enc = Column(Text,   nullable=True)               # Fernet-encrypted, refreshed daily
+    token_fetched_at = Column(DateTime, nullable=True)
+    broker_user_id   = Column(String, nullable=True)               # e.g. "ZP1234" from Zerodha
+    status           = Column(String, nullable=False, default="connected")
+    # status values: 'connected' | 'token_expired' | 'disconnected'
+    created_at       = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at       = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "broker", name="uix_user_broker"),
+    )
 
 
 class MarketDataProvider(ABC):

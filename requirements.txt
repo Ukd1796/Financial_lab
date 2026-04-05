@@ -10,3 +10,8 @@ python-dateutil==2.9.0.post0
 pytz==2025.2
 beautifulsoup4==4.14.3
 curl_cffi==0.13.0
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+anthropic>=0.25.0
+kiteconnect>=5.0.1
+cryptography>=42.0.0
