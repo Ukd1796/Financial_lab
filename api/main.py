@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.db.store import init_db
-from api.routers import backtest, market, paper_trade, strategies
+from api.routers import backtest, broker, market, paper_trade, strategies
 
 app = FastAPI(
     title="Financial Lab API",
@@ -66,6 +66,7 @@ app.include_router(market.router,      prefix="/api/market",      tags=["Market"
 app.include_router(strategies.router,  prefix="/api/strategies",  tags=["Strategies"])
 app.include_router(backtest.router,    prefix="/api/backtest",    tags=["Backtest"])
 app.include_router(paper_trade.router, prefix="/api/paper-trade", tags=["Paper Trade"])
+app.include_router(broker.router,      prefix="/api/broker",      tags=["Broker"])
 
 
 # ---------------------------------------------------------------------------
