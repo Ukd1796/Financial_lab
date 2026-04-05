@@ -27,10 +27,12 @@
 
 import json
 import os
-import sqlite3
 import sys
 import uuid
 from datetime import date, datetime, timedelta
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from app.backtest.observer import MarketObserverAgent
 from app.broker.paper_adapter import PaperAdapter
@@ -193,27 +195,26 @@ def _save_selector_state(selector: AdaptiveStrategySelector, rebalanced_today: b
 # Paper trading capital helpers
 # ---------------------------------------------------------------------------
 
-_API_STATE_DB = os.path.join(os.path.dirname(__file__), "api_state.db")
-
 def _get_paper_starting_capital() -> float:
     """
-    Read starting_capital from the most-recent paper_sessions row in api_state.db.
+    Read starting_capital from the most-recent active paper_trade_sessions row in Supabase B.
     Falls back to PAPER_CAPITAL env var, then to 500_000.
     """
     default = float(os.environ.get("PAPER_CAPITAL", 500_000))
     try:
-        if not os.path.exists(_API_STATE_DB):
-            return default
-        conn = sqlite3.connect(_API_STATE_DB)
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT starting_capital FROM paper_sessions ORDER BY created_at DESC LIMIT 1"
-        ).fetchone()
-        conn.close()
-        if row:
-            return float(row["starting_capital"])
+        from sqlalchemy import text as _text
+        db = SessionLocal()
+        try:
+            row = db.execute(_text(
+                "SELECT starting_capital FROM paper_trade_sessions "
+                "WHERE status = 'active' ORDER BY created_at DESC LIMIT 1"
+            )).fetchone()
+            if row:
+                return float(row[0])
+        finally:
+            db.close()
     except Exception as exc:
-        print(f"  [Portfolio] Could not read paper_sessions ({exc}) — using default ₹{default:,.0f}")
+        print(f"  [Portfolio] Could not read paper_trade_sessions ({exc}) — using default ₹{default:,.0f}")
     return default
 
 
@@ -497,7 +498,7 @@ def main():
         risk_per_trade_pct=0.005,
         use_vol_sizing=True,
         breadth_circuit_breaker=True,
-        max_downtrend_pct=0.50,
+        max_downtrend_pct=0.70,
         min_atr_cost_ratio=3.0,
     )
 

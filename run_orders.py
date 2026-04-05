@@ -50,6 +50,7 @@ def main():
             select(SignalQueue)
             .where(SignalQueue.status == "PENDING")
             .where(SignalQueue.signal_date < prev_trading_day)
+            .where(SignalQueue.session_id == None)   # noqa: E711 — personal signals only
         ).scalars().all()
 
         if stale_rows:
@@ -67,6 +68,7 @@ def main():
             select(SignalQueue)
             .where(SignalQueue.status == "PENDING")
             .where(SignalQueue.signal_date == prev_trading_day)
+            .where(SignalQueue.session_id == None)   # noqa: E711 — personal signals only
             .order_by(SignalQueue.action.desc())   # SELLs first
         ).scalars().all()
 
