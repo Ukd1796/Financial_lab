@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # api/run_paper_orders.py
 #
-# Morning order fill job for paper trading — processes fills for ALL active sessions.
-# Schedule via cron at 9:15 AM IST on trading days:
-#   15 3 * * 1-5  cd /path/to/Financial_lab && python -m api.run_paper_orders >> logs/paper_orders.log 2>&1
+# EOD order fill job for paper trading — processes fills for ALL active sessions.
+# Must run AFTER run_signals.py (which ingests today's OHLC at 3:35 PM IST).
+# Schedule via cron at 3:45 PM IST on trading days:
+#   45 10 * * 1-5  cd /path/to/Financial_lab && python -m api.run_paper_orders >> logs/paper_orders.log 2>&1
 #
 # What it does per session:
 #   1. Cancel stale PENDING signals older than 1 trading day
@@ -68,7 +69,7 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
             select(SignalQueue).where(
                 and_(
                     SignalQueue.session_id == sid,
-                    SignalQueue.status     == "PENDING",
+                    SignalQueue.status.in_(["PENDING", "PLACED"]),
                     SignalQueue.signal_date < prev_day,
                 )
             )
@@ -88,7 +89,7 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
             select(SignalQueue).where(
                 and_(
                     SignalQueue.session_id  == sid,
-                    SignalQueue.status      == "PENDING",
+                    SignalQueue.status.in_(["PENDING", "PLACED"]),
                     SignalQueue.signal_date == prev_day,
                 )
             ).order_by(SignalQueue.action.desc())   # SELLs first

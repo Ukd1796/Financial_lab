@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # run_orders.py
 #
-# Morning order placement job for paper trading.
-# Schedule via cron at 9:15 AM IST on trading days:
-#   15 3 * * 1-5 cd /path/to/Financial_lab && python run_orders.py >> logs/orders.log 2>&1
+# EOD order fill job for paper trading.
+# Must run AFTER run_signals.py (which ingests today's OHLC at 3:35 PM IST).
+# Schedule via cron at 3:45 PM IST on trading days:
+#   45 10 * * 1-5 cd /path/to/Financial_lab && python run_orders.py >> logs/orders.log 2>&1
 #
 # What it does:
-#   1. Load all PENDING signals from signal_queue for today
-#   2. Cancel any stale signals (older than 1 trading day)
-#   3. For each PENDING signal: call broker.get_order_status() to attempt fill
+#   1. Cancel stale PENDING/PLACED signals (older than 1 trading day)
+#   2. Load yesterday's PENDING or PLACED signals (PLACED = placed but not yet filled)
+#   3. For each signal: call broker.get_order_status() to attempt fill
 #      PaperAdapter simulates fill at next-day open from market_ohlc
+#      (today's OHLC is available because run_signals.py already ran)
 #   4. Print fill summary
 
 import sys
@@ -48,7 +50,7 @@ def main():
         prev_trading_day = calendar.previous_trading_day(today)
         stale_rows = session.execute(
             select(SignalQueue)
-            .where(SignalQueue.status == "PENDING")
+            .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
             .where(SignalQueue.signal_date < prev_trading_day)
             .where(SignalQueue.session_id == None)   # noqa: E711 — personal signals only
         ).scalars().all()
@@ -66,7 +68,7 @@ def main():
         # ------------------------------------------------------------------
         pending_rows = session.execute(
             select(SignalQueue)
-            .where(SignalQueue.status == "PENDING")
+            .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
             .where(SignalQueue.signal_date == prev_trading_day)
             .where(SignalQueue.session_id == None)   # noqa: E711 — personal signals only
             .order_by(SignalQueue.action.desc())   # SELLs first
