@@ -69,7 +69,7 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
             select(SignalQueue).where(
                 and_(
                     SignalQueue.session_id == sid,
-                    SignalQueue.status.in_(["PENDING", "PLACED"]),
+                    SignalQueue.status     == "PENDING",   # PLACED = already in market, never cancel
                     SignalQueue.signal_date < prev_day,
                 )
             )

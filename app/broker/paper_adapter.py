@@ -125,14 +125,23 @@ class PaperAdapter(BrokerAdapter):
     # ------------------------------------------------------------------
     @staticmethod
     def _get_next_open(session, symbol: str, signal_date: date) -> float | None:
-        """Fetch the open price of the first trading day after signal_date."""
+        """Fetch the open price of the first trading day after signal_date.
+
+        Timestamps in market_ohlc are stored as UTC-naive datetimes. NSE daily
+        candles from yfinance use IST midnight as the candle timestamp, so
+        'April 10 IST' is stored as 'April 9 18:30:00 UTC' (midnight IST minus
+        the 5h30m offset). We must subtract the IST offset when building query
+        boundaries, otherwise the search window starts 5h30m too late and misses
+        the correct candle.
+        """
+        _IST = timedelta(hours=5, minutes=30)
         next_day = signal_date + timedelta(days=1)
-        cutoff   = signal_date + timedelta(days=5)   # look ahead up to 5 days
+        cutoff   = signal_date + timedelta(days=5)   # look ahead up to 5 calendar days
         row = session.execute(
             select(MarketOHLC)
             .where(MarketOHLC.symbol == symbol)
-            .where(MarketOHLC.timestamp >= datetime.combine(next_day, datetime.min.time()))
-            .where(MarketOHLC.timestamp <= datetime.combine(cutoff, datetime.max.time()))
+            .where(MarketOHLC.timestamp >= datetime.combine(next_day, datetime.min.time()) - _IST)
+            .where(MarketOHLC.timestamp <= datetime.combine(cutoff, datetime.max.time()) - _IST)
             .order_by(MarketOHLC.timestamp.asc())
             .limit(1)
         ).scalar_one_or_none()
