@@ -50,7 +50,7 @@ def main():
         prev_trading_day = calendar.previous_trading_day(today)
         stale_rows = session.execute(
             select(SignalQueue)
-            .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
+            .where(SignalQueue.status == "PENDING")   # PLACED = already in market, never cancel
             .where(SignalQueue.signal_date < prev_trading_day)
             .where(SignalQueue.session_id == None)   # noqa: E711 — personal signals only
         ).scalars().all()
