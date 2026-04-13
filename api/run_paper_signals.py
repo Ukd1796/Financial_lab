@@ -18,14 +18,13 @@
 import os
 import sys
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 # Load .env so OPENAI_API_KEY and DATABASE_URL are available
 from dotenv import load_dotenv
 load_dotenv()
 
 from app.backtest.observer import MarketObserverAgent
-from app.broker.paper_adapter import PaperAdapter
 from app.data.calendar import NSECalendar
 from app.data.models import SignalQueue
 from app.data.providers.yfinance_provider import YFinanceProvider
@@ -139,26 +138,64 @@ def _load_strategy_config(strategy_id: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Portfolio reconstruction
+# Portfolio reconstruction — derived from session's own signal_queue fills.
+# Does NOT read live_positions (which has no session isolation and mixes
+# personal paper-trading fills with API paper-session fills).
 # ---------------------------------------------------------------------------
 
-def _build_portfolio(broker: PaperAdapter, starting_capital: float) -> tuple:
-    position_owners = {}
-    positions = broker.get_positions()
-    deployed = sum(p.quantity * p.average_price for p in positions)
-    cash = max(starting_capital - deployed, 0.0)
+def _build_portfolio(session_id: str, starting_capital: float) -> tuple:
+    """Rebuild portfolio state from FILLED signals in signal_queue for this session."""
+    db = SessionLocal()
+    try:
+        fills = db.execute(
+            select(SignalQueue)
+            .where(SignalQueue.session_id == session_id)
+            .where(SignalQueue.status == "FILLED")
+            .order_by(SignalQueue.created_at.asc())
+        ).scalars().all()
+    finally:
+        db.close()
 
-    portfolio = Portfolio(cash=cash)
-    for pos in positions:
-        portfolio.positions[pos.symbol] = type(
-            "Position", (), {
-                "quantity":      pos.quantity,
-                "average_price": pos.average_price,
-            }
-        )()
-        position_owners[pos.symbol] = pos.strategy
+    # Compute open positions from fill history
+    positions: dict[str, dict] = {}
+    for fill in fills:
+        if fill.action == "BUY":
+            if fill.symbol in positions:
+                existing = positions[fill.symbol]
+                new_qty  = existing["quantity"] + fill.fill_qty
+                new_avg  = (existing["quantity"] * existing["average_price"]
+                            + fill.fill_qty * fill.fill_price) / new_qty
+                existing["quantity"]      = new_qty
+                existing["average_price"] = new_avg
+            else:
+                positions[fill.symbol] = {
+                    "quantity":      fill.fill_qty,
+                    "average_price": fill.fill_price,
+                    "strategy":      fill.strategy,
+                }
+        elif fill.action == "SELL" and fill.symbol in positions:
+            remaining = positions[fill.symbol]["quantity"] - fill.fill_qty
+            if remaining <= 0:
+                del positions[fill.symbol]
+            else:
+                positions[fill.symbol]["quantity"] = remaining
 
-    print(f"    Capital: ₹{starting_capital:,.0f}  |  Deployed: ₹{deployed:,.0f}  |  Cash: ₹{cash:,.0f}")
+    deployed = sum(p["quantity"] * p["average_price"] for p in positions.values())
+    cash     = max(starting_capital - deployed, 0.0)
+
+    portfolio        = Portfolio(cash=cash)
+    position_owners  = {}
+    for sym, pos in positions.items():
+        portfolio.positions[sym] = type("Position", (), {
+            "quantity":      pos["quantity"],
+            "average_price": pos["average_price"],
+        })()
+        position_owners[sym] = pos["strategy"]
+
+    print(f"    Capital: ₹{starting_capital:,.0f}  |  Deployed: ₹{deployed:,.0f}  |  Cash: ₹{cash:,.0f}  |  Positions: {len(positions)}")
+    if positions:
+        for sym, pos in positions.items():
+            print(f"      {sym:<14} qty={pos['quantity']}  avg=₹{pos['average_price']:.2f}  [{pos['strategy']}]")
     return portfolio, position_owners
 
 
@@ -170,7 +207,7 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
                    paper_session_id: str) -> int:
     session = SessionLocal()
     count = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         for decision in decisions:
             if decision.action not in ("BUY", "SELL"):
@@ -207,7 +244,7 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
 # ---------------------------------------------------------------------------
 
 def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
-                 broad_regime: str, trend: str, suppress_buys: bool, today: date,
+                 broad_regime: str, suppress_buys: bool, today: date,
                  today_dt: datetime) -> None:
     """Run signal generation for a single paper session and write results."""
     sid       = sess["session_id"]
@@ -252,8 +289,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
     print(f"     Regime: {regime_label} | Weights: " +
           "  ".join(f"{k}={v:.2f}" for k, v in weights.items()))
 
-    broker = PaperAdapter()
-    portfolio, position_owners = _build_portfolio(broker, starting_capital)
+    portfolio, position_owners = _build_portfolio(sid, starting_capital)
 
     downtrend_count = sum(
         1 for s in daily_symbol_states.values()
@@ -286,6 +322,19 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         min_atr_cost_ratio=3.0,
     )
 
+    equity_prices = {s: st.latest_price for s, st in daily_symbol_states.items()}
+
+    # Warn about held positions the router cannot see (not in active universe).
+    # These positions get no sell/ATR-stop signals today.
+    unmanaged = set(portfolio.positions.keys()) - set(daily_symbol_states.keys())
+    if unmanaged:
+        print(f"     [WARN] {len(unmanaged)} held position(s) not in active universe "
+              f"— no sell signal possible today: {sorted(unmanaged)}")
+
+    cb_active = effective_downtrend_pct >= pause_pct
+    n_proposed = len([d for d in proposed if d is not None])
+    cb_blocked = 0
+
     final_decisions = []
     for decision in proposed:
         if decision is None:
@@ -295,20 +344,23 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             continue
         if suppress_buys and decision.action == "BUY":
             continue
-        final_decisions.append(risk_agent.evaluate(
+        evaluated = risk_agent.evaluate(
             decision, portfolio, state,
-            equity_prices={s: st.latest_price for s, st in daily_symbol_states.items()},
+            equity_prices=equity_prices,
             market_downtrend_pct=effective_downtrend_pct,
-        ))
+        )
+        if decision.action == "BUY" and evaluated.action == "HOLD" and cb_active:
+            cb_blocked += 1
+        final_decisions.append(evaluated)
 
     buys  = [d for d in final_decisions if d.action == "BUY"]
     sells = [d for d in final_decisions if d.action == "SELL"]
     written = _write_signals(final_decisions, daily_symbol_states, regime_label, weights,
                              today, paper_session_id=sid)
 
-    cb_active = effective_downtrend_pct >= pause_pct
-    print(f"     Signals: {written} written  (BUY: {len(buys)}, SELL: {len(sells)})  "
-          f"CB={'ACTIVE' if cb_active else 'clear'}")
+    cb_status = f"ACTIVE — {effective_downtrend_pct:.0%} downtrend > pause {pause_pct:.0%}" if cb_active else "clear"
+    print(f"     Router proposals: {n_proposed}  →  BUY:{len(buys)}  SELL:{len(sells)}  CB-blocked:{cb_blocked}  CB={cb_status}")
+    print(f"     Signals written: {written}")
 
     send_email(
         subject=f"[FinLab Paper] {sid} — {today} | {regime_label} | BUY:{len(buys)} SELL:{len(sells)}",
@@ -435,7 +487,7 @@ def main():
     for sess in active_sessions:
         try:
             _run_session(sess, daily_symbol_states, regime_snapshot,
-                         broad_regime, trend, suppress_buys, today, today_dt)
+                         broad_regime, suppress_buys, today, today_dt)
         except Exception as exc:
             print(f"  [ERROR] Session {sess['session_id']}: {exc}")
 
