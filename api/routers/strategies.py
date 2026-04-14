@@ -56,7 +56,7 @@ def delete_strategy(strategy_id: str):
     """
     Cascade-delete a strategy and all related data:
       SQLite  — backtest_runs, llm_weight_decisions, backtest_ab_results, paper_sessions, strategies
-      Supabase — backtest_results, paper_trade_sessions (rows where strategy_id matches)
+      Supabase — signal_queue (via session_ids), paper_trade_sessions, backtest_results
 
     The caller (frontend) is responsible for deleting user_strategies from Supabase
     using the user's JWT (RLS-protected table).
@@ -64,16 +64,25 @@ def delete_strategy(strategy_id: str):
     # SQLite cascade
     store.delete_strategy_cascade(strategy_id)
 
-    # Supabase cascade — backtest_results and paper_trade_sessions are not RLS-restricted
-    # for service-role writes, so we can clean them up here.
+    # Supabase cascade — signal_queue must be deleted BEFORE paper_trade_sessions
+    # so we can still resolve the session_ids.
     try:
         db = SessionLocal()
         db.execute(
-            text("DELETE FROM backtest_results WHERE strategy_id = :sid"),
+            text("""
+                DELETE FROM signal_queue
+                WHERE session_id IN (
+                    SELECT session_id FROM paper_trade_sessions WHERE strategy_id = :sid
+                )
+            """),
             {"sid": strategy_id},
         )
         db.execute(
             text("DELETE FROM paper_trade_sessions WHERE strategy_id = :sid"),
+            {"sid": strategy_id},
+        )
+        db.execute(
+            text("DELETE FROM backtest_results WHERE strategy_id = :sid"),
             {"sid": strategy_id},
         )
         db.commit()
