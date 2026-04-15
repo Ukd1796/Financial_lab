@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # run_orders.py
 #
+# ==============================================================
+# DEPRECATED — do not run or schedule.
+# Replaced by api/run_paper_orders.py which is session-aware
+# and processes fills per paper_trade_sessions entry.
+# Remove from cron: was scheduled at  45 10 * * 1-5
+# ==============================================================
+#
 # EOD order fill job for paper trading.
 # Must run AFTER run_signals.py (which ingests today's OHLC at 3:35 PM IST).
 # Schedule via cron at 3:45 PM IST on trading days:

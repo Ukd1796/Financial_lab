@@ -73,7 +73,8 @@ class PaperAdapter(BrokerAdapter):
             if next_open is None:
                 return self._row_to_order(row)   # not yet available
 
-            # Simulate fill
+            # Simulate fill — signal_queue is authoritative; live_positions is
+            # maintained as a convenience cache for frontend display.
             row.status     = "FILLED"
             row.fill_price = next_open
             row.fill_qty   = row.target_qty
