@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # run_signals.py
 #
+# ==============================================================
+# DEPRECATED — do not run or schedule.
+# Replaced by api/run_paper_signals.py which is session-aware
+# and reads strategy config from the database (user_strategies /
+# paper_trade_sessions tables).
+# Remove from cron: was scheduled at  35 10 * * 1-5
+# ==============================================================
+#
 # Daily signal generation job for live / paper trading.
 # Schedule via cron at 3:35 PM IST on trading days:
 #   35 10 * * 1-5 cd /path/to/Financial_lab && python run_signals.py >> logs/signals.log 2>&1

@@ -1,8 +1,9 @@
 # api/routers/paper_trade.py
 #
 # Phase 2 — Paper trading session management.
-# The actual signal generation still runs via run_signals.py (cron job at 3:35 PM IST).
-# These endpoints expose the session state and live positions from the existing DB tables.
+# Signal generation runs via api/run_paper_signals.py (cron at 3:45 PM IST).
+# Positions are derived from FILLED signal_queue rows (session-scoped).
+# live_positions table is no longer used.
 #
 #   POST /api/paper-trade/start
 #   GET  /api/paper-trade/{session_id}/dashboard
@@ -14,13 +15,13 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Header, HTTPException
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 
 import api.db.store as store
 from api.models.request import PaperTradeStartRequest
 import api.services.regime_service as regime_svc
 from app.core.database import SessionLocal
-from app.data.models import LivePosition, SignalQueue
+from app.data.models import SignalQueue
 
 router = APIRouter()
 
@@ -29,23 +30,45 @@ router = APIRouter()
 # Helpers — read from Supabase (existing tables)
 # ---------------------------------------------------------------------------
 
-def _get_live_positions() -> list[dict]:
-    """Read all rows from live_positions table."""
-    session = SessionLocal()
+def _get_positions_for_session(session_id: str) -> list[dict]:
+    """Derive open positions from FILLED signal_queue entries for this session."""
+    db = SessionLocal()
     try:
-        rows = session.execute(select(LivePosition)).scalars().all()
-        return [
-            {
-                "symbol":        r.symbol,
-                "quantity":      r.quantity,
-                "average_price": r.average_price,
-                "entry_date":    str(r.entry_date),
-                "strategy":      r.strategy,
-            }
-            for r in rows
-        ]
+        fills = db.execute(
+            select(SignalQueue)
+            .where(SignalQueue.session_id == session_id)
+            .where(SignalQueue.status == "FILLED")
+            .order_by(SignalQueue.created_at.asc())
+        ).scalars().all()
     finally:
-        session.close()
+        db.close()
+
+    positions: dict[str, dict] = {}
+    for fill in fills:
+        if fill.action == "BUY":
+            if fill.symbol in positions:
+                p = positions[fill.symbol]
+                new_qty = p["quantity"] + fill.fill_qty
+                p["average_price"] = (
+                    p["quantity"] * p["average_price"] + fill.fill_qty * fill.fill_price
+                ) / new_qty
+                p["quantity"] = new_qty
+            else:
+                positions[fill.symbol] = {
+                    "symbol":        fill.symbol,
+                    "quantity":      fill.fill_qty,
+                    "average_price": fill.fill_price,
+                    "entry_date":    str(fill.signal_date),
+                    "strategy":      fill.strategy,
+                }
+        elif fill.action == "SELL" and fill.symbol in positions:
+            remaining = positions[fill.symbol]["quantity"] - fill.fill_qty
+            if remaining <= 0:
+                del positions[fill.symbol]
+            else:
+                positions[fill.symbol]["quantity"] = remaining
+
+    return list(positions.values())
 
 
 def _get_signals_for_date(signal_date: date, session_id: str) -> list[dict]:
@@ -62,15 +85,16 @@ def _get_signals_for_date(signal_date: date, session_id: str) -> list[dict]:
         ).scalars().all()
         return [
             {
+                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
                 "symbol":       r.symbol,
                 "action":       r.action,
                 "strategy":     r.strategy,
-                "raw_price":    r.raw_price,
+                "entry_price":  r.raw_price,     # frontend expects entry_price
                 "target_qty":   r.target_qty,
                 "status":       r.status,
                 "regime_label": r.regime_label,
                 "notes":        r.notes,
-                "created_at":   str(r.created_at),
+                "date":         str(r.created_at),  # frontend expects date
             }
             for r in rows
         ]
@@ -96,13 +120,14 @@ def _get_signals_range(start_date: date, end_date: date, session_id: str) -> lis
                 "symbol":       r.symbol,
                 "action":       r.action,
                 "strategy":     r.strategy,
-                "raw_price":    r.raw_price,
+                "entry_price":  r.raw_price,     # frontend expects entry_price
                 "fill_price":   r.fill_price,
                 "target_qty":   r.target_qty,
                 "status":       r.status,
-                "signal_date":  str(r.signal_date),
+                "date":         str(r.signal_date),  # frontend expects date
                 "regime_label": r.regime_label,
                 "weight":       r.weight,
+                "pnl_pct":      None,   # computed when exits are matched
             }
             for r in rows
         ]
@@ -123,12 +148,37 @@ def _unrealised_pnl(positions: list[dict]) -> float:
 
 
 def _resolve_session(session_id: str) -> dict:
+    # 1. Try SQLite first (API-created sessions via POST /paper-trade/start)
     session = store.get_paper_session(session_id)
-    if session is None:
+    if session:
+        return session
+
+    # 2. Fall back to Supabase paper_trade_sessions (sessions created directly,
+    #    e.g. pt_ujjwal migrated from personal scripts, or frontend-created sessions)
+    db = SessionLocal()
+    try:
+        row = db.execute(
+            text(
+                "SELECT session_id, strategy_id, strategy_name, starting_capital, start_date "
+                "FROM paper_trade_sessions WHERE session_id = :sid"
+            ),
+            {"sid": session_id},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if row is None:
         raise HTTPException(
             status_code=404, detail=f"Paper trade session '{session_id}' not found."
         )
-    return session
+
+    return {
+        "session_id":       row.session_id,
+        "strategy_id":      row.strategy_id,
+        "strategy_name":    row.strategy_name,
+        "starting_capital": row.starting_capital,
+        "start_date":       str(row.start_date),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -190,10 +240,22 @@ def get_dashboard(session_id: str):
     start_dt = datetime.fromisoformat(paper_session["start_date"])
     day_count = (date.today() - start_dt.date()).days + 1
 
-    positions = _get_live_positions()
+    raw_positions = _get_positions_for_session(session_id)
     today_signals = _get_signals_for_date(date.today(), session_id)
 
-    # Best-effort portfolio value: starting capital + unrealised PnL from positions
+    # Enrich positions with frontend-expected fields
+    today = date.today()
+    enriched_positions = []
+    for p in raw_positions:
+        entry = date.fromisoformat(p["entry_date"]) if p["entry_date"] else today
+        enriched_positions.append({
+            **p,
+            "entry_price":       p["average_price"],   # alias for frontend
+            "days_held":         (today - entry).days,
+            "unrealised_pnl_pct": None,   # requires live price — supply at UI layer
+        })
+
+    # Best-effort portfolio value: starting capital (unrealised PnL needs live prices)
     portfolio_value = paper_session["starting_capital"]
 
     # Regime (cached — fast)
@@ -210,11 +272,11 @@ def get_dashboard(session_id: str):
         "day_count":         day_count,
         "days_until_live":   max(0, 30 - day_count),
         "portfolio_value":   portfolio_value,
-        "open_positions":    len(positions),
-        "todays_signals":    len(today_signals),
+        "open_positions":    enriched_positions,   # array — frontend reads this as the list
+        "position_count":    len(enriched_positions),
+        "todays_signals":    today_signals,        # array — frontend reads this as the list
+        "signal_count":      len(today_signals),
         "regime":            regime,
-        "positions":         positions,
-        "signals":           today_signals,
     }
 
 
@@ -224,7 +286,7 @@ def get_positions(session_id: str):
     Open positions with unrealised P&L, strategy source, and days held.
     """
     _resolve_session(session_id)
-    positions = _get_live_positions()
+    positions = _get_positions_for_session(session_id)
     today = date.today()
 
     result = []
@@ -233,8 +295,9 @@ def get_positions(session_id: str):
         days_held = (today - entry).days
         result.append({
             **p,
-            "days_held":       days_held,
-            "unrealised_pnl":  None,   # requires live price — supply at UI layer
+            "entry_price":        p["average_price"],   # alias for frontend
+            "days_held":          days_held,
+            "unrealised_pnl_pct": None,   # requires live price — supply at UI layer
         })
 
     return {"session_id": session_id, "positions": result}
@@ -281,8 +344,8 @@ def get_weekly_report(session_id: str):
         "day_count":       day_count,
         "regime":          regime,
         "total_signals":   len(signals),
-        "buys_filled":     len(buys_filled),
-        "sells_filled":    len(sells_filled),
-        "pending":         len(pending),
+        "filled_buys":     len(buys_filled),    # renamed from buys_filled
+        "filled_sells":    len(sells_filled),   # renamed from sells_filled
+        "pending_signals": len(pending),        # renamed from pending
         "notable_trades":  sells_filled[:10],   # last 10 completed exits
     }
