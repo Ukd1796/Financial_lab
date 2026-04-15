@@ -159,7 +159,7 @@ def _resolve_session(session_id: str) -> dict:
     try:
         row = db.execute(
             text(
-                "SELECT session_id, strategy_id, strategy_name, starting_capital, start_date "
+                "SELECT session_id, strategy_id, strategy_name, starting_capital, created_at "
                 "FROM paper_trade_sessions WHERE session_id = :sid"
             ),
             {"sid": session_id},
@@ -177,7 +177,7 @@ def _resolve_session(session_id: str) -> dict:
         "strategy_id":      row.strategy_id,
         "strategy_name":    row.strategy_name,
         "starting_capital": row.starting_capital,
-        "start_date":       str(row.start_date),
+        "start_date":       str(row.created_at),   # created_at serves as session start
     }
 
 
