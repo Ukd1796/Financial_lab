@@ -245,7 +245,7 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
 
 def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
                  broad_regime: str, suppress_buys: bool, today: date,
-                 today_dt: datetime) -> None:
+                 today_dt: datetime, observer, start_dt: datetime) -> None:
     """Run signal generation for a single paper session and write results."""
     sid       = sess["session_id"]
     strat_id  = sess["strategy_id"]
@@ -291,12 +291,39 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
     portfolio, position_owners = _build_portfolio(sid, starting_capital)
 
+    # Fix 1: Positions migrated from personal scripts have strategy='unknown'.
+    # Reassign to first enabled strategy so the router can propose exit signals.
+    default_strategy = enabled_internals[0]
+    position_owners = {
+        sym: (strat if strat in enabled_internals else default_strategy)
+        for sym, strat in position_owners.items()
+    }
+
+    # Fix 2: Held positions that fell out of the active universe still need exit
+    # evaluation. Preload their market state and add to a local extended dict.
+    held_symbols = set(portfolio.positions.keys())
+    missing_from_universe = held_symbols - set(daily_symbol_states.keys())
+    extended_states = dict(daily_symbol_states)
+    if missing_from_universe:
+        loaded = 0
+        for symbol in missing_from_universe:
+            try:
+                observer.preload(symbol, start_dt, today_dt)
+                state = observer.run_for_day(symbol, today_dt)
+                if state:
+                    extended_states[symbol] = state
+                    loaded += 1
+            except Exception:
+                pass
+        print(f"     Loaded {loaded}/{len(missing_from_universe)} held-but-unmanaged "
+              f"position states for exit evaluation")
+
     downtrend_count = sum(
-        1 for s in daily_symbol_states.values()
+        1 for s in extended_states.values()
         if isinstance(s.indicators.get("regime"), str)
         and "DOWNTREND" in s.indicators["regime"]
     )
-    market_downtrend_pct = downtrend_count / len(daily_symbol_states)
+    market_downtrend_pct = downtrend_count / len(extended_states)
     if broad_regime == "TRANSITION_UP":
         effective_downtrend_pct = min(market_downtrend_pct, 0.30)
     elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
@@ -310,7 +337,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         allowed_regimes={name: _ALLOWED_REGIMES[name] for name in enabled_internals},
     )
     router.position_owners = position_owners
-    proposed = router.decide(today_dt, daily_symbol_states, portfolio)
+    proposed = router.decide(today_dt, extended_states, portfolio)
 
     risk_agent = RiskAgent(
         max_position_pct=max_pos_pct,
@@ -322,14 +349,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         min_atr_cost_ratio=3.0,
     )
 
-    equity_prices = {s: st.latest_price for s, st in daily_symbol_states.items()}
-
-    # Warn about held positions the router cannot see (not in active universe).
-    # These positions get no sell/ATR-stop signals today.
-    unmanaged = set(portfolio.positions.keys()) - set(daily_symbol_states.keys())
-    if unmanaged:
-        print(f"     [WARN] {len(unmanaged)} held position(s) not in active universe "
-              f"— no sell signal possible today: {sorted(unmanaged)}")
+    equity_prices = {s: st.latest_price for s, st in extended_states.items()}
 
     cb_active = effective_downtrend_pct >= pause_pct
     n_proposed = len([d for d in proposed if d is not None])
@@ -339,7 +359,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
     for decision in proposed:
         if decision is None:
             continue
-        state = daily_symbol_states.get(decision.symbol)
+        state = extended_states.get(decision.symbol)
         if state is None:
             continue
         if suppress_buys and decision.action == "BUY":
@@ -355,7 +375,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
     buys  = [d for d in final_decisions if d.action == "BUY"]
     sells = [d for d in final_decisions if d.action == "SELL"]
-    written = _write_signals(final_decisions, daily_symbol_states, regime_label, weights,
+    written = _write_signals(final_decisions, extended_states, regime_label, weights,
                              today, paper_session_id=sid)
 
     cb_status = f"ACTIVE — {effective_downtrend_pct:.0%} downtrend > pause {pause_pct:.0%}" if cb_active else "clear"
@@ -487,7 +507,8 @@ def main():
     for sess in active_sessions:
         try:
             _run_session(sess, daily_symbol_states, regime_snapshot,
-                         broad_regime, suppress_buys, today, today_dt)
+                         broad_regime, suppress_buys, today, today_dt,
+                         observer, start_dt)
         except Exception as exc:
             print(f"  [ERROR] Session {sess['session_id']}: {exc}")
 
