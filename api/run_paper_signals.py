@@ -377,6 +377,35 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             cb_blocked += 1
         final_decisions.append(evaluated)
 
+    # Sequential cash gate: BUY signals are evaluated against the same cash
+    # snapshot, so multiple BUYs can collectively exceed available cash.
+    # Walk through BUYs in weight-descending order and drop/trim any that
+    # don't fit in the remaining cash.
+    remaining_cash = portfolio.cash
+    cash_gated = []
+    for d in final_decisions:
+        if d.action != "BUY":
+            cash_gated.append(d)
+            continue
+        state = extended_states.get(d.symbol)
+        price = state.latest_price if state else 0.0
+        if price <= 0:
+            cash_gated.append(d)
+            continue
+        affordable_qty = int(remaining_cash // price)
+        if affordable_qty <= 0:
+            print(f"     [CashGate] DROP  {d.symbol} — no cash remaining (₹{remaining_cash:,.0f})")
+            continue
+        if affordable_qty < d.quantity:
+            print(f"     [CashGate] TRIM  {d.symbol} qty {d.quantity}→{affordable_qty} "
+                  f"(cash ₹{remaining_cash:,.0f}, price ₹{price:.2f})")
+            d = Decision(symbol=d.symbol, action="BUY", quantity=affordable_qty,
+                         reasoning=(d.reasoning or "") + f" | trimmed by cash gate",
+                         source=d.source, weight=getattr(d, "weight", None))
+        remaining_cash -= affordable_qty * price
+        cash_gated.append(d)
+    final_decisions = cash_gated
+
     buys  = [d for d in final_decisions if d.action == "BUY"]
     sells = [d for d in final_decisions if d.action == "SELL"]
     written = _write_signals(final_decisions, extended_states, regime_label, weights,
