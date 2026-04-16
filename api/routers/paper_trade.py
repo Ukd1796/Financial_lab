@@ -291,8 +291,24 @@ def get_dashboard(session_id: str):
     portfolio value, open positions, today's signals, regime, day count.
     """
     paper_session = _resolve_session(session_id)
-    start_dt = datetime.fromisoformat(paper_session["start_date"])
-    day_count = (date.today() - start_dt.date()).days + 1
+
+    # day_count: use the earliest signal date for this session as the true start.
+    # Falls back to start_date (session created_at) if no signals exist yet.
+    db = SessionLocal()
+    try:
+        first_signal_row = db.execute(
+            text("SELECT MIN(signal_date) AS first FROM signal_queue WHERE session_id = :sid"),
+            {"sid": session_id},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if first_signal_row and first_signal_row.first:
+        effective_start = first_signal_row.first
+    else:
+        effective_start = datetime.fromisoformat(paper_session["start_date"]).date()
+
+    day_count = (date.today() - effective_start).days + 1
 
     raw_positions = _get_positions_for_session(session_id)
     today_signals = _get_signals_for_date(date.today(), session_id)
