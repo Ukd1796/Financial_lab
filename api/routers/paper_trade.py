@@ -71,6 +71,60 @@ def _get_positions_for_session(session_id: str) -> list[dict]:
     return list(positions.values())
 
 
+def _get_latest_prices(symbols: list[str]) -> dict[str, float]:
+    """
+    Fetch the most recent EOD close price for each symbol from market_ohlc.
+    Uses DISTINCT ON for a single efficient query.
+    Returns {symbol: close_price}; missing symbols are absent from the dict.
+    """
+    if not symbols:
+        return {}
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT DISTINCT ON (symbol) symbol, close
+                FROM market_ohlc
+                WHERE symbol = ANY(:syms)
+                ORDER BY symbol, timestamp DESC
+            """),
+            {"syms": symbols},
+        ).fetchall()
+        return {r.symbol: float(r.close) for r in rows}
+    finally:
+        db.close()
+
+
+def _enrich_positions(positions: list[dict], prices: dict[str, float], today: date) -> list[dict]:
+    """Add current_price, unrealised_pnl_abs, current_value, unrealised_pnl_pct to each position."""
+    enriched = []
+    for p in positions:
+        entry = date.fromisoformat(p["entry_date"]) if p["entry_date"] else today
+        current_price = prices.get(p["symbol"])
+        entry_price   = p["average_price"]
+        qty           = p["quantity"]
+
+        if current_price is not None:
+            unreal_abs = (current_price - entry_price) * qty
+            unreal_pct = ((current_price - entry_price) / entry_price * 100) if entry_price else None
+            cur_value  = current_price * qty
+        else:
+            unreal_abs = None
+            unreal_pct = None
+            cur_value  = None
+
+        enriched.append({
+            **p,
+            "entry_price":        entry_price,
+            "days_held":          (today - entry).days,
+            "current_price":      current_price,
+            "current_value":      cur_value,
+            "unrealised_pnl_abs": unreal_abs,
+            "unrealised_pnl_pct": round(unreal_pct, 2) if unreal_pct is not None else None,
+        })
+    return enriched
+
+
 def _get_signals_for_date(signal_date: date, session_id: str) -> list[dict]:
     """Read signal_queue rows for a specific date and paper session."""
     session = SessionLocal()
@@ -242,21 +296,26 @@ def get_dashboard(session_id: str):
 
     raw_positions = _get_positions_for_session(session_id)
     today_signals = _get_signals_for_date(date.today(), session_id)
+    today         = date.today()
 
-    # Enrich positions with frontend-expected fields
-    today = date.today()
-    enriched_positions = []
-    for p in raw_positions:
-        entry = date.fromisoformat(p["entry_date"]) if p["entry_date"] else today
-        enriched_positions.append({
-            **p,
-            "entry_price":       p["average_price"],   # alias for frontend
-            "days_held":         (today - entry).days,
-            "unrealised_pnl_pct": None,   # requires live price — supply at UI layer
-        })
+    # Fetch latest EOD prices for all open positions in one query
+    symbols       = [p["symbol"] for p in raw_positions]
+    prices        = _get_latest_prices(symbols)
+    enriched      = _enrich_positions(raw_positions, prices, today)
 
-    # Best-effort portfolio value: starting capital (unrealised PnL needs live prices)
-    portfolio_value = paper_session["starting_capital"]
+    # Portfolio breakdown
+    starting_capital = float(paper_session["starting_capital"])
+    total_invested   = sum(p["average_price"] * p["quantity"] for p in raw_positions)
+    # Realised PnL is not tracked separately yet; cash approximated from deployed cost.
+    cash_balance     = starting_capital - total_invested
+    total_unreal_abs = sum(
+        p["unrealised_pnl_abs"] for p in enriched if p["unrealised_pnl_abs"] is not None
+    ) or None
+    portfolio_value  = (
+        starting_capital + total_unreal_abs
+        if total_unreal_abs is not None
+        else starting_capital
+    )
 
     # Regime (cached — fast)
     try:
@@ -272,9 +331,12 @@ def get_dashboard(session_id: str):
         "day_count":         day_count,
         "days_until_live":   max(0, 30 - day_count),
         "portfolio_value":   portfolio_value,
-        "open_positions":    enriched_positions,   # array — frontend reads this as the list
-        "position_count":    len(enriched_positions),
-        "todays_signals":    today_signals,        # array — frontend reads this as the list
+        "total_invested":    total_invested,
+        "cash_balance":      cash_balance,
+        "unrealised_pnl_abs": total_unreal_abs,
+        "open_positions":    enriched,
+        "position_count":    len(enriched),
+        "todays_signals":    today_signals,
         "signal_count":      len(today_signals),
         "regime":            regime,
     }
@@ -283,23 +345,13 @@ def get_dashboard(session_id: str):
 @router.get("/{session_id}/positions")
 def get_positions(session_id: str):
     """
-    Open positions with unrealised P&L, strategy source, and days held.
+    Open positions with current prices, unrealised P&L, strategy source, and days held.
     """
     _resolve_session(session_id)
-    positions = _get_positions_for_session(session_id)
+    raw   = _get_positions_for_session(session_id)
     today = date.today()
-
-    result = []
-    for p in positions:
-        entry = date.fromisoformat(p["entry_date"]) if p["entry_date"] else today
-        days_held = (today - entry).days
-        result.append({
-            **p,
-            "entry_price":        p["average_price"],   # alias for frontend
-            "days_held":          days_held,
-            "unrealised_pnl_pct": None,   # requires live price — supply at UI layer
-        })
-
+    prices  = _get_latest_prices([p["symbol"] for p in raw])
+    result  = _enrich_positions(raw, prices, today)
     return {"session_id": session_id, "positions": result}
 
 
