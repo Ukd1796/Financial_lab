@@ -364,11 +364,15 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             continue
         if suppress_buys and decision.action == "BUY":
             continue
+        original_source = decision.source  # preserve before RiskAgent creates new Decision
         evaluated = risk_agent.evaluate(
             decision, portfolio, state,
             equity_prices=equity_prices,
             market_downtrend_pct=effective_downtrend_pct,
         )
+        # RiskAgent always returns a fresh Decision without source — copy it back.
+        if not getattr(evaluated, "source", None):
+            evaluated.source = original_source
         if decision.action == "BUY" and evaluated.action == "HOLD" and cb_active:
             cb_blocked += 1
         final_decisions.append(evaluated)
