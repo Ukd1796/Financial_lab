@@ -15,7 +15,7 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Header, HTTPException
-from sqlalchemy import select, and_, text
+from sqlalchemy import select, and_, or_, text
 
 import api.db.store as store
 from api.models.request import PaperTradeStartRequest
@@ -311,8 +311,44 @@ def get_dashboard(session_id: str):
     day_count = (date.today() - effective_start).days + 1
 
     raw_positions = _get_positions_for_session(session_id)
-    today_signals = _get_signals_for_date(date.today(), session_id)
     today         = date.today()
+    # Include PENDING signals from past 3 days so dashboard shows signals
+    # generated yesterday that are awaiting today's fill run.
+    look_back     = today - timedelta(days=3)
+    _db = SessionLocal()
+    try:
+        _rows = _db.execute(
+            select(SignalQueue).where(
+                and_(
+                    SignalQueue.session_id == session_id,
+                    or_(
+                        SignalQueue.signal_date == today,
+                        and_(
+                            SignalQueue.signal_date >= look_back,
+                            SignalQueue.status.in_(["PENDING", "PLACED"]),
+                        ),
+                    ),
+                )
+            ).order_by(SignalQueue.signal_date.desc(), SignalQueue.created_at.desc())
+        ).scalars().all()
+        today_signals = [
+            {
+                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
+                "symbol":       r.symbol,
+                "action":       r.action,
+                "strategy":     r.strategy,
+                "entry_price":  r.raw_price,
+                "target_qty":   r.target_qty,
+                "status":       r.status,
+                "regime_label": r.regime_label,
+                "notes":        r.notes,
+                "date":         str(r.created_at),
+                "signal_date":  str(r.signal_date),
+            }
+            for r in _rows
+        ]
+    finally:
+        _db.close()
 
     # Fetch latest EOD prices for all open positions in one query
     symbols       = [p["symbol"] for p in raw_positions]
@@ -374,11 +410,50 @@ def get_positions(session_id: str):
 @router.get("/{session_id}/signals")
 def get_signals(session_id: str):
     """
-    Today's generated signals (BUY / SELL / PENDING / FILLED / CANCELLED) with reason.
+    Today's generated signals plus any PENDING/PLACED signals from the past 3 days
+    that haven't been executed yet (e.g. signals generated yesterday that are awaiting
+    the next morning's fill run).
     """
     _resolve_session(session_id)
-    signals = _get_signals_for_date(date.today(), session_id)
-    return {"session_id": session_id, "date": str(date.today()), "signals": signals}
+    today      = date.today()
+    look_back  = today - timedelta(days=3)
+
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            select(SignalQueue).where(
+                and_(
+                    SignalQueue.session_id == session_id,
+                    or_(
+                        SignalQueue.signal_date == today,
+                        and_(
+                            SignalQueue.signal_date >= look_back,
+                            SignalQueue.status.in_(["PENDING", "PLACED"]),
+                        ),
+                    ),
+                )
+            ).order_by(SignalQueue.signal_date.desc(), SignalQueue.created_at.desc())
+        ).scalars().all()
+        signals = [
+            {
+                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
+                "symbol":       r.symbol,
+                "action":       r.action,
+                "strategy":     r.strategy,
+                "entry_price":  r.raw_price,
+                "target_qty":   r.target_qty,
+                "status":       r.status,
+                "regime_label": r.regime_label,
+                "notes":        r.notes,
+                "date":         str(r.created_at),
+                "signal_date":  str(r.signal_date),
+            }
+            for r in rows
+        ]
+    finally:
+        db.close()
+
+    return {"session_id": session_id, "date": str(today), "signals": signals}
 
 
 @router.get("/{session_id}/report/weekly")
