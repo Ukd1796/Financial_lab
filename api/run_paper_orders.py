@@ -28,6 +28,7 @@ from sqlalchemy import select, and_
 from app.broker.paper_adapter import PaperAdapter
 from app.core.database import SessionLocal
 from app.core.notify import send_email
+from app.core.push import send_push_to_session_user
 from app.data.calendar import NSECalendar
 from app.data.models import SignalQueue
 from sqlalchemy import text
@@ -145,6 +146,19 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
                 f"Pending ({len(pending)}):\n{pending_lines}\n"
             ),
         )
+
+        if fills:
+            traded = ", ".join(
+                f"{row.action} {row.symbol}" for row, _ in fills[:4]
+            )
+            if len(fills) > 4:
+                traded += f" +{len(fills) - 4} more"
+            send_push_to_session_user(
+                sid,
+                title=f"{len(fills)} order(s) filled",
+                body=traded,
+                data={"screen": "PaperTrade"},
+            )
 
     finally:
         db.close()
