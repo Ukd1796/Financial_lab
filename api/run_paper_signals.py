@@ -49,6 +49,7 @@ from app.universe.filters import (
 )
 from app.core.database import SessionLocal
 from app.core.notify import send_email
+from app.core.push import send_push_to_session_user
 from sqlalchemy import select
 
 from run_experiments import NIFTY_50, NIFTY_NEXT_50, NIFTY_MIDCAP_50
@@ -436,6 +437,18 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             ) or "  (none)")
         ),
     )
+
+    if written > 0:
+        top_tickers = ", ".join(d.symbol for d in buys[:3]) if buys else None
+        push_body = f"{len(buys)} BUY · {len(sells)} SELL · {regime_label}"
+        if top_tickers:
+            push_body += f" — {top_tickers}"
+        send_push_to_session_user(
+            sid,
+            title=f"Signals ready — {today}",
+            body=push_body,
+            data={"screen": "PaperTrade"},
+        )
 
 
 def main():
