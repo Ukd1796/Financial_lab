@@ -449,6 +449,14 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             body=push_body,
             data={"screen": "PaperTrade"},
         )
+    else:
+        reason = "Breadth circuit breaker active" if cb_active else f"Regime: {regime_label}"
+        send_push_to_session_user(
+            sid,
+            title="No signals today",
+            body=f"Strategy paused — {reason}. Open Insights for details.",
+            data={"screen": "PaperTrade"},
+        )
 
 
 def main():

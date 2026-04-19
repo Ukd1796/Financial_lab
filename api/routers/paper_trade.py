@@ -492,3 +492,14 @@ def get_weekly_report(session_id: str):
         "pending_signals": len(pending),        # renamed from pending
         "notable_trades":  sells_filled[:10],   # last 10 completed exits
     }
+
+
+@router.get("/{session_id}/insights")
+def get_insights(session_id: str):
+    """
+    Claude-powered feedback: signal health, position insight, regime context, strategy tip.
+    Enriched with stock news headlines for held positions. Cached 60 minutes.
+    """
+    from api.services.feedback_service import generate_feedback
+    _resolve_session(session_id)
+    return generate_feedback(session_id)
