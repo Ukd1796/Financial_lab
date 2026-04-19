@@ -76,7 +76,6 @@ Mobile / Web → Railway FastAPI (api/main.py)
 | Var | Purpose |
 |---|---|
 | `DATABASE_URL` | Supabase B transaction pooler (port 6543 for API, use 5432 for DDL) |
-| `OPENAI_API_KEY` | GPT-4o-mini for `AdaptiveStrategySelector` |
-| `ANTHROPIC_API_KEY` | Claude for `narrative_service` and any new AI agents |
+| `OPENAI_API_KEY` | GPT-4o-mini for `AdaptiveStrategySelector`, `narrative_service`, and `feedback_service` |
 | `RESEND_API_KEY` | Email via Resend (preferred over SMTP on Railway) |
 | `SUPPRESS_NEW_BUYS` | Set to `1` to block all new BUY signals (manual kill switch) |

@@ -8,14 +8,14 @@ import os
 
 def generate_narrative(summary: dict, period_breakdown: list) -> dict:
     """
-    Build the 4-part ai_narrative dict using Claude claude-sonnet-4-6.
-    Falls back to template strings if ANTHROPIC_API_KEY is not set.
+    Build the 4-part ai_narrative dict using gpt-4o-mini.
+    Falls back to template strings if OPENAI_API_KEY is not set.
     """
     try:
-        import anthropic
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        from openai import OpenAI
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set")
+            raise ValueError("OPENAI_API_KEY not set")
 
         period_text = "\n".join(
             f"  {p['period']} ({p['start_date']} – {p['end_date']}): "
@@ -46,13 +46,14 @@ def generate_narrative(summary: dict, period_breakdown: list) -> dict:
             "IMPROVEMENT_TIP: <text>"
         )
 
-        client   = anthropic.Anthropic(api_key=api_key)
-        message  = client.messages.create(
-            model="claude-sonnet-4-6",
+        client   = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=512,
+            temperature=0.3,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text
+        raw = response.choices[0].message.content or ""
 
         parsed: dict[str, str] = {}
         for line in raw.splitlines():
