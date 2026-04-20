@@ -139,7 +139,7 @@ def _get_signals_for_date(signal_date: date, session_id: str) -> list[dict]:
         ).scalars().all()
         return [
             {
-                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
+                "id":           r.order_id or str(r.id),
                 "symbol":       r.symbol,
                 "action":       r.action,
                 "strategy":     r.strategy,
@@ -333,7 +333,7 @@ def get_dashboard(session_id: str):
         ).scalars().all()
         today_signals = [
             {
-                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
+                "id":           r.order_id or str(r.id),
                 "symbol":       r.symbol,
                 "action":       r.action,
                 "strategy":     r.strategy,
@@ -436,7 +436,7 @@ def get_signals(session_id: str):
         ).scalars().all()
         signals = [
             {
-                "id":           r.order_id or f"{r.symbol}-{r.signal_date}",
+                "id":           r.order_id or str(r.id),
                 "symbol":       r.symbol,
                 "action":       r.action,
                 "strategy":     r.strategy,
