@@ -460,22 +460,35 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--session", metavar="SESSION_ID", default=None,
+                        help="Run for a single session only (skips trading-day check)")
+    args = parser.parse_args()
+
     today    = date.today()
     today_dt = datetime.combine(today, datetime.min.time())
     calendar = NSECalendar()
 
-    if not calendar.is_trading_day(today):
+    if not args.session and not calendar.is_trading_day(today):
         print(f"[paper_signals] {today} is not a trading day — exiting.")
         sys.exit(0)
 
     print(f"\n{'='*70}")
     print(f"  api/run_paper_signals.py — {today}")
+    if args.session:
+        print(f"  *** Single-session mode: {args.session} ***")
     print(f"{'='*70}")
 
     # ------------------------------------------------------------------
-    # Load all active sessions — exit cleanly if none
+    # Load sessions — filter to the requested one if --session passed
     # ------------------------------------------------------------------
     active_sessions = _load_active_sessions()
+    if args.session:
+        active_sessions = [s for s in active_sessions if s["session_id"] == args.session]
+        if not active_sessions:
+            print(f"  Session '{args.session}' not found or not active — exiting.")
+            sys.exit(1)
     if not active_sessions:
         print("  No active paper sessions — exiting.")
         sys.exit(0)
