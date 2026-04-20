@@ -403,7 +403,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
             d = Decision(symbol=d.symbol, action="BUY", quantity=affordable_qty,
                          reasoning=(d.reasoning or "") + f" | trimmed by cash gate",
                          source=d.source, weight=getattr(d, "weight", None))
-        remaining_cash -= affordable_qty * price
+        remaining_cash -= d.quantity * price
         cash_gated.append(d)
     final_decisions = cash_gated
 
