@@ -262,7 +262,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
     starting_capital = float(sess["starting_capital"])
     max_pos_pct      = float(risk_cfg.get("max_position_pct", 10.0)) / 100.0
     risk_per_trade   = float(risk_cfg.get("risk_per_trade_pct", 0.5)) / 100.0
-    pause_pct        = float(risk_cfg.get("pause_threshold_pct", 35.0)) / 100.0
+    pause_pct        = max(float(risk_cfg.get("pause_threshold_pct", 35.0)), 20.0) / 100.0
 
     enabled_internals = [
         _UI_TO_INTERNAL[s["id"]]
