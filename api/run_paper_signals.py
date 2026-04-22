@@ -182,7 +182,25 @@ def _build_portfolio(session_id: str, starting_capital: float) -> tuple:
                 positions[fill.symbol]["quantity"] = remaining
 
     deployed = sum(p["quantity"] * p["average_price"] for p in positions.values())
-    cash     = max(starting_capital - deployed, 0.0)
+
+    # Also deduct capital committed to PENDING/PLACED BUY signals that haven't
+    # been filled yet — otherwise the cash gate re-opens to full capital the
+    # next morning before yesterday's fills are processed and allows double-allocation.
+    db2 = SessionLocal()
+    try:
+        pending_buys = db2.execute(
+            select(SignalQueue)
+            .where(SignalQueue.session_id == session_id)
+            .where(SignalQueue.action == "BUY")
+            .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
+        ).scalars().all()
+    finally:
+        db2.close()
+    pending_deployed = sum(
+        (r.target_qty or 0) * (r.raw_price or 0) for r in pending_buys
+    )
+
+    cash = max(starting_capital - deployed - pending_deployed, 0.0)
 
     portfolio        = Portfolio(cash=cash)
     position_owners  = {}
@@ -193,7 +211,7 @@ def _build_portfolio(session_id: str, starting_capital: float) -> tuple:
         })()
         position_owners[sym] = pos["strategy"]
 
-    print(f"    Capital: ₹{starting_capital:,.0f}  |  Deployed: ₹{deployed:,.0f}  |  Cash: ₹{cash:,.0f}  |  Positions: {len(positions)}")
+    print(f"    Capital: ₹{starting_capital:,.0f}  |  Deployed: ₹{deployed:,.0f}  |  Pending: ₹{pending_deployed:,.0f}  |  Cash: ₹{cash:,.0f}  |  Positions: {len(positions)}")
     if positions:
         for sym, pos in positions.items():
             print(f"      {sym:<14} qty={pos['quantity']}  avg=₹{pos['average_price']:.2f}  [{pos['strategy']}]")
