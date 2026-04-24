@@ -50,7 +50,7 @@ from app.universe.filters import (
 from app.core.database import SessionLocal
 from app.core.notify import send_email
 from app.core.push import send_push_to_session_user
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
 from run_experiments import NIFTY_50, NIFTY_NEXT_50, NIFTY_MIDCAP_50
 
@@ -183,19 +183,39 @@ def _build_portfolio(session_id: str, starting_capital: float) -> tuple:
 
     deployed = sum(p["quantity"] * p["average_price"] for p in positions.values())
 
+    # Deduct positions that already have a PENDING/PLACED SELL — signals generated
+    # but not yet filled by run_paper_orders.py (which runs 38 min after us).
+    # Without this, the portfolio still shows those symbols as open on the next run,
+    # causing a second SELL signal for a position that's already pending closure.
+    db2 = SessionLocal()
+    try:
+        pending_sells = db2.execute(
+            select(SignalQueue)
+            .where(SignalQueue.session_id == session_id)
+            .where(SignalQueue.action == "SELL")
+            .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
+        ).scalars().all()
+    finally:
+        db2.close()
+    pending_sell_syms = [s.symbol for s in pending_sells]
+    for sym in pending_sell_syms:
+        positions.pop(sym, None)
+    if pending_sell_syms:
+        print(f"    Excluded pending-SELL positions: {pending_sell_syms}")
+
     # Also deduct capital committed to PENDING/PLACED BUY signals that haven't
     # been filled yet — otherwise the cash gate re-opens to full capital the
     # next morning before yesterday's fills are processed and allows double-allocation.
-    db2 = SessionLocal()
+    db3 = SessionLocal()
     try:
-        pending_buys = db2.execute(
+        pending_buys = db3.execute(
             select(SignalQueue)
             .where(SignalQueue.session_id == session_id)
             .where(SignalQueue.action == "BUY")
             .where(SignalQueue.status.in_(["PENDING", "PLACED"]))
         ).scalars().all()
     finally:
-        db2.close()
+        db3.close()
     pending_deployed = sum(
         (r.target_qty or 0) * (r.raw_price or 0) for r in pending_buys
     )
@@ -236,6 +256,20 @@ def _write_signals(decisions, daily_symbol_states, regime_label, weights, signal
             state = daily_symbol_states.get(decision.symbol)
             if state is None:
                 continue
+            if decision.action == "SELL":
+                already = session.execute(
+                    select(SignalQueue).where(
+                        and_(
+                            SignalQueue.session_id == paper_session_id,
+                            SignalQueue.symbol     == decision.symbol,
+                            SignalQueue.action     == "SELL",
+                            SignalQueue.status.in_(["PENDING", "PLACED"]),
+                        )
+                    )
+                ).scalars().first()
+                if already:
+                    print(f"  [Dedup] Skipping SELL {decision.symbol} — already PENDING/PLACED (id={already.id})")
+                    continue
             session.add(SignalQueue(
                 id           = uuid.uuid4(),
                 created_at   = now,
