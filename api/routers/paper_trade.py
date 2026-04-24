@@ -358,16 +358,33 @@ def get_dashboard(session_id: str):
     # Portfolio breakdown
     starting_capital = float(paper_session["starting_capital"])
     total_invested   = sum(p["average_price"] * p["quantity"] for p in raw_positions)
-    # Realised PnL is not tracked separately yet; cash approximated from deployed cost.
-    cash_balance     = starting_capital - total_invested
+
+    # True cash: track every fill transaction (buys reduce cash, sells increase it).
+    # The naive formula (starting_capital - total_invested) misses realised P&L from
+    # closed positions — e.g. if a stock was sold at a loss, cash is lower than expected.
+    db_fills = SessionLocal()
+    try:
+        all_fills = db_fills.execute(
+            select(SignalQueue)
+            .where(SignalQueue.session_id == session_id)
+            .where(SignalQueue.status == "FILLED")
+        ).scalars().all()
+    finally:
+        db_fills.close()
+    cash_balance = starting_capital + sum(
+        (f.fill_price * f.fill_qty) * (1 if f.action == "SELL" else -1)
+        for f in all_fills
+        if f.fill_price and f.fill_qty
+    )
+    # Realised P&L = difference between true cash and what cash would be if
+    # all closed trades had broken even (starting_capital - open_cost).
+    realised_pnl_abs = round(cash_balance - (starting_capital - total_invested), 2)
+
     total_unreal_abs = sum(
         p["unrealised_pnl_abs"] for p in enriched if p["unrealised_pnl_abs"] is not None
     ) or None
-    portfolio_value  = (
-        starting_capital + total_unreal_abs
-        if total_unreal_abs is not None
-        else starting_capital
-    )
+    # portfolio_value = cash on hand + current market value of open positions
+    portfolio_value = cash_balance + total_invested + (total_unreal_abs or 0)
 
     # Regime (cached — fast)
     try:
@@ -382,10 +399,11 @@ def get_dashboard(session_id: str):
         "start_date":        paper_session["start_date"],
         "day_count":         day_count,
         "days_until_live":   max(0, 30 - day_count),
-        "portfolio_value":   portfolio_value,
-        "total_invested":    total_invested,
-        "cash_balance":      cash_balance,
+        "portfolio_value":   round(portfolio_value, 2),
+        "total_invested":    round(total_invested, 2),
+        "cash_balance":      round(cash_balance, 2),
         "unrealised_pnl_abs": total_unreal_abs,
+        "realised_pnl_abs":  realised_pnl_abs,
         "open_positions":    enriched,
         "position_count":    len(enriched),
         "todays_signals":    today_signals,
