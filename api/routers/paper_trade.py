@@ -95,6 +95,33 @@ def _get_latest_prices(symbols: list[str]) -> dict[str, float]:
         db.close()
 
 
+def _get_prev_prices(symbols: list[str]) -> dict[str, float]:
+    """
+    Fetch the second-most-recent EOD close for each symbol (previous trading day's close).
+    Used to compute 1-day P&L on open positions.
+    """
+    if not symbols:
+        return {}
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            text("""
+                SELECT symbol, close
+                FROM (
+                    SELECT symbol, close,
+                           ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY timestamp DESC) AS rn
+                    FROM market_ohlc
+                    WHERE symbol = ANY(:syms)
+                ) t
+                WHERE rn = 2
+            """),
+            {"syms": symbols},
+        ).fetchall()
+        return {r.symbol: float(r.close) for r in rows}
+    finally:
+        db.close()
+
+
 def _enrich_positions(positions: list[dict], prices: dict[str, float], today: date) -> list[dict]:
     """Add current_price, unrealised_pnl_abs, current_value, unrealised_pnl_pct to each position."""
     enriched = []
@@ -350,10 +377,11 @@ def get_dashboard(session_id: str):
     finally:
         _db.close()
 
-    # Fetch latest EOD prices for all open positions in one query
-    symbols       = [p["symbol"] for p in raw_positions]
-    prices        = _get_latest_prices(symbols)
-    enriched      = _enrich_positions(raw_positions, prices, today)
+    # Fetch latest and previous EOD prices for all open positions
+    symbols      = [p["symbol"] for p in raw_positions]
+    prices       = _get_latest_prices(symbols)
+    prev_prices  = _get_prev_prices(symbols)
+    enriched     = _enrich_positions(raw_positions, prices, today)
 
     # Portfolio breakdown
     starting_capital = float(paper_session["starting_capital"])
@@ -386,6 +414,23 @@ def get_dashboard(session_id: str):
     # portfolio_value = cash on hand + current market value of open positions
     portfolio_value = cash_balance + total_invested + (total_unreal_abs or 0)
 
+    # 1-day P&L: sum of (today_close - prev_close) × qty for each open position
+    one_day_pnl_abs  = None
+    one_day_pnl_pct  = None
+    if prev_prices:
+        daily_change = sum(
+            (prices.get(p["symbol"], 0) - prev_prices[p["symbol"]]) * p["quantity"]
+            for p in raw_positions
+            if p["symbol"] in prices and p["symbol"] in prev_prices
+        )
+        prev_value = sum(
+            prev_prices[p["symbol"]] * p["quantity"]
+            for p in raw_positions
+            if p["symbol"] in prev_prices
+        )
+        one_day_pnl_abs = round(daily_change, 2)
+        one_day_pnl_pct = round(daily_change / prev_value * 100, 2) if prev_value > 0 else None
+
     # Regime (cached — fast)
     try:
         regime_data = regime_svc.get_regime()
@@ -404,6 +449,8 @@ def get_dashboard(session_id: str):
         "cash_balance":      round(cash_balance, 2),
         "unrealised_pnl_abs": total_unreal_abs,
         "realised_pnl_abs":  realised_pnl_abs,
+        "one_day_pnl_abs":   one_day_pnl_abs,
+        "one_day_pnl_pct":   one_day_pnl_pct,
         "open_positions":    enriched,
         "position_count":    len(enriched),
         "todays_signals":    today_signals,
