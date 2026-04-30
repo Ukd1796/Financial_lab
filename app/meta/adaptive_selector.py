@@ -52,9 +52,20 @@ is heavily filtered. RSI-MR is the only strategy with negative Sharpe in Mixed/R
 # ---------------------------------------------------------------------------
 _REGIME_RULES = [
     # (label, description, condition_fn, confidence)
+    #
+    # Rule ordering matters — first match wins.
+    # CRASH_HIGHVOL must precede BEAR_CONFIRMED so that a high-vol deep crash
+    # gets the breakout/trend-PB allocation (Sharpe 1.7–1.8) instead of the
+    # DualMA-heavy bear allocation that is optimised for LOW-vol downtrends.
+    # TRANSITION_UP must precede BEAR_CONFIRMED so that an improving bear gets
+    # recovery allocation before the bear rule fires.
+    ("CRASH_HIGHVOL",
+     "Sharp selloff — >35% DOWNTREND and avg ATR% > 2.3%",
+     lambda s: s["pct_downtrend"] > 0.35 and s["avg_atr_pct"] > 0.023,
+     "HIGH"),
     ("TRANSITION_UP",
-     "Breadth recovering — 5-day trend IMPROVING with declining downtrend",
-     lambda s: s.get("broad_regime") == "TRANSITION_UP",
+     "Breadth recovering — 5-day trend IMPROVING with >20% still in downtrend",
+     lambda s: s.get("trend") == "IMPROVING" and s["pct_downtrend"] > 0.20,
      "MEDIUM"),
     ("BEAR_CONFIRMED",
      "Sustained downtrend — >45% stocks in DOWNTREND",
@@ -64,10 +75,6 @@ _REGIME_RULES = [
      "Early/building downtrend — 35–45% in DOWNTREND",
      lambda s: 0.35 <= s["pct_downtrend"] <= 0.45,
      "MEDIUM"),
-    ("CRASH_HIGHVOL",
-     "Sharp selloff — >25% DOWNTREND and avg ATR% > 2.3%",
-     lambda s: s["pct_downtrend"] > 0.25 and s["avg_atr_pct"] > 0.023,
-     "HIGH"),
     ("RECOVERY",
      "Post-crash V-shape — >60% UPTREND and avg ATR% > 2.2%",
      lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] > 0.022,
