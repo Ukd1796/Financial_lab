@@ -52,6 +52,7 @@ from app.core.notify import send_email
 from app.core.push import send_push_to_session_user
 from sqlalchemy import select, and_
 
+from api.db.store import init_db, load_regime_state, save_regime_state
 from run_experiments import NIFTY_50, NIFTY_NEXT_50, NIFTY_MIDCAP_50
 
 BROAD_UNIVERSE = NIFTY_50 + NIFTY_NEXT_50 + NIFTY_MIDCAP_50
@@ -337,7 +338,35 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         verbose=False,
         regime_stability_weeks=2,
     )
+
+    # Restore persisted selector state so rebalance_frequency and regime stability
+    # survive across cron runs (both reset to zero on every fresh instantiation).
+    sel_key   = f"selector_{sid}"
+    sel_state = load_regime_state(sel_key)
+    if sel_state:
+        if sel_state.get("last_updated"):
+            selector._last_updated = datetime.fromisoformat(sel_state["last_updated"])
+        selector._snapshot_history = sel_state.get("snapshot_history", [])
+        selector._confirmed_regime = sel_state.get("confirmed_regime")
+        selector._pending_regime   = sel_state.get("pending_regime")
+        selector._pending_count    = sel_state.get("pending_count", 0)
+        # Only restore weights when strategy set is unchanged
+        saved_weights = sel_state.get("weights", {})
+        if saved_weights and set(saved_weights.keys()) == set(enabled_internals):
+            selector.weights = saved_weights
+
     weights = selector.rebalance(today_dt, regime_snapshot)
+
+    # Persist updated state for the next run
+    save_regime_state(sel_key, {
+        "last_updated":     selector._last_updated.isoformat() if selector._last_updated else None,
+        "snapshot_history": selector._snapshot_history,
+        "confirmed_regime": selector._confirmed_regime,
+        "pending_regime":   selector._pending_regime,
+        "pending_count":    selector._pending_count,
+        "weights":          selector.weights,
+    })
+
     regime_label = selector._confirmed_regime or broad_regime
     print(f"     Regime: {regime_label} | Weights: " +
           "  ".join(f"{k}={v:.2f}" for k, v in weights.items()))
@@ -518,6 +547,7 @@ def main():
                         help="Run for a single session only (skips trading-day check)")
     args = parser.parse_args()
 
+    init_db()  # ensure regime_state table exists
     today    = date.today()
     today_dt = datetime.combine(today, datetime.min.time())
     calendar = NSECalendar()
@@ -578,6 +608,14 @@ def main():
     dynamic_agent.preload(start_dt, today_dt)
     rca = RegimeContextAgent(dynamic_agent)
 
+    # Restore RCA history so _detect_trend() has prior days to work with
+    rca_state = load_regime_state("rca_history")
+    if rca_state:
+        rca._history = [
+            (datetime.fromisoformat(d), snap)
+            for d, snap in rca_state.get("history", [])
+        ]
+
     union_filter = UnionUniverseFilter([
         BreakoutUniverseFilter(top_n=20),
         BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
@@ -610,6 +648,16 @@ def main():
     # ------------------------------------------------------------------
     print(f"\n[3/4] Regime snapshot...")
     regime_snapshot = rca.build_snapshot(daily_symbol_states, today_dt)
+
+    # Persist RCA history after today's snapshot is appended
+    save_regime_state("rca_history", {
+        "history": [
+            (d.isoformat(), {k: v for k, v in snap.items()
+                             if isinstance(v, (str, int, float, bool, type(None)))})
+            for d, snap in rca._history
+        ]
+    })
+
     broad_regime = regime_snapshot.get("broad_regime", "UNKNOWN")
     trend        = regime_snapshot.get("trend", "STABLE")
     print(
