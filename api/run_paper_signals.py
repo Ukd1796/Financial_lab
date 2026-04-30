@@ -408,7 +408,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
     market_downtrend_pct = downtrend_count / len(extended_states)
     if broad_regime == "TRANSITION_UP":
         effective_downtrend_pct = min(market_downtrend_pct, 0.30)
-    elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
+    elif broad_regime == "BEAR_EARLY":
         effective_downtrend_pct = min(market_downtrend_pct, 0.38)
     else:
         effective_downtrend_pct = market_downtrend_pct

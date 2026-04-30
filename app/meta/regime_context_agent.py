@@ -18,6 +18,7 @@ import pandas as pd
 from datetime import datetime
 
 from app.meta.regime_snapshot import build_regime_snapshot
+from app.meta.adaptive_selector import _classify_regime as _shared_classify
 
 
 class RegimeContextAgent:
@@ -37,7 +38,10 @@ class RegimeContextAgent:
         base  = build_regime_snapshot(daily_symbol_states, current_date)
         broad = self._compute_broad_breadth(current_date)
         trend = self._detect_trend()
-        broad_regime = self._classify_regime(base, broad, trend)
+        # Use the shared classifier so broad_regime and selector._confirmed_regime
+        # always use the same label set.
+        merged = {**base, **broad, "trend": trend}
+        broad_regime, _, _ = _shared_classify(merged)
 
         snapshot = {**base, **broad, "trend": trend, "broad_regime": broad_regime}
 
@@ -108,40 +112,3 @@ class RegimeContextAgent:
             return "DETERIORATING"
         return "STABLE"
 
-    # ------------------------------------------------------------------
-    def _classify_regime(self, base: dict, broad: dict, trend: str) -> str:
-        """
-        Synthesise a broad regime label from active-universe stats + broad breadth + trend.
-
-        Labels (most to least bearish):
-          BEAR_CONFIRMED   — deep bear, no improvement
-          BEAR_TRANSITION  — deep bear but breadth actively improving
-          BEAR_WATCH       — moderate bear, stable
-          TRANSITION_UP    — moderate bear AND breadth improving → early recovery signal
-          SIDEWAYS_CHOPPY  — mixed, no clear direction
-          BULL_WATCH       — majority above SMA_50 but not accelerating
-          BULL_EARLY       — majority above SMA_50 and improving
-          BULL_CONFIRMED   — strong broad uptrend
-        """
-        pct_down  = base["pct_downtrend"]
-        pct_above = broad["pct_above_sma50_broad"]
-
-        # Deep bear zone (pct_down > 60% AND <30% above SMA_50)
-        if pct_down > 0.60 and pct_above < 0.30:
-            return "BEAR_TRANSITION" if trend == "IMPROVING" else "BEAR_CONFIRMED"
-
-        # Bear watch zone (pct_down 45-60%)
-        if pct_down > 0.45:
-            return "TRANSITION_UP" if trend == "IMPROVING" else "BEAR_WATCH"
-
-        # Bull zone (majority above SMA_50)
-        if pct_above > 0.65 and base.get("pct_uptrend", 0) > 0.50:
-            return "BULL_CONFIRMED"
-        if pct_above > 0.50:
-            return "BULL_EARLY" if trend == "IMPROVING" else "BULL_WATCH"
-
-        # Mid zone
-        if trend == "IMPROVING" and pct_down < 0.45:
-            return "TRANSITION_UP"
-
-        return "SIDEWAYS_CHOPPY"
