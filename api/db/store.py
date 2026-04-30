@@ -73,6 +73,14 @@ def init_db() -> None:
                 call_seq         INTEGER NOT NULL DEFAULT 0
             );
 
+            -- Persisted regime state for cron runs (RegimeContextAgent + AdaptiveStrategySelector).
+            -- Key format: "rca_history" (global) or "selector_<session_id>" (per session).
+            CREATE TABLE IF NOT EXISTS regime_state (
+                key        TEXT PRIMARY KEY,
+                state_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             -- Side-by-side LLM-adaptive vs fixed-weight baseline for each backtest.
             CREATE TABLE IF NOT EXISTS backtest_ab_results (
                 run_id                TEXT PRIMARY KEY,
@@ -357,3 +365,28 @@ def get_ab_result(run_id: str) -> Optional[dict]:
             "SELECT * FROM backtest_ab_results WHERE run_id = ?", (run_id,)
         ).fetchone()
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Regime state persistence
+# ---------------------------------------------------------------------------
+
+def load_regime_state(key: str) -> Optional[dict]:
+    """Load persisted regime state by key. Returns None if not found."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT state_json FROM regime_state WHERE key = ?", (key,)
+        ).fetchone()
+    if row is None:
+        return None
+    return json.loads(row["state_json"])
+
+
+def save_regime_state(key: str, state: dict) -> None:
+    """Upsert persisted regime state for the given key."""
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO regime_state (key, state_json, updated_at) "
+            "VALUES (?, ?, ?)",
+            (key, json.dumps(state, default=str), datetime.utcnow().isoformat()),
+        )
