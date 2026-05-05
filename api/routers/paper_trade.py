@@ -414,6 +414,13 @@ def get_dashboard(session_id: str):
     # portfolio_value = cash on hand + current market value of open positions
     portfolio_value = cash_balance + total_invested + (total_unreal_abs or 0)
 
+    # Two distinct profit views:
+    #   total_pnl    — portfolio return vs starting capital (includes realised + unrealised)
+    #   invested_pnl — return on deployed capital only (unrealised / cost basis)
+    total_pnl_abs    = round(realised_pnl_abs + (total_unreal_abs or 0), 2)
+    total_pnl_pct    = round(total_pnl_abs / starting_capital * 100, 2) if starting_capital else None
+    invested_pnl_pct = round((total_unreal_abs or 0) / total_invested * 100, 2) if total_invested else None
+
     # 1-day P&L: sum of (today_close - prev_close) × qty for each open position
     one_day_pnl_abs  = None
     one_day_pnl_pct  = None
@@ -444,11 +451,17 @@ def get_dashboard(session_id: str):
         "start_date":        paper_session["start_date"],
         "day_count":         day_count,
         "days_until_live":   max(0, 30 - day_count),
+        "starting_capital":  round(starting_capital, 2),
         "portfolio_value":   round(portfolio_value, 2),
         "total_invested":    round(total_invested, 2),
         "cash_balance":      round(cash_balance, 2),
         "unrealised_pnl_abs": total_unreal_abs,
         "realised_pnl_abs":  realised_pnl_abs,
+        # Portfolio-level return (vs starting capital; includes realised + unrealised)
+        "total_pnl_abs":     total_pnl_abs,
+        "total_pnl_pct":     total_pnl_pct,
+        # Return on deployed capital only (unrealised gain / cost of open positions)
+        "invested_pnl_pct":  invested_pnl_pct,
         "one_day_pnl_abs":   one_day_pnl_abs,
         "one_day_pnl_pct":   one_day_pnl_pct,
         "open_positions":    enriched,
