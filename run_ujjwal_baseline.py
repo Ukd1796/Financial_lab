@@ -361,8 +361,12 @@ _VOLFILTER_RESULTS = {
 }
 
 
-def _make_router_regime_target():
-    """Router identical to _make_router() but with regime-conditional TrendPB target."""
+def _make_router_regime_exit():
+    """Router with exit-only regime-conditional TrendPB target.
+
+    Entry check stays at ×1.05 (strong pre-pullback filter unchanged).
+    Only the profit exit varies by vol-regime: LOW_VOL→1.03, MID_VOL→1.05, HIGH_VOL→1.08.
+    """
     return MultiStrategyRouter(
         strategies={
             "DualMA":   DualMovingAverageStrategy(),
@@ -402,24 +406,24 @@ def run_baseline():
         out("=" * (ROW_W + 2))
         out(HEADER)
 
-        out(f"{DIVIDER}  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit "
-            f"(LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)")
-        router = _make_router_regime_target()
+        out(f"{DIVIDER}  [TrendPB ExitOnly] ATR×2.5 + vol filter + regime-conditional EXIT only "
+            f"(entry stays ×1.05; exit: LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)")
+        router = _make_router_regime_exit()
         result = _run_one(repository, router, ctx, atr_multiplier=2.5)
-        out(_fmt_row("EqW  RegimeTarget", result))
+        out(_fmt_row("EqW  ExitOnly", result))
         new_results[period_label.strip()] = result
 
-    # ── Summary: Part H (vol filter) vs regime-conditional TrendPB target ────
+    # ── Summary: Part H (vol filter) vs exit-only regime-conditional target ──
     CONFIGS = [
-        ("ATR×2.5 +Vol",        _VOLFILTER_RESULTS),  # Part H hardcoded baseline
-        ("TrendPB RegimeTarget", None),                # this fresh run
+        ("ATR×2.5 +Vol",   _VOLFILTER_RESULTS),  # Part H hardcoded baseline
+        ("TrendPB ExitOnly", None),               # this fresh run
     ]
 
     out()
     out("=" * (ROW_W + 2))
-    out("  SUMMARY — TrendPullback regime-conditional profit target")
-    out("  Baseline: Part H (ATR×2.5 + vol filter, fixed ×1.05).")
-    out("  New:      same + LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08 exit target.")
+    out("  SUMMARY — TrendPullback exit-only regime-conditional target")
+    out("  Baseline: Part H (ATR×2.5 + vol filter, fixed ×1.05 exit).")
+    out("  New:      entry stays ×1.05; exit LOW_VOL→×1.03 / MID→×1.05 / HIGH→×1.08.")
     out("=" * (ROW_W + 2))
 
     col_w = 14
@@ -462,13 +466,14 @@ def run_baseline():
 
 
 def append_results_to_md():
-    """Append Part I results to the existing MD file."""
+    """Append Part J results to the existing MD file."""
     md_path = "docs/baseline_backtest_results.md"
     results_block = (
         "\n\n---\n\n"
-        "## Part I — TrendPullback Regime-Conditional Profit Target\n\n"
+        "## Part J — TrendPullback Exit-Only Regime-Conditional Target\n\n"
         "> Baseline (Part H): ATR×2.5 + vol filter, fixed ×1.05 exit.  \n"
-        "> New: same + LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08.\n\n"
+        "> New: entry stays ×1.05; exit only: LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08.  \n"
+        "> (Part I tested both entry+exit change — reverted; this isolates exit only.)\n\n"
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  \n"
         f"**Costs:** 0.10% commission + 0.05% slippage per side\n\n"
         "```\n"
