@@ -432,7 +432,30 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         allowed_regimes={name: _ALLOWED_REGIMES[name] for name in enabled_internals},
     )
     router.position_owners = position_owners
+
+    # Restore time-based stop state for stateful strategies. Both TrendPullback
+    # and RSI-MR track _entry_dates in-memory; without persistence the time stop
+    # (10-day for TrendPB, 7-day for RSI-MR) never fires in production because
+    # a fresh instance is created on every cron run.
+    for strat_key in ("TrendPB", "RSI-MR"):
+        if strat_key not in router.strategies:
+            continue
+        saved = load_regime_state(f"entry_dates_{strat_key}_{sid}") or {}
+        router.strategies[strat_key]._entry_dates = {
+            sym: datetime.fromisoformat(dt_str)
+            for sym, dt_str in saved.items()
+        }
+
     proposed = router.decide(today_dt, extended_states, portfolio)
+
+    # Save updated _entry_dates so next run can enforce the time stop correctly.
+    for strat_key in ("TrendPB", "RSI-MR"):
+        if strat_key not in router.strategies:
+            continue
+        save_regime_state(f"entry_dates_{strat_key}_{sid}", {
+            sym: dt.isoformat()
+            for sym, dt in router.strategies[strat_key]._entry_dates.items()
+        })
 
     risk_agent = RiskAgent(
         max_position_pct=max_pos_pct,
