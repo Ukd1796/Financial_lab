@@ -21,6 +21,10 @@ import sys
 import io
 from datetime import datetime
 
+# Load .env before any app imports so DATABASE_URL is available at import time
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.backtest.engine import BacktestEngine
 from app.backtest.observer import MarketObserverAgent
 from app.data.repository import MarketDataRepository
@@ -258,14 +262,19 @@ class OHLCCache:
         self._store = {}
         self._warm  = False
 
-    def warm_all(self, symbols, start=None, end=None):
+    def warm_all(self, symbols, start=None, end=None, batch_size=25):
         cache_start = start or self._CACHE_START
         cache_end   = end   or self._CACHE_END
+        batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
         print(f"\n  [Cache] Warming {len(symbols)} symbols from DB "
-              f"({cache_start.date()} → {cache_end.date()})...")
-        records = self._repo.get_ohlc_bulk(symbols, cache_start, cache_end)
-        for symbol, recs in records.items():
-            self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+              f"({cache_start.date()} → {cache_end.date()}) "
+              f"in {len(batches)} batches of ≤{batch_size}...")
+        for idx, batch in enumerate(batches, 1):
+            print(f"  [Cache] Batch {idx}/{len(batches)} ({len(batch)} symbols)...", end=" ", flush=True)
+            records = self._repo.get_ohlc_bulk(batch, cache_start, cache_end)
+            for symbol, recs in records.items():
+                self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+            print("done")
         total = sum(len(v) for v in self._store.values())
         print(f"  [Cache] Loaded {total:,} records for {len(self._store)} symbols\n")
         self._warm = True
@@ -361,21 +370,13 @@ _VOLFILTER_RESULTS = {
 }
 
 
-def _make_router_regime_exit():
-    """Router with exit-only regime-conditional TrendPB target.
-
-    Entry check stays at ×1.05 (strong pre-pullback filter unchanged).
-    Only the profit exit varies by vol-regime: LOW_VOL→1.03, MID_VOL→1.05, HIGH_VOL→1.08.
-    """
+def _make_router():
     return MultiStrategyRouter(
         strategies={
             "DualMA":   DualMovingAverageStrategy(),
             "Breakout": BreakoutMomentumStrategy(),
             "QuietBrk": QuietBreakoutStrategy(),
-            "TrendPB":  TrendPullbackStrategy(
-                            pullback_threshold=0.05,
-                            target_mult_by_vol=None,   # uses _DEFAULT_TARGET_MULTS
-                        ),
+            "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
             "RSI-MR":   RSIMeanReversionStrategy(
                             rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
         },
@@ -390,7 +391,6 @@ def run_baseline():
     repository = OHLCCache(_base)
     repository.warm_all(BROAD_UNIVERSE)
 
-    # {period_label: result} — TrendPB with regime-conditional profit target
     new_results = {}
 
     for period_label, (start_date, end_date) in PERIODS.items():
@@ -406,24 +406,25 @@ def run_baseline():
         out("=" * (ROW_W + 2))
         out(HEADER)
 
-        out(f"{DIVIDER}  [TrendPB ExitOnly] ATR×2.5 + vol filter + regime-conditional EXIT only "
-            f"(entry stays ×1.05; exit: LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)")
-        router = _make_router_regime_exit()
+        out(f"{DIVIDER}  [Current] ATR×2.5 trailing stop + volume filter")
+        router = _make_router()
         result = _run_one(repository, router, ctx, atr_multiplier=2.5)
-        out(_fmt_row("EqW  ExitOnly", result))
+        out(_fmt_row("EqW  Current", result))
         new_results[period_label.strip()] = result
 
-    # ── Summary: Part H (vol filter) vs exit-only regime-conditional target ──
+    # ── Summary: Part H baseline vs TrendPB exit-only vs 6-Strat RelStr ──
+    # CONFIGS: (label, static_tuple_dict | None)
+    # None → look up from the matching live results dict
     CONFIGS = [
-        ("ATR×2.5 +Vol",   _VOLFILTER_RESULTS),  # Part H hardcoded baseline
-        ("TrendPB ExitOnly", None),               # this fresh run
+        ("Part H baseline", _VOLFILTER_RESULTS),  # hardcoded reference
+        ("Current",         None),                # this fresh run
     ]
 
     out()
     out("=" * (ROW_W + 2))
-    out("  SUMMARY — TrendPullback exit-only regime-conditional target")
-    out("  Baseline: Part H (ATR×2.5 + vol filter, fixed ×1.05 exit).")
-    out("  New:      entry stays ×1.05; exit LOW_VOL→×1.03 / MID→×1.05 / HIGH→×1.08.")
+    out("  SUMMARY — Current config vs Part H baseline")
+    out("  Part H: ATR×2.5 trailing stop + volume filter (committed reference).")
+    out("  Current: same config — confirms no regression from reverts.")
     out("=" * (ROW_W + 2))
 
     col_w = 14
@@ -466,14 +467,13 @@ def run_baseline():
 
 
 def append_results_to_md():
-    """Append Part J results to the existing MD file."""
+    """Append latest run to the existing MD file."""
     md_path = "docs/baseline_backtest_results.md"
     results_block = (
         "\n\n---\n\n"
-        "## Part J — TrendPullback Exit-Only Regime-Conditional Target\n\n"
-        "> Baseline (Part H): ATR×2.5 + vol filter, fixed ×1.05 exit.  \n"
-        "> New: entry stays ×1.05; exit only: LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08.  \n"
-        "> (Part I tested both entry+exit change — reverted; this isolates exit only.)\n\n"
+        "## Latest Run\n\n"
+        "> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  \n"
+        "> All experimental changes (regime-conditional stop, RSI threshold, TrendPB exit target) reverted.\n\n"
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  \n"
         f"**Costs:** 0.10% commission + 0.05% slippage per side\n\n"
         "```\n"
@@ -486,9 +486,5 @@ def append_results_to_md():
 
 
 if __name__ == "__main__":
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
-
     run_baseline()
     append_results_to_md()
