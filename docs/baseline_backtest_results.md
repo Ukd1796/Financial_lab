@@ -658,3 +658,153 @@ _REGIME_MULTIPLIER = {
 | 5 | Regime-conditional stop multiplier | `app/risk/agent.py` | 1 hour | Fine-tuning; backtest first |
 
 **Do #1 first** — it's a pure bug fix, zero regression risk, and unblocks a correct implementation of #2 (trailing stop must use entry ATR or it becomes even more unstable).
+
+
+---
+
+## Part I — TrendPullback Regime-Conditional Profit Target
+
+> Baseline (Part H): ATR×2.5 + vol filter, fixed ×1.05 exit.  
+> New: same + LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08.
+
+**Generated:** 2026-05-10 19:00  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget          1.15    62.06%   10.09%    1.37  46.4%     6121
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget         -0.66    -3.86%    7.38%    0.81  42.2%     1089
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget          2.18    19.37%    4.78%    1.83  51.2%     1030
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget          2.63    45.84%    5.97%    1.93  50.7%     2040
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget          0.32     1.67%    6.00%    1.09  42.8%      724
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget          1.23    21.10%    6.00%    1.38  46.6%     2033
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [TrendPB RegimeTarget] ATR×2.5 + vol filter + regime-conditional exit (LOW_VOL→×1.03, MID_VOL→×1.05, HIGH_VOL→×1.08)
+  EqW  RegimeTarget         -0.53    -2.65%    4.40%    0.85  39.7%      698
+
+========================================================================
+  SUMMARY — TrendPullback regime-conditional profit target
+  Baseline: Part H (ATR×2.5 + vol filter, fixed ×1.05).
+  New:      same + LOW_VOL→×1.03 / MID_VOL→×1.05 / HIGH_VOL→×1.08 exit target.
+========================================================================
+
+  Sharpe ratio
+  Period                 ATR×2.5 +VolTrendPB RegimeTarget
+  --------------------------------------------------
+  Full  2018–2024                1.18          1.15
+  Bull  2019–2020               -0.57         -0.66
+  Crash 2020                     2.19          2.18
+  Recov 2020–2021                2.62          2.63
+  Bear  2022                     0.36          0.32
+  Recent2022–2024                1.24          1.23
+  Live  2025–2026               -0.60         -0.53
+
+  Return %
+  Period                 ATR×2.5 +VolTrendPB RegimeTarget
+  --------------------------------------------------
+  Full  2018–2024               64.8%         62.1%
+  Bull  2019–2020               -3.4%         -3.9%
+  Crash 2020                    19.6%         19.4%
+  Recov 2020–2021               46.1%         45.8%
+  Bear  2022                     1.9%          1.7%
+  Recent2022–2024               21.2%         21.1%
+  Live  2025–2026               -3.0%         -2.6%
+
+  MaxDD %  (lower=better)
+  Period                 ATR×2.5 +VolTrendPB RegimeTarget
+  --------------------------------------------------
+  Full  2018–2024                9.8%         10.1%
+  Bull  2019–2020                7.3%          7.4%
+  Crash 2020                     4.7%          4.8%
+  Recov 2020–2021                6.3%          6.0%
+  Bear  2022                     5.8%          6.0%
+  Recent2022–2024                5.8%          6.0%
+  Live  2025–2026                4.8%          4.4%
+
+  Win Rate %
+  Period                 ATR×2.5 +VolTrendPB RegimeTarget
+  --------------------------------------------------
+  Full  2018–2024               46.5%         46.4%
+  Bull  2019–2020               42.6%         42.2%
+  Crash 2020                    51.2%         51.2%
+  Recov 2020–2021               51.0%         50.7%
+  Bear  2022                    42.7%         42.8%
+  Recent2022–2024               46.6%         46.6%
+  Live  2025–2026               39.3%         39.7%
+
+  #Trades
+  Period                 ATR×2.5 +VolTrendPB RegimeTarget
+  --------------------------------------------------
+  Full  2018–2024                6178          6121
+  Bull  2019–2020                1093          1089
+  Crash 2020                     1040          1030
+  Recov 2020–2021                2067          2040
+  Bear  2022                      728           724
+  Recent2022–2024                2046          2033
+  Live  2025–2026                 704           698
+
+  Generated: 2026-05-10 19:00
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
