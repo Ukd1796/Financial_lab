@@ -2,6 +2,12 @@ from datetime import datetime
 
 from app.strategy.models import Decision
 
+_DEFAULT_TARGET_MULTS: dict[str, float] = {
+    "LOW_VOL": 1.03,   # slow markets — 3% reachable; 5% tends to fire time-stop instead
+    "MID_VOL": 1.05,   # unchanged from prior behaviour
+    "HIGH_VOL": 1.08,  # volatile markets — recovery can run further before cutting
+}
+
 
 class TrendPullbackStrategy:
     """
@@ -36,12 +42,35 @@ class TrendPullbackStrategy:
         self,
         pullback_threshold: float = 0.03,
         max_hold_days:      int   = 10,
+        target_mult_by_vol: dict | None = None,
     ):
         self.pullback_threshold = pullback_threshold
         self.max_hold_days      = max_hold_days
+        self.target_mult_by_vol = (
+            target_mult_by_vol if target_mult_by_vol is not None
+            else _DEFAULT_TARGET_MULTS
+        )
 
         # Track entry date per symbol so max_hold_days can be enforced
         self._entry_dates: dict[str, datetime] = {}
+
+    def _exit_mult(self, regime: str | None) -> float:
+        """Exit-target multiplier based on vol-state component of regime.
+
+        Entry check always stays at 1.05 so quality-of-trend filter is unchanged.
+        Only the profit exit varies: LOW_VOL gets a closer target (achievable in
+        slow markets), HIGH_VOL gets a wider target (lets recoveries run further).
+        Falls back to MID_VOL (1.05) for warm-up bars where vol_state is NaN.
+        """
+        if not regime or not isinstance(regime, str):
+            return self.target_mult_by_vol.get("MID_VOL", 1.05)
+        parts = regime.split("_")
+        if len(parts) < 3:                        # "nan_UPTREND" during ATR warm-up
+            return self.target_mult_by_vol.get("MID_VOL", 1.05)
+        vol_state = "_".join(parts[:2])           # "LOW_VOL", "MID_VOL", "HIGH_VOL"
+        return self.target_mult_by_vol.get(
+            vol_state, self.target_mult_by_vol.get("MID_VOL", 1.05)
+        )
 
     def decide(
         self,
@@ -58,12 +87,18 @@ class TrendPullbackStrategy:
             sma_20    = state.indicators.get("sma_20")
             sma_50    = state.indicators.get("sma_50")
             return_3d = state.indicators.get("return_3d")
+            regime    = state.indicators.get("regime")
 
             # Previous day's SMA_20 — used to compute slope
             sma_20_prev = state.previous_indicators.get("sma_20")
 
             if None in (sma_20, sma_50, return_3d, sma_20_prev):
                 continue
+
+            # Exit target varies by vol regime; entry check stays fixed at 1.05
+            # so the pre-pullback quality filter is never weakened.
+            exit_m      = self._exit_mult(regime)
+            exit_target = sma_20 * exit_m
 
             in_position = symbol in portfolio.positions
 
@@ -74,10 +109,10 @@ class TrendPullbackStrategy:
                 )
 
                 # --- Exit 1: recovered to pre-pullback strength ---
-                # Price must return to the "strong trend" zone (>5% above SMA_20).
-                # This is consistent with the entry condition (stock was >5% above
-                # SMA_20 before the pullback) so we capture the full mean-reversion move.
-                if price > sma_20 * 1.05:
+                # Exit threshold is regime-conditional: LOW_VOL uses ×1.03 (reachable
+                # in slow markets), HIGH_VOL uses ×1.08 (lets recovery run further).
+                # Entry check stays at ×1.05 so we only enter on genuinely strong trends.
+                if price > exit_target:
                     if symbol in self._entry_dates:
                         del self._entry_dates[symbol]
                     decisions.append(Decision(
@@ -85,7 +120,7 @@ class TrendPullbackStrategy:
                         action="SELL",
                         reasoning=(
                             f"Recovered to pre-pullback strength "
-                            f"(price={price:.2f} > SMA_20*1.05={sma_20 * 1.05:.2f}, "
+                            f"(price={price:.2f} > SMA_20×{exit_m:.2f}={exit_target:.2f}, "
                             f"held {hold_days}d)"
                         ),
                     ))
