@@ -41,9 +41,10 @@ class QuietBreakoutStrategy:
 
         for symbol, state in symbol_states.items():
 
-            price    = state.latest_price
-            high_20d = state.indicators.get("high_20d")
-            sma_20   = state.indicators.get("sma_20")
+            price     = state.latest_price
+            high_20d  = state.indicators.get("high_20d")
+            sma_20    = state.indicators.get("sma_20")
+            vol_ratio = state.indicators.get("vol_ratio")
 
             if high_20d is None or sma_20 is None:
                 continue
@@ -71,12 +72,19 @@ class QuietBreakoutStrategy:
                 ))
                 continue
 
-            # --- Entry: 20-day breakout ---
-            if not in_position and price > high_20d:
+            # --- Entry: 20-day breakout with volume confirmation ---
+            # vol_ratio > 1.2 requires above-average volume on the breakout day.
+            # Falls back to allowing entry when vol_ratio is unavailable (warm-up period).
+            vol_confirmed = vol_ratio is None or vol_ratio > 1.2
+            if not in_position and price > high_20d and vol_confirmed:
                 decisions.append(Decision(
                     symbol=symbol,
                     action="BUY",
                     reasoning=(
+                        f"20-day quiet breakout with volume confirmation "
+                        f"(price={price:.2f} > high_20d={high_20d:.2f}, "
+                        f"vol_ratio={vol_ratio:.2f})"
+                        if vol_ratio is not None else
                         f"20-day quiet breakout detected "
                         f"(price={price:.2f} > high_20d={high_20d:.2f})"
                     ),
