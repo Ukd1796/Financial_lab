@@ -7,6 +7,8 @@ class Position:
     symbol: str
     quantity: float
     average_price: float
+    atr_at_entry: float = 0.0
+    high_watermark: float = 0.0  # highest price seen since entry; trailing stop trails this
 
 
 @dataclass

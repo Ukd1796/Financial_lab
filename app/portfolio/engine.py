@@ -6,7 +6,7 @@ class PortfolioEngine:
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
 
-    def buy(self, symbol: str, quantity: float, price: float):
+    def buy(self, symbol: str, quantity: float, price: float, atr_at_entry: float = 0.0):
 
         cost = quantity * price
 
@@ -26,11 +26,14 @@ class PortfolioEngine:
             )
             existing.quantity = total_quantity
             existing.average_price = new_avg_price
+            # Keep the original entry ATR and watermark on add-to-position
         else:
             self.portfolio.positions[symbol] = Position(
                 symbol=symbol,
                 quantity=quantity,
-                average_price=price
+                average_price=price,
+                atr_at_entry=atr_at_entry,
+                high_watermark=price,   # initialise to entry price; trails up from here
             )
 
     def sell(self, symbol: str, quantity: float, price: float):
