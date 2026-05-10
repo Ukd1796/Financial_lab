@@ -80,6 +80,7 @@ class ExecutionAgent:
                     decision.symbol,
                     exec_quantity,
                     exec_price,
+                    atr_at_entry=getattr(decision, "atr_at_entry", 0.0),
                 )
                 executed = True
 

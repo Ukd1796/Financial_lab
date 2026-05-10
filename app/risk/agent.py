@@ -1,5 +1,20 @@
 from app.strategy.models import Decision
 
+# Stop multiplier per stock-level regime (LOW/MID/HIGH_VOL × UPTREND/SIDEWAYS/DOWNTREND).
+# Used by RiskAgent when regime_multipliers is not None.
+# Logic: tight stop in choppy/downtrend regimes (protect capital); wide in smooth uptrends.
+_DEFAULT_REGIME_MULTIPLIERS = {
+    "LOW_VOL_UPTREND":    2.5,   # smooth trend — give it room
+    "MID_VOL_UPTREND":    2.0,   # normal
+    "HIGH_VOL_UPTREND":   1.5,   # volatile uptrend — lock in gains faster
+    "LOW_VOL_SIDEWAYS":   1.5,   # choppy, no clear direction
+    "MID_VOL_SIDEWAYS":   1.5,
+    "HIGH_VOL_SIDEWAYS":  1.0,   # high vol + choppy — exit quickly
+    "LOW_VOL_DOWNTREND":  1.0,   # downtrend — exit as soon as stop triggers
+    "MID_VOL_DOWNTREND":  1.0,
+    "HIGH_VOL_DOWNTREND": 1.0,   # crash — exit immediately
+}
+
 
 class RiskAgent:
 
@@ -14,6 +29,7 @@ class RiskAgent:
         max_downtrend_pct:   float = 0.40,   # block BUY when >40% of universe in DOWNTREND (R1)
         min_atr_cost_ratio:  float = 3.0,    # ATR must cover ≥ N× round-trip cost (0 = disabled)
         round_trip_cost_pct: float = 0.0015, # 0.10% commission + 0.05% slippage per side
+        regime_multipliers:  dict  = None,   # if set, overrides atr_multiplier for stop eval per regime
     ):
         self.max_position_pct        = max_position_pct
         self.atr_multiplier          = atr_multiplier
@@ -24,6 +40,13 @@ class RiskAgent:
         self.max_downtrend_pct       = max_downtrend_pct
         self.min_atr_cost_ratio      = min_atr_cost_ratio
         self.round_trip_cost_pct     = round_trip_cost_pct
+        self.regime_multipliers      = regime_multipliers
+
+    def _stop_multiplier(self, regime: str | None) -> float:
+        """Return the ATR multiplier to use for the trailing stop given the current regime."""
+        if self.regime_multipliers is None or not regime:
+            return self.atr_multiplier
+        return self.regime_multipliers.get(regime, self.atr_multiplier)
 
     # --------------------------------------------------
     # MAIN EVALUATION
@@ -89,16 +112,35 @@ class RiskAgent:
                     reasoning=f"Blocked by regime filter ({regime})",
                 )
 
-        # --- ATR stop enforcement ---
+        # --- Trailing ATR stop enforcement ---
         if symbol in portfolio.positions and atr:
-            position   = portfolio.positions[symbol]
-            stop_price = position.average_price - (self.atr_multiplier * atr)
+            position = portfolio.positions[symbol]
+
+            # ATR locked at entry so the stop distance doesn't widen in crashes.
+            # Falls back to current ATR for positions opened before this field was added.
+            entry_atr = getattr(position, "atr_at_entry", None) or atr
+
+            # Trail the high-watermark upward as the stock rises; never move it down.
+            prev_watermark = getattr(position, "high_watermark", None) or position.average_price
+            high_watermark = max(prev_watermark, current_price)
+            position.high_watermark = high_watermark   # update in-place for next day
+
+            # Regime-conditional multiplier: tighter in choppy/downtrend regimes,
+            # wider in smooth low-vol uptrends. Falls back to fixed atr_multiplier
+            # when regime_multipliers is not configured.
+            stop_mult  = self._stop_multiplier(regime)
+            stop_price = high_watermark - (stop_mult * entry_atr)
+
             if current_price <= stop_price:
                 return Decision(
                     symbol=symbol,
                     action="SELL",
                     quantity=position.quantity,
-                    reasoning=f"ATR stop hit at {stop_price:.2f}",
+                    reasoning=(
+                        f"Trailing ATR stop hit at {stop_price:.2f} "
+                        f"(watermark {high_watermark:.2f}, entry ATR {entry_atr:.2f}, "
+                        f"mult {stop_mult:.1f}×, regime {regime})"
+                    ),
                 )
 
         # --- HOLD pass-through ---
@@ -135,6 +177,7 @@ class RiskAgent:
                 symbol=symbol,
                 action="BUY",
                 quantity=quantity,
+                atr_at_entry=atr or 0.0,
                 reasoning=self._sizing_reasoning(total_equity, current_price, atr, quantity, strategy_weight),
             )
 

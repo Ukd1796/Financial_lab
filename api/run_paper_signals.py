@@ -373,6 +373,19 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
     portfolio, position_owners = _build_portfolio(sid, starting_capital)
 
+    # Inject persisted high_watermarks so RiskAgent can trail stops correctly.
+    # Falls back to average_price (= entry price) for positions with no saved watermark,
+    # which matches the pre-trailing-stop behaviour and is safe on first run.
+    wm_key       = f"watermarks_{sid}"
+    saved_wm     = load_regime_state(wm_key) or {}
+    for sym, pos in portfolio.positions.items():
+        wm = saved_wm.get(sym, pos.average_price)
+        pos.high_watermark = wm
+        # atr_at_entry is not stored historically; fall back to 0 (RiskAgent
+        # will fall back to current ATR, matching old behaviour for live positions).
+        if not getattr(pos, "atr_at_entry", None):
+            pos.atr_at_entry = 0.0
+
     # Fix 1: Positions migrated from personal scripts have strategy='unknown'.
     # Reassign to first enabled strategy so the router can propose exit signals.
     default_strategy = enabled_internals[0]
@@ -423,7 +436,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
     risk_agent = RiskAgent(
         max_position_pct=max_pos_pct,
-        atr_multiplier=2.0,
+        atr_multiplier=2.5,
         risk_per_trade_pct=risk_per_trade,
         use_vol_sizing=True,
         breadth_circuit_breaker=True,
@@ -490,6 +503,18 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
 
     buys  = [d for d in final_decisions if d.action == "BUY"]
     sells = [d for d in final_decisions if d.action == "SELL"]
+
+    # Persist updated high_watermarks for all remaining open positions.
+    # RiskAgent updates position.high_watermark in-place during evaluate();
+    # positions exited today (SELL decisions) are dropped from the saved dict.
+    sold_symbols = {d.symbol for d in sells}
+    updated_wm = {
+        sym: pos.high_watermark
+        for sym, pos in portfolio.positions.items()
+        if sym not in sold_symbols and pos.high_watermark
+    }
+    save_regime_state(wm_key, updated_wm)
+
     written = _write_signals(final_decisions, extended_states, regime_label, weights,
                              today, paper_session_id=sid)
 
