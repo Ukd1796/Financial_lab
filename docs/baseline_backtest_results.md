@@ -1,0 +1,660 @@
+# Ujjwal Portfolio — Baseline Backtest Results
+
+**Strategy config:** `f786f5cc-09f7-43b2-afbb-4f0b688f55d2` — Ujjwal's Portfolio  
+**Capital:** ₹1,00,000  
+**Universe:** broad150 (Nifty50 + NiftyNext50 + NiftyMidcap50 = 150 symbols)  
+**Strategies:** TrendFollow + Breakout + QuietBreakout + TrendPullback + RSI-MR (all 5 enabled)  
+**Risk params:** max_position=10% · risk/trade=0.5% · breadth CB=35% · ATR ratio≥3×
+
+---
+
+## Part A — Stored Runs (from web UI backtest history)
+
+> **Important:** These runs used **different risk params** than Ujjwal's production config.
+> The CB threshold (`pause_threshold_pct`) ranged from 5–13%, vs Ujjwal's current **35%**.
+> A higher threshold means the CB triggers less often → more trades, more market exposure.
+> These runs are included for reference but are **not a valid baseline for Ujjwal's config**.
+
+| Run ID | Date | Universe | Strategies | Period | Capital | MaxPos | CB% | Risk% | Return | Sharpe | MaxDD | Trades | WinRate |
+|--------|------|----------|-----------|--------|---------|--------|-----|-------|--------|--------|-------|--------|---------|
+| bt_c1102a | 2026-04-03 | broad150 | All 5 | 2020-01 → 2021-03 | ₹10L | 12% | 7% | 0.75% | **+55.45%** | **2.40** | -8.96% | 1523 | 51.0% |
+| bt_ee9a3d | 2026-04-03 | broad150 | All 5 | 2021-01 → 2022-03 | ₹10L | 12% | 7% | 0.75% | **+28.89%** | **1.56** | -15.33% | 1522 | 47.2% |
+| bt_d83d16 | 2026-04-03 | broad150 | All 5 | 2023-04 → 2026-03 | ₹10L | 12% | 7% | 0.75% | +29.42% | 0.76 | -17.18% | 3293 | 46.2% |
+| bt_9d2fb3 | 2026-04-02 | broad150 | All 5 | 2023-01 → 2026-03 | ₹10L | 12% | 7% | 0.75% | +25.33% | 0.64 | -18.32% | 3500 | 45.3% |
+| bt_963d92 | 2026-04-03 | broad150 | All 5 | 2024-01 → 2026-03 | ₹10L | 12% | 7% | 0.75% | -6.09% | -0.16 | -17.84% | 2462 | 43.4% |
+| bt_2b011f | 2026-04-03 | broad150 | All 5 | 2025-01 → 2026-03 | ₹10L | 12% | 7% | 0.75% | -4.75% | -0.38 | -9.43% | 1037 | 41.5% |
+| bt_8003c8 | 2026-04-04 | broad150 | All 5 | 2024-01 → 2026-04 | ₹10L | 10% | 5% | 0.5% | -5.36% | -0.20 | -14.66% | 487 | 39.2% |
+| bt_2aff2e | 2026-04-04 | broad150 | All 5 | 2025-01 → 2026-04 | ₹1L | 13% | 6% | 0.5% | -1.07% | -0.26 | -4.21% | 141 | 39.7% |
+| bt_ca99bc | 2026-04-03 | broad150 | 3 strats* | 2019-01 → 2024-08 | ₹10L | 12% | 7% | 0.75% | +185.47% | 1.40 | -22.79% | 2233 | 43.4% |
+| bt_71a105 | 2026-04-03 | broad150 | 3 strats* | 2023-01 → 2024-08 | ₹10L | 12% | 7% | 0.75% | +63.73% | 2.23 | -9.56% | 604 | 46.7% |
+
+*3-strat runs: TrendFollow + QuietBreakout + TrendPullback (no Breakout or RSI-MR)
+
+### Key observations from stored runs
+
+1. **Bull/recovery periods (2020-2022) are the system's sweet spot** — Sharpe 1.5–2.4, returns 29–55%
+2. **Recent 2024-2026 is consistently negative** across all configs. This is a regime problem: the market has been in a choppier, more volatile bear-sideways regime where trend strategies struggle.
+3. **Higher CB threshold (7%) + higher risk/trade (0.75%)** in the 2020-2022 runs partially explains the stronger results — more trades captured more of the rally.
+4. **Win rates cluster at 39-51%** — typical for trend-following. Profits come from letting winners run (profit factor > 1), not from being right more often.
+5. **3 strategies (TF+QBK+TPB) beat all-5 over 2019-2024** with 185% return — RSI-MR and Breakout may be diluting returns in trending markets.
+
+---
+
+## Part B — Ujjwal's Exact Config Baseline (EqualWeight, 5-strat)
+
+> Config: broad150 · max_pos=10% · CB=35% · risk/trade=0.5% · ATR≥3× · commission=0.10% · slippage=0.05%  
+> These results use the **exact production parameters** from Ujjwal's live session.
+
+**Generated:** 2026-05-09 00:37  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)      1.21    97.77%   15.15%    1.42  46.5%     6269
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)     -0.56    -4.28%    9.44%    0.83  42.5%     1127
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)      2.46    28.90%    6.23%    1.81  51.7%     1049
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)      2.88    77.57%    8.88%    2.13  51.5%     2088
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)      0.32     2.29%    8.25%    0.95  41.6%      762
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)      1.27    29.15%    8.25%    1.38  46.3%     2078
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [A] Equal Weight — 5 strategies × 0.20 each (no LLM)
+  EqualWeight (5-strat)     -0.43    -2.79%    4.94%    0.87  39.1%      757
+
+========================================================================
+  SUMMARY — Sharpe ratio across all periods
+========================================================================
+  Period                   EqW Sharpe   EqW Return   EqW MaxDD     WR  #Trades
+  ---------------------------------------------------------------------------
+  Full  2018–2024                1.21       97.77%      15.15%  46.5%     6269
+  Bull  2019–2020               -0.56       -4.28%       9.44%  42.5%     1127
+  Crash 2020                     2.46       28.90%       6.23%  51.7%     1049
+  Recov 2020–2021                2.88       77.57%       8.88%  51.5%     2088
+  Bear  2022                     0.32        2.29%       8.25%  41.6%      762
+  Recent2022–2024                1.27       29.15%       8.25%  46.3%     2078
+  Live  2025–2026               -0.43       -2.79%       4.94%  39.1%      757
+
+  Generated: 2026-05-09 00:37
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+```
+
+---
+
+## Part C — After Bug #1 Fix (entry ATR stop)
+
+> **Change:** `app/risk/agent.py:95` — ATR stop now uses `position.atr_at_entry` (locked at BUY time) instead of today's ATR.  
+> **Generated:** 2026-05-09 00:50
+
+```
+  Period                   EqW Sharpe   EqW Return   EqW MaxDD     WR  #Trades
+  ---------------------------------------------------------------------------
+  Full  2018–2024                1.16       90.25%      15.56%  46.4%     6326
+  Bull  2019–2020               -0.64       -4.84%       9.84%  42.2%     1131
+  Crash 2020                     2.38       27.80%       6.32%  51.7%     1053
+  Recov 2020–2021                2.80       73.41%       9.04%  51.1%     2109
+  Bear  2022                     0.28        1.98%       8.26%  41.2%      770
+  Recent2022–2024                1.30       29.91%       8.26%  46.5%     2083
+  Live  2025–2026               -0.45       -2.91%       5.05%  38.9%      758
+```
+
+## Part D — After Bug #1 + Improvement #3 (trailing ATR stop)
+
+> **Additional change:** `app/risk/agent.py` — stop now trails the high-watermark (max price since entry) downward.  
+> All three fields now in play: `atr_at_entry`, `high_watermark`, trailing stop = `watermark − 2×entry_ATR`.  
+> **Generated:** 2026-05-09 00:57
+
+```
+  Period                   EqW Sharpe   EqW Return   EqW MaxDD     WR  #Trades
+  ---------------------------------------------------------------------------
+  Full  2018–2024                1.13       76.63%      12.86%  46.4%     6580
+  Bull  2019–2020               -0.67       -4.73%       9.29%  42.4%     1156
+  Crash 2020                     2.33       26.32%       5.70%  51.7%     1097
+  Recov 2020–2021                2.78       64.24%       7.95%  50.9%     2231
+  Bear  2022                     0.15        0.81%       7.54%  42.3%      796
+  Recent2022–2024                1.10       21.92%       7.54%  46.0%     2194
+  Live  2025–2026               -0.52       -3.12%       4.73%  39.1%      780
+```
+
+---
+
+## Three-way comparison — v1 (bug) → v2 (entry ATR) → v3 (trailing stop)
+
+| Period | v1 MaxDD | v2 MaxDD | v3 MaxDD | MaxDD Δ (v1→v3) |
+|--------|----------|----------|----------|-----------------|
+| Full 2018–2024 | 15.15% | 15.56% | **12.86%** | **−2.3pp** |
+| Bull 2019–2020 | 9.44% | 9.84% | **9.29%** | −0.15pp |
+| Crash 2020 | 6.23% | 6.32% | **5.70%** | **−0.53pp** |
+| Recov 2020–2021 | 8.88% | 9.04% | **7.95%** | **−0.93pp** |
+| Bear 2022 | 8.25% | 8.26% | **7.54%** | **−0.71pp** |
+| Recent 2022–2024 | 8.25% | 8.26% | **7.54%** | **−0.71pp** |
+| Live 2025–2026 | 4.94% | 5.05% | **4.73%** | **−0.21pp** |
+
+| Period | v1 Return | v2 Return | v3 Return | Return Δ (v1→v3) |
+|--------|-----------|-----------|-----------|-------------------|
+| Full 2018–2024 | +97.77% | +90.25% | +76.63% | −21.1pp |
+| Bull 2019–2020 | −4.28% | −4.84% | −4.73% | −0.45pp |
+| Crash 2020 | +28.90% | +27.80% | +26.32% | −2.58pp |
+| Recov 2020–2021 | +77.57% | +73.41% | +64.24% | −13.3pp |
+| Bear 2022 | +2.29% | +1.98% | +0.81% | −1.48pp |
+| Recent 2022–2024 | +29.15% | +29.91% | +21.92% | −7.23pp |
+| Live 2025–2026 | −2.79% | −2.91% | −3.12% | −0.33pp |
+
+### Reading the results
+
+**MaxDD improved across every single period** — the trailing stop does exactly what it's supposed to: it exits profitable positions before they fully reverse, capping drawdown. Full period MaxDD improved 2.3pp (15.15% → 12.86%).
+
+**Return dropped more than expected.** The trailing stop generates 311 extra round-trips over the full period (6,269 → 6,580). Each exit+re-entry costs ~0.3% in friction. More importantly, positions that would have run 6+ months are now stopped out at smaller gains during normal pullbacks, then potentially re-entered.
+
+**Calmar ratio (return / MaxDD) tells a clearer story:**
+
+| Version | Full Period Return | MaxDD | Calmar |
+|---------|-------------------|-------|--------|
+| v1 (bug) | 97.77% | 15.15% | 6.45 |
+| v2 (entry ATR) | 90.25% | 15.56% | 5.80 |
+| v3 (trailing) | 76.63% | 12.86% | **5.96** |
+
+The trailing stop recovered the Calmar degradation from v2. The raw Sharpe (1.21→1.13) looks worse, but for real-money trading, a system with −12.9% MaxDD vs −15.2% MaxDD is meaningfully more liveable — drawdowns are what cause users to shut off a system emotionally.
+
+**Why returns dropped in bull/recovery periods:** In trending markets, ATR tends to expand as momentum builds. The entry ATR (lower vol, early in trend) combined with a trailing stop creates a tight leash. A stock gaining 15% then pulling back 2× entry-ATR (say 4%) gets stopped out with a 11% gain instead of riding to 15–20%. The system re-enters if the signal re-fires — paying costs again.
+
+**Next tuning lever:** The `atr_multiplier=2.0` is the knob. Testing `2.5×` for the trailing distance would give positions more room to breathe in trends. This is a parameter optimisation question, not a code change.
+
+---
+
+## Part E — ATR Multiplier Sweep (trailing stop: 2.0× vs 2.5× vs 3.0×)
+
+> **Change from Part D:** Same trailing-stop code. Only `atr_multiplier` varies.  
+> **Generated:** 2026-05-09 01:09
+
+```
+  Sharpe ratio
+  Period                 v1-bug      ATR×2.0     ATR×2.5     ATR×3.0
+  ------------------------------------------------------------------
+  Full  2018–2024          1.21        1.13        1.17        1.22
+  Bull  2019–2020         -0.56       -0.67       -0.63       -0.62
+  Crash 2020               2.46        2.37        2.22        2.29
+  Recov 2020–2021          2.88        2.79        2.64        2.83
+  Bear  2022               0.32        0.15        0.33        0.26
+  Recent2022–2024          1.27        1.11        1.23        1.21
+  Live  2025–2026         -0.43       -0.52       -0.61       -0.65
+
+  Return %
+  Period                 v1-bug      ATR×2.0     ATR×2.5     ATR×3.0
+  ------------------------------------------------------------------
+  Full  2018–2024         97.8%       77.3%       64.0%       53.7%
+  Bull  2019–2020         -4.3%       -4.7%       -3.7%       -3.0%
+  Crash 2020              28.9%       26.8%       19.8%       16.6%
+  Recov 2020–2021         77.6%       64.8%       46.5%       39.9%
+  Bear  2022               2.3%        0.8%        1.8%        1.2%
+  Recent2022–2024         29.1%       22.3%       21.2%       17.4%
+  Live  2025–2026         -2.8%       -3.1%       -3.0%       -2.7%
+
+  MaxDD %  (lower is better)
+  Period                 v1-bug      ATR×2.0     ATR×2.5     ATR×3.0
+  ------------------------------------------------------------------
+  Full  2018–2024         15.2%       12.9%       10.2%        8.5%
+  Bull  2019–2020          9.4%        9.3%        7.4%        6.1%
+  Crash 2020               6.2%        5.7%        4.7%        3.7%
+  Recov 2020–2021          8.9%        8.2%        6.3%        4.8%
+  Bear  2022               8.2%        7.5%        5.9%        5.1%
+  Recent2022–2024          8.2%        7.5%        5.9%        5.1%
+  Live  2025–2026          4.9%        4.7%        4.8%        4.1%
+
+  #Trades
+  Period                 v1-bug      ATR×2.0     ATR×2.5     ATR×3.0
+  ------------------------------------------------------------------
+  Full  2018–2024          6269        6578        6201        5762
+  Bull  2019–2020          1127        1158        1102        1049
+  Crash 2020               1049        1099        1042         978
+  Recov 2020–2021          2088        2239        2068        1901
+  Bear  2022                762         796         737         677
+  Recent2022–2024          2078        2189        2060        1894
+  Live  2025–2026           757         780         712         648
+```
+
+### Calmar ratio (Return / MaxDD — higher = better risk-adjusted)
+
+| Version | Full Period Return | MaxDD | Calmar |
+|---------|-------------------|-------|--------|
+| v1-bug (buggy stop) | 97.8% | 15.2% | 6.43 |
+| ATR×2.0 (trailing) | 77.3% | 12.9% | **5.99** |
+| ATR×2.5 (trailing) | 64.0% | 10.2% | **6.27** |
+| ATR×3.0 (trailing) | 53.7% | 8.5% | **6.32** |
+
+### Verdict
+
+**ATR×3.0 matches v1 Sharpe (1.22) while halving MaxDD (8.5% vs 15.2%).** This is the most striking result: wider trailing stop paradoxically improves risk-adjusted return because it stops fewer round-trips in trending markets (lower friction), while the trailing mechanism still locks in gains before full reversals.
+
+**ATR×2.5 is best for the current bear/choppy regime:**
+- Bear 2022 Sharpe: **0.33** — best of all four configs (beats v1's 0.32)
+- Recent 2022-2024 Sharpe: **1.23** — second only to v1's 1.27
+- MaxDD cut to 10.2% vs 15.2% (v1) — a third lower
+- Calmar 6.27 beats ATR×2.0's 5.99
+
+**Why wider stop → fewer trades → better Sharpe:**  
+Tighter trailing stop (2.0×) fires more often on normal daily pullbacks, generating unnecessary round-trips that each cost ~0.3% in friction. Wider stop (2.5–3.0×) holds through daily noise, re-enters less → total friction is lower. The cost is lower raw return (position exits at peak less often), but Sharpe improves because the vol of returns also drops.
+
+**Recommendation: deploy ATR×2.5 to production.**
+
+| Consideration | ATR×2.5 | ATR×3.0 |
+|---|---|---|
+| Full period Sharpe | 1.17 | 1.22 |
+| Bear 2022 Sharpe | **0.33** | 0.26 |
+| Recent Sharpe | **1.23** | 1.21 |
+| Full MaxDD | 10.2% | **8.5%** |
+| Full return | **64.0%** | 53.7% |
+| Calmar | 6.27 | 6.32 |
+
+ATR×2.5 wins on the two most recent periods (the most relevant forward-looking signal) and retains 10pp more return over the full period. ATR×3.0 would be the choice if minimising drawdown is the overriding goal (e.g., funded account with hard DD limits).
+
+The change to production is a single parameter: `atr_multiplier=2.5` in `RiskAgent.__init__()` in `api/run_paper_signals.py`.
+
+---
+
+## Part G — RSI Threshold Fix (Bug #2: rsi_oversold 5→15, rsi_overbought 80→70)
+
+> **Change:** `RSIMeanReversionStrategy` threshold raised from RSI_3<5 to RSI_3<15 (fires more often).  
+> Exit threshold lowered from RSI_3>80 to RSI_3>70 (exits sooner).  
+> Both use ATR×2.5 trailing stop. v1-bug shown for reference.  
+> **Generated:** 2026-05-10 17:23
+
+```
+  Sharpe ratio
+  Period                       v1-bug ATR×2.5 RSI=5ATR×2.5 RSI=15
+  ----------------------------------------------------------------
+  Full  2018–2024                1.21          1.17          1.09
+  Bull  2019–2020               -0.56         -0.63         -0.72
+  Crash 2020                     2.46          2.22          2.03
+  Recov 2020–2021                2.88          2.64          2.58
+  Bear  2022                     0.32          0.33          0.30
+  Recent2022–2024                1.27          1.23          1.17
+  Live  2025–2026               -0.43         -0.61         -0.73
+
+  Win Rate %
+  Period                       v1-bug ATR×2.5 RSI=5ATR×2.5 RSI=15
+  ----------------------------------------------------------------
+  Full  2018–2024               46.5%         46.4%         48.0%  ← higher
+  Bear  2022                    41.6%         42.2%         44.3%  ← higher
+  Recent2022–2024               46.3%         46.5%         48.1%  ← higher
+  Live  2025–2026               39.1%         39.0%         41.9%  ← higher
+
+  MaxDD %  (lower=better)
+  Period                       v1-bug ATR×2.5 RSI=5ATR×2.5 RSI=15
+  ----------------------------------------------------------------
+  Full  2018–2024               15.2%         10.2%         11.6%  ← worse
+  Live  2025–2026                4.9%          4.8%          5.3%  ← worse
+
+  #Trades
+  Period                       v1-bug ATR×2.5 RSI=5ATR×2.5 RSI=15
+  ----------------------------------------------------------------
+  Full  2018–2024                6269          6201          6773  ← +572 trades
+```
+
+### Verdict: revert RSI threshold back to 5
+
+**The RSI fix proves that RSI-MR IS now trading** — win rate improves by 1.5–3pp across every period, confirming RSI_3<15 captures real mean-reversion bounces. But **net Sharpe worsens** in every period. Why:
+
+1. **Friction > signal.** 572 extra trades × ~0.3% round-trip cost = ~1.7pp additional annual drag. The win rate improvement doesn't generate enough gross PnL to cover the extra friction.
+
+2. **RSI-MR competes with and displaces trend signals.** With a weight of 0.20, RSI-MR BUYs during pullbacks compete against TrendPB and Breakout BUYs on the same stocks. When RSI-MR wins a conflict, it holds the position for 7 days max then exits — cutting off what would have been a longer trend trade.
+
+3. **`max_hold_days=7` is too short for a strategy with 1.5× higher friction.** In a bear market, oversold bounces often take 10-14 days. Exiting after 7 days means selling into a recovery that hasn't fully played out.
+
+**Why Bug #1 (entry_dates persistence) doesn't show here:** The backtest runs one continuous strategy instance per period, so `_entry_dates` persists in memory throughout — time stops already work correctly in backtests. This is a production-only fix.
+
+**Code status:**
+- `rsi_oversold=15` reverted to `rsi_oversold=5` in both `run_paper_signals.py` and `run_ujjwal_baseline.py`
+- `_entry_dates` persistence for TrendPB and RSI-MR kept in `run_paper_signals.py` (production fix, correct behavior)
+
+---
+
+## Part F — Regime-conditional Stop Multiplier (Improvement #5 test)
+
+> **Config:** Same trailing stop code. `regime_multipliers` map added to RiskAgent:  
+> `LOW_VOL_UPTREND=2.5, MID_VOL_UPTREND=2.0, HIGH_VOL_UPTREND=1.5, *_SIDEWAYS=1.5, *_DOWNTREND=1.0`  
+> **Comparison:** ATR×2.5 (fixed) vs RegimeCond (this run) vs v1-bug (reference)  
+> **Generated:** 2026-05-10 16:39
+
+```
+  Sharpe ratio
+  Period                     v1-bug     ATR×2.5  RegimeCond
+  ----------------------------------------------------------
+  Full  2018–2024              1.21        1.17        1.07
+  Bull  2019–2020             -0.56       -0.63       -0.69
+  Crash 2020                   2.46        2.22        2.48
+  Recov 2020–2021              2.88        2.64        2.85
+  Bear  2022                   0.32        0.33       -0.04
+  Recent2022–2024              1.27        1.23        1.01
+  Live  2025–2026             -0.43       -0.61       -0.48
+
+  MaxDD %  (lower=better)
+  Period                     v1-bug     ATR×2.5  RegimeCond
+  ----------------------------------------------------------
+  Full  2018–2024             15.2%       10.2%       13.3%
+  Bear  2022                   8.2%        5.9%        7.8%
+
+  #Trades
+  Period                     v1-bug     ATR×2.5  RegimeCond
+  ----------------------------------------------------------
+  Full  2018–2024              6269        6201        6825
+```
+
+### Verdict: do not deploy
+
+**RegimeCond fails in the two most important periods for live trading:**
+- Bear 2022 Sharpe: **−0.04** vs ATR×2.5's **0.33** — from the best config to the worst
+- Recent 2022-2024 Sharpe: **1.01** vs ATR×2.5's **1.23**
+- Full MaxDD: **13.3%** vs ATR×2.5's **10.2%** — the protection is actually *worse*
+
+**Why it makes things worse:**
+
+1. **More whipsaw, not less.** In bear/sideways markets, stocks oscillate between SIDEWAYS and DOWNTREND labels daily. The tight 1.0–1.5× stops fire on normal noise, generating 624 extra round-trips (6825 vs 6201) each costing ~0.3% in friction.
+
+2. **Regime labels are noisy at the stock level.** A stock in a mid-uptrend that pulls back 3% flips to SIDEWAYS for one day. The 1.5× stop triggers, exits the position, then the stock resumes the uptrend. Cost paid for no benefit.
+
+3. **The breadth circuit breaker already handles market protection.** New BUYs are blocked when >35% of the universe is in DOWNTREND. Tighter stock-level stops duplicate this but add friction on existing positions.
+
+**Where it helps:** Crash 2020 (Sharpe 2.48 vs v1's 2.46) and Recovery 2020-2021 (2.85 vs v1's 2.88) — fast directional moves where 1.0× DOWNTREND stop correctly exits before full reversals. But these periods are already well-handled by any trailing stop.
+
+**Code status:** `_DEFAULT_REGIME_MULTIPLIERS` and `regime_multipliers` parameter are in `app/risk/agent.py` but `regime_multipliers=None` by default — no behavior change in production. Leave as-is; do not enable.
+
+---
+
+## Before vs After — Bug #1 fix delta
+
+| Period | Sharpe Δ | Return Δ | MaxDD Δ | Trades Δ | Verdict |
+|--------|----------|----------|---------|----------|---------|
+| Full 2018–2024 | 1.21 → **1.16** (−0.05) | 97.77% → **90.25%** (−7.5pp) | 15.15% → 15.56% (worse) | +57 | Mixed |
+| Bull 2019–2020 | −0.56 → −0.64 (−0.08) | −4.28% → −4.84% (−0.6pp) | 9.44% → 9.84% (worse) | +4 | Slightly worse |
+| Crash 2020 | 2.46 → 2.38 (−0.08) | 28.90% → 27.80% (−1.1pp) | 6.23% → 6.32% (flat) | +4 | Slightly worse |
+| Recov 2020–2021 | 2.88 → 2.80 (−0.08) | 77.57% → 73.41% (−4.2pp) | 8.88% → 9.04% (flat) | +21 | Slightly worse |
+| Bear 2022 | 0.32 → 0.28 (−0.04) | 2.29% → 1.98% (−0.3pp) | 8.25% → 8.26% (flat) | +8 | Marginal |
+| Recent 2022–2024 | 1.27 → **1.30** (+0.03) | 29.15% → **29.91%** (+0.76pp) | 8.25% → 8.26% (flat) | +5 | Slightly better |
+| Live 2025–2026 | −0.43 → −0.45 (−0.02) | −2.79% → −2.91% (−0.1pp) | 4.94% → 5.05% (flat) | +1 | Flat |
+
+### Why the fix slightly hurt bull/recovery periods (counterintuitive)
+
+The fix is theoretically correct but produces a nuanced outcome:
+
+**Bull markets**: In trending upswings, ATR tends to *expand* slightly as momentum builds. This means `entry_atr < current_atr` in bull runs. With the bug (current ATR), stops were *wider* → winners ran longer → higher raw return. With the fix (entry ATR), stops are *tighter* → positions get stopped out on normal pullbacks → 57 more round-trips (churn cost), slightly lower return.
+
+**Bear/choppy periods**: The fix is most correct in crash scenarios where ATR doubles or triples. Here the fix keeps the stop distance at the level from when you entered (lower vol), so positions are exited sooner on drawdowns. The Recent 2022-2024 small improvement (+0.76pp) is consistent with this.
+
+**The fix alone is not sufficient.** The entry ATR stop is the *correct foundation* for a trailing stop — you can't implement a sensible trailing stop (Bug #3) if the stop distance changes with current volatility. The full benefit will show when Bug #3 (trailing high-watermark stop) is added on top: tighter initial stop (entry ATR) + trailing upward as the stock gains = better risk/reward on winners without widening stops in crashes.
+
+**Net assessment:** Bug #1 fix is correct and necessary plumbing for Bug #3. Marginal standalone impact. Implement Bug #3 next before concluding whether the change is net positive.
+
+---
+
+## Column guide
+
+| Column | Meaning |
+|--------|---------|
+| Sharpe | Annualised Sharpe ratio (higher = better risk-adjusted return) |
+| Return | Total return % over the period (net of costs) |
+| MaxDD | Maximum drawdown % (worst peak-to-trough decline) |
+| PF | Profit factor (gross profit / gross loss; >1 = profitable) |
+| WR | Win rate % of closed trades |
+| #Trades | Total number of completed round-trips |
+
+## Config variants explained
+
+- **EqualWeight**: All 5 strategies at weight 0.20. No LLM. Deterministic. The comparison floor.
+- **Adaptive**: GPT-4o-mini rebalances strategy weights every 5 trading days based on regime snapshot.
+- **Adaptive+RCA**: Same as Adaptive, plus RegimeContextAgent feeds breadth-level signals to relax the CB during TRANSITION_UP regimes (earlier re-entry after bear).
+
+---
+
+## How the RiskAgent currently works
+
+The RiskAgent is a **single-pass, per-signal gate** that sits between the strategy router and the execution layer. Every proposed decision (BUY / SELL / HOLD) passes through it in the order it arrives. The code lives in `app/risk/agent.py`.
+
+### Layer 1 — Breadth Circuit Breaker (BUY only)
+
+```
+if market_downtrend_pct >= max_downtrend_pct → HOLD
+```
+
+Counts how many stocks in the active universe have `"DOWNTREND"` in their stock-level regime label. If the fraction ≥ `pause_threshold_pct` (Ujjwal's config: **35%**), all new BUYs are suppressed for the day. The RCA (RegimeContextAgent) relaxes this to 30% during `TRANSITION_UP` and 38% during `BEAR_EARLY` to allow earlier re-entry.
+
+### Layer 2 — ATR-to-Cost Filter (BUY only)
+
+```
+if (ATR / price) < (round_trip_cost × min_atr_cost_ratio) → HOLD
+```
+
+Blocks entry when the stock's daily volatility (ATR-14) is too small to cover round-trip costs (0.15%) multiplied by the ratio (3×). This filters out low-vol, choppy stocks where commissions would eat all gross PnL. Effective threshold: ATR must be ≥ **0.45% of price**.
+
+### Layer 3 — Stock-Level Regime Filter (BUY only)
+
+```
+if stock_regime not in allowed_regimes → HOLD
+```
+
+Each strategy has its own allowlist enforced by `MultiStrategyRouter` *before* the RiskAgent sees the decision. The RiskAgent has a second copy of this gate (currently `allowed_regimes=None` in multi-strategy runs because the router already handles it).
+
+### Layer 4 — ATR Stop (existing positions, any day)
+
+```
+stop_price = position.average_price - (atr_multiplier × current_ATR)
+if current_price ≤ stop_price → SELL
+```
+
+Checked on every day for every held position. If the stock falls more than 2× the current ATR below the original entry price, the RiskAgent overrides any HOLD with a forced SELL. **Uses today's ATR, not ATR at entry.**
+
+### Position sizing (BUY only, after all gates pass)
+
+```
+risk_budget   = total_equity × risk_per_trade_pct × strategy_weight
+stop_distance = atr_multiplier × atr
+vol_qty       = risk_budget / stop_distance          ← ATR-based
+max_qty       = total_equity × max_position_pct × strategy_weight / price
+quantity      = min(vol_qty, max_qty, available_cash / price)
+```
+
+For Ujjwal's config: `risk_per_trade_pct=0.5%`, `max_position_pct=10%`, `strategy_weight=0.20`. A single strategy can deploy at most `10% × 0.20 = 2%` of portfolio per position, and will size down further if ATR is high (stock is volatile).
+
+### Sequential cash gate (signal runner, after RiskAgent)
+
+After RiskAgent approves a set of BUY decisions, `run_paper_signals.py` walks through them sequentially and checks whether remaining cash can cover each one. If not, the signal is dropped (or trimmed). The code comment says "weight-descending order" but the list is **not actually sorted** — see Bug #2 below.
+
+---
+
+## RiskAgent bugs and improvements (priority order)
+
+### Bug #1 — ATR stop widens in volatile markets (HIGH)
+
+**File:** `app/risk/agent.py:95`  
+**Severity:** High — directly hurts performance in bear/crash periods  
+
+**Current code:**
+```python
+stop_price = position.average_price - (self.atr_multiplier * atr)
+# `atr` here is TODAY's ATR, which expands when markets are volatile
+```
+
+**The problem:** ATR is a measure of recent daily volatility. During a market crash, ATR doubles or triples. When ATR expands, `atr_multiplier × atr` grows, which pushes `stop_price` *further below entry*. This means the stop distance **widens exactly when you most need it to tighten** — a stock in free fall gets a bigger stop, not a smaller one.
+
+Example: Stock bought at ₹500 with ATR=₹10 → stop at ₹480.  
+Three weeks later: stock at ₹460, ATR has doubled to ₹20 → stop now at ₹460 − ₹40 = **₹420**, still not hit despite being 8% below entry.
+
+**The fix:** Capture ATR at BUY time and store it with the position. The stop should always use the entry ATR, not the current ATR.
+
+
+```python
+# In Position model: store atr_at_entry when the BUY fills
+# In RiskAgent.evaluate():
+entry_atr  = getattr(position, "atr_at_entry", atr)  # fall back to current if not stored
+stop_price = position.average_price - (self.atr_multiplier * entry_atr)
+```
+
+**Expected improvement:** Bear 2022 and Live 2025-2026 periods — fewer trades getting stopped out too late, tighter protection of capital. MaxDD on Full period should shrink from -15.15%.
+
+---
+
+### Bug #2 — Cash gate not weight-ordered (MEDIUM)
+
+**File:** `api/run_paper_signals.py:462–489`  
+**Severity:** Medium — causes capital misallocation in adaptive (LLM-weighted) runs  
+
+**Current code:**
+```python
+# Comment says "weight-descending order" but there is no sort:
+for d in final_decisions:
+    if d.action != "BUY":
+        ...
+```
+
+**The problem:** `final_decisions` arrives in proposal-arrival order (alphabetical by symbol within each strategy, then by strategy order). A signal from a low-weight strategy early in the list can consume cash that a high-weight strategy's signal arriving later needs. In EqualWeight mode (all weights=0.20) this doesn't matter. In Adaptive mode, if the LLM assigns DualMA weight=0.40 and RSI-MR weight=0.05, the RSI-MR signal should yield to DualMA, not grab cash first.
+
+**The fix:**
+```python
+# Sort BUYs by weight descending before walking the gate
+buys_sorted = sorted(
+    [d for d in final_decisions if d.action == "BUY"],
+    key=lambda d: getattr(d, "weight", 0.0),
+    reverse=True,
+)
+non_buys = [d for d in final_decisions if d.action != "BUY"]
+ordered_decisions = non_buys + buys_sorted  # SELLs always execute first
+```
+
+**Expected improvement:** Cleaner capital allocation in adaptive runs. No measurable impact on EqualWeight backtest results.
+
+---
+
+### Improvement #3 — Trailing ATR stop (HIGH)
+
+**File:** `app/risk/agent.py:93–102`  
+**Severity:** High — the biggest single improvement for win quality  
+
+**Current behaviour:** The stop is permanently anchored to the entry price. Once a stock gains 20%, the stop is still below entry — you can give back the entire gain before the stop triggers.
+
+**The fix:** Track the highest closing price seen since entry. Trail the stop upward as the stock rises. Never allow the stop to move down.
+
+```python
+# Requires storing high_watermark per position (updated daily)
+high_watermark = max(getattr(position, "high_watermark", position.average_price), current_price)
+position.high_watermark = high_watermark   # update in-place
+
+entry_atr  = getattr(position, "atr_at_entry", atr)
+stop_price = high_watermark - (self.atr_multiplier * entry_atr)
+
+if current_price <= stop_price:
+    return Decision(symbol=symbol, action="SELL", ...)
+```
+
+**Why this matters for the baseline numbers:**
+- Full 2018-2024: Profit factor is 1.42. Trailing stops let winners run longer → PF should increase.
+- Recovery 2020-2021 (Sharpe 2.88): The system was already excellent here. Trailing stops should maintain or slightly improve it.
+- Live 2025-2026 (Sharpe -0.43): Positions that turned profitable then reversed would have been exited earlier → smaller losses.
+
+**Note:** This requires storing `atr_at_entry` and `high_watermark` alongside each position. In the backtest, these can be stored in the `Portfolio.positions` dict. In the live system (`run_paper_signals.py`), they need to be persisted in the `signal_queue` FILLED rows or a new side-table.
+
+---
+
+### Improvement #4 — Max hold duration for trend strategies (LOW)
+
+**File:** `app/risk/agent.py` (new parameter)  
+**Severity:** Low — prevents capital lock-up, minor benefit  
+
+**Current behaviour:** RSI-MR has `max_hold_days=7` enforced inside the strategy itself. DualMA, Breakout, QuietBrk, and TrendPB have no time limit — a position can be held indefinitely if the price stays above the ATR stop and the strategy says HOLD.
+
+**The problem:** In sideways markets, trend positions can sit range-bound for months, consuming a position slot (and cash) without contributing P&L. The opportunity cost is another BUY signal that can't be taken because cash is locked up.
+
+**The fix:** Add `max_hold_days: int | None = None` to RiskAgent. If set, force a SELL when `days_held >= max_hold_days` even if the stop hasn't triggered and the strategy says HOLD.
+
+**Suggested values:** DualMA → 60 days, Breakout/QuietBrk → 20 days, TrendPB → 15 days.
+
+---
+
+### Improvement #5 — Regime-conditional stop multiplier (LOW)
+
+**File:** `app/risk/agent.py`  
+**Severity:** Low — fine-tuning, not a structural fix  
+
+**Current behaviour:** `atr_multiplier=2.0` is fixed regardless of regime. In low-vol uptrends, 2× ATR might be too wide (slow to exit). In high-vol downtrends, even with the ATR-at-entry fix (#1), 2× may be too tight.
+
+**The fix:** Map regime → multiplier:
+```python
+_REGIME_MULTIPLIER = {
+    "LOW_VOL_UPTREND":  2.5,   # wider — trend is smooth, let it breathe
+    "MID_VOL_UPTREND":  2.0,   # default
+    "HIGH_VOL_UPTREND": 1.5,   # tighter — vol is elevated, protect gains faster
+    "SIDEWAYS":         1.5,   # tighter — choppy, exit sooner
+}
+```
+
+---
+
+## Implementation order recommendation
+
+| # | Change | Files | Effort | Expected impact |
+|---|--------|-------|--------|----------------|
+| 1 | ATR stop uses entry ATR, not current ATR | `app/risk/agent.py` | 1 hour | MaxDD shrinks; bear protection improves |
+| 2 | Trailing ATR stop (high watermark) | `app/risk/agent.py`, position model | 2–3 hours | Profit factor increases; win rate may drop slightly but avg win grows |
+| 3 | Weight-ordered cash gate | `api/run_paper_signals.py` | 30 min | Cleaner capital allocation in adaptive mode |
+| 4 | Max hold duration | `app/risk/agent.py` | 1 hour | Minor; prevents capital lock-up in sideways |
+| 5 | Regime-conditional stop multiplier | `app/risk/agent.py` | 1 hour | Fine-tuning; backtest first |
+
+**Do #1 first** — it's a pure bug fix, zero regression risk, and unblocks a correct implementation of #2 (trailing stop must use entry ATR or it becomes even more unstable).

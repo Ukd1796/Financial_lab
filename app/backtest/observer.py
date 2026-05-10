@@ -42,9 +42,10 @@ class MarketObserverAgent:
         if not records:
             raise ValueError(f"No data found for {symbol}")
 
-        closes = [r.close for r in records]
-        highs  = [r.high  for r in records]
-        lows   = [r.low   for r in records]
+        closes  = [r.close  for r in records]
+        highs   = [r.high   for r in records]
+        lows    = [r.low    for r in records]
+        volumes = [r.volume for r in records]
 
         # ----------------------------------------------------------
         # List-based indicators (consistent with existing helpers)
@@ -70,9 +71,17 @@ class MarketObserverAgent:
         # Vectorized pandas features (multi-bar returns, rolling vol,
         # price-range levels)
         # ----------------------------------------------------------
-        closes_s = pd.Series(closes, dtype=float)
-        highs_s  = pd.Series(highs,  dtype=float)
-        lows_s   = pd.Series(lows,   dtype=float)
+        closes_s  = pd.Series(closes,  dtype=float)
+        highs_s   = pd.Series(highs,   dtype=float)
+        lows_s    = pd.Series(lows,    dtype=float)
+        volumes_s = pd.Series(volumes, dtype=float)
+
+        # shift(1) so today's volume is compared against the prior 20-day average,
+        # not including today itself — avoids look-ahead on the entry signal.
+        vol_sma20 = volumes_s.rolling(20, min_periods=10).mean().shift(1)
+        vol_ratio = volumes_s / vol_sma20   # >1 = above-average volume; None when insufficient history
+
+        vol_ratio_l = _nan_to_none(vol_ratio)
 
         daily_return    = closes_s.pct_change(1)
         return_3d       = closes_s.pct_change(3)
@@ -181,6 +190,8 @@ class MarketObserverAgent:
                     "high_10d": high_10d_l[i],
                     "low_10d":  low_10d_l[i],
                     "high_20d": high_20d_l[i],
+                    # ---- Volume ----
+                    "vol_ratio": vol_ratio_l[i],  # today's volume / 20-day avg volume
                 },
                 previous_indicators={
                     # ---- Medium-term trend (existing) ----
