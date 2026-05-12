@@ -475,10 +475,16 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
     n_proposed = len([d for d in proposed if d is not None])
     cb_blocked = 0
 
+    # Sort BUY-intent signals by weight descending so higher-weight strategies
+    # are evaluated (and potentially cash-gated) before lower-weight ones.
+    proposed = sorted(
+        (d for d in proposed if d is not None),
+        key=lambda d: getattr(d, "weight", 1.0) if d.action == "BUY" else -1.0,
+        reverse=True,
+    )
+
     final_decisions = []
     for decision in proposed:
-        if decision is None:
-            continue
         state = extended_states.get(decision.symbol)
         if state is None:
             continue
