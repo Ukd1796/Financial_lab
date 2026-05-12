@@ -229,6 +229,9 @@ class AdaptiveStrategySelector:
         self._confirmed_regime: str | None  = None   # last regime confirmed for ≥ stability_weeks
         self._pending_regime: str | None    = None   # candidate not yet confirmed
         self._pending_count: int            = 0      # consecutive weeks seen for pending
+        # How many consecutive rebalances we have been in the confirmed regime.
+        # Passed to the LLM so it knows whether to be cautious (week 1) or confident (week 3+).
+        self._confirmed_weeks: int          = 0
         # Last raw LLM text response — captured in _call_llm, read by rebalance()
         self._last_raw_response: str | None = None
 
@@ -259,12 +262,14 @@ class AdaptiveStrategySelector:
             self._confirmed_regime = label
             self._pending_regime   = None
             self._pending_count    = 0
+            self._confirmed_weeks  = 1
             effective_label        = label
         elif label == self._confirmed_regime:
             # Still in the confirmed regime — reset any pending candidate
-            self._pending_regime = None
-            self._pending_count  = 0
-            effective_label      = label
+            self._pending_regime   = None
+            self._pending_count    = 0
+            self._confirmed_weeks += 1
+            effective_label        = label
         else:
             # Different from confirmed — track as pending
             if label == self._pending_regime:
@@ -284,6 +289,7 @@ class AdaptiveStrategySelector:
                 self._confirmed_regime = label
                 self._pending_regime   = None
                 self._pending_count    = 0
+                self._confirmed_weeks  = 1
                 effective_label        = label
             else:
                 # Not yet confirmed — hold the previous allocation
@@ -415,21 +421,44 @@ class AdaptiveStrategySelector:
         confidence: str,
     ) -> str:
         """Build the LLM prompt with regime classification + rolling history."""
-        # Rolling history block
+        # --- Rolling history block with SWITCH annotations ---
         history_lines = []
+        prev_label = None
         for h in self._snapshot_history:
+            switch_tag = "  ← SWITCH" if (prev_label is not None and h["label"] != prev_label) else ""
             history_lines.append(
                 f"  {h['date']}  [{h['label']}/{h['confidence']}]"
                 f"  UP={h['pct_uptrend']:.1%}"
                 f"  DOWN={h['pct_downtrend']:.1%}"
                 f"  ATR={h['avg_atr_pct']:.2%}"
+                + switch_tag
             )
+            prev_label = h["label"]
         history_block = (
             "Recent regime history (oldest → newest):\n" + "\n".join(history_lines)
             if history_lines else "  (first rebalance — no history yet)"
         )
 
-        # Hard rule for the classified regime
+        # --- Inferred trend direction when RegimeContextAgent is absent ---
+        inferred_trend = snapshot.get("trend")  # set by RegimeContextAgent if active
+        if inferred_trend is None and len(self._snapshot_history) >= 2:
+            delta = (self._snapshot_history[-1]["pct_downtrend"]
+                     - self._snapshot_history[-2]["pct_downtrend"])
+            if delta > 0.03:
+                inferred_trend = "DETERIORATING"
+            elif delta < -0.03:
+                inferred_trend = "IMPROVING"
+            else:
+                inferred_trend = "STABLE"
+
+        # --- Regime age context ---
+        regime_age_note = (
+            f"Regime confirmed for: {self._confirmed_weeks} rebalance(s)\n"
+            f"  (Week 1 = just switched — stay close to equal weight until confirmed.\n"
+            f"   Week 3+ = well-established — apply MANDATORY RULE fully.)"
+        )
+
+        # --- Hard rule for the classified regime ---
         regime_rule = _REGIME_ALLOCATION_RULES.get(label, _REGIME_ALLOCATION_RULES["MIXED"])
 
         expected_json = (
@@ -438,7 +467,7 @@ class AdaptiveStrategySelector:
             + "}"
         )
 
-        # Broad breadth block (only when RegimeContextAgent is active)
+        # --- Broad breadth block (only when RegimeContextAgent is active) ---
         broad_regime = snapshot.get("broad_regime")
         broad_block = ""
         if broad_regime:
@@ -449,6 +478,8 @@ class AdaptiveStrategySelector:
                 f"  % above SMA_50:  {snapshot.get('pct_above_sma50_broad', 0):.1%}\n"
                 f"  Adv/Dec ratio:   {snapshot.get('advance_decline_ratio', 0):.1%}\n"
             )
+        elif inferred_trend:
+            broad_block = f"\n  Inferred breadth trend: {inferred_trend} (computed from history)\n"
 
         return f"""You are allocating capital across five NSE Indian equity trading strategies for the next week.
 
@@ -461,6 +492,8 @@ CURRENT REGIME (Python-classified, confidence {confidence}):
   % HIGH_VOL:  {snapshot.get('pct_high_vol', 0):.1%}
   Avg ATR%:    {snapshot.get('avg_atr_pct', 0):.2%}
 {broad_block}
+{regime_age_note}
+
 {history_block}
 
 {self._performance_table}
@@ -472,8 +505,9 @@ GLOBAL RULES (always apply):
 - Weights sum to 1.0 exactly. All values in [0.0, 1.0].
 - Minimum viable weight: 0.05. Either 0.0 (disabled) or ≥ 0.05.
 - Follow the MANDATORY RULE above. Do not soften it.
-- If the regime history shows a trend (e.g. DOWNTREND rising for 3+ weeks), lean more
-  defensively than a single-week snapshot would suggest.
+- If breadth trend is DETERIORATING, lean more defensively than the regime label alone suggests.
+- If breadth trend is IMPROVING, you may lean slightly more offensively within rule bounds.
+- Rows marked ← SWITCH in history indicate a regime change that week.
 
 Respond ONLY with a JSON object, no explanation, no markdown:
 {expected_json}"""

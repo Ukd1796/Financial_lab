@@ -173,7 +173,7 @@ class BacktestEngine:
                 broad_regime = regime_snapshot.get("broad_regime")
                 if broad_regime == "TRANSITION_UP":
                     effective_downtrend_pct = min(market_downtrend_pct, 0.30)
-                elif broad_regime in ("BEAR_WATCH", "BEAR_TRANSITION"):
+                elif broad_regime == "BEAR_EARLY":
                     effective_downtrend_pct = min(market_downtrend_pct, 0.38)
 
             # --- Risk + execution ---

@@ -350,6 +350,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         selector._confirmed_regime = sel_state.get("confirmed_regime")
         selector._pending_regime   = sel_state.get("pending_regime")
         selector._pending_count    = sel_state.get("pending_count", 0)
+        selector._confirmed_weeks  = sel_state.get("confirmed_weeks", 0)
         # Only restore weights when strategy set is unchanged
         saved_weights = sel_state.get("weights", {})
         if saved_weights and set(saved_weights.keys()) == set(enabled_internals):
@@ -364,6 +365,7 @@ def _run_session(sess: dict, daily_symbol_states: dict, regime_snapshot: dict,
         "confirmed_regime": selector._confirmed_regime,
         "pending_regime":   selector._pending_regime,
         "pending_count":    selector._pending_count,
+        "confirmed_weeks":  selector._confirmed_weeks,
         "weights":          selector.weights,
     })
 
