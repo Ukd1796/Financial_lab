@@ -3,22 +3,32 @@ Baseline backtest for Ujjwal's live portfolio configuration.
 
 Profile (from pt_ujjwal / user_strategies id=f786f5cc):
   Universe:          broad150 (150 symbols: Nifty50 + NiftyNext50 + NiftyMidcap50)
-  Strategies:        all 5 enabled at equal weight (0.20 each)
+  Strategies:        all 5 enabled
   max_position_pct:  10%
   risk_per_trade_pct: 0.5%
   pause_threshold_pct: 35%  → max_downtrend_pct=0.35 in RiskAgent
   capital:           ₹1,00,000
 
-Runs three configs per period:
-  A. EqualWeight (5-strat) — deterministic, no LLM calls
-  B. Adaptive    (5-strat) — LLM weight updates every 5 days
-  C. Adaptive+RCA           — Adaptive + RegimeContextAgent breadth signals
+Usage:
+  python run_ujjwal_baseline.py              # EqualWeight — fast, deterministic, no LLM
+  python run_ujjwal_baseline.py --adaptive   # AdaptiveStrategySelector — makes OpenAI calls
+
+Default (no flag):
+  Runs EqualWeight (all weights=0.20). Compares against Part H hardcoded baseline
+  (_VOLFILTER_RESULTS). Use this for fast regression checks after any code change.
+
+--adaptive:
+  Runs AdaptiveStrategySelector with weekly LLM rebalance (gpt-4o-mini, every 5 days).
+  Compares against _ADAPTIVE_BASELINE (hardcoded after the first --adaptive run).
+  Use this to measure LLM prompt changes: run once pre-change → fill _ADAPTIVE_BASELINE
+  → make changes → run again → compare.
 
 Output: docs/baseline_backtest_results.md
 """
 
 import sys
 import io
+import argparse
 from datetime import datetime
 
 # Load .env before any app imports so DATABASE_URL is available at import time
@@ -369,6 +379,18 @@ _VOLFILTER_RESULTS = {
     "Live  2025–2026":  (-0.60, -2.98, 4.76, 39.3,  704),
 }
 
+# Pre-change Adaptive baseline — regime_stability_weeks=2, prompt v1 (2026-05-11)
+# Format: (sharpe, return_pct, maxdd_pct, win_rate_pct, num_trades)
+_ADAPTIVE_BASELINE: dict = {
+    "Full  2018–2024":  (1.31, 110.0, 16.9, 43.6, 5207),
+    "Bull  2019–2020":  (-0.80, -6.2, 11.0, 39.9, 867),
+    "Crash 2020":       (2.35, 30.4,  7.0, 46.8,  891),
+    "Recov 2020–2021":  (2.84, 77.8,  8.8, 48.5, 1799),
+    "Bear  2022":       (0.84,  6.5,  7.9, 40.5,  615),
+    "Recent2022–2024":  (1.78, 46.4,  7.9, 44.9, 1767),
+    "Live  2025–2026":  (-0.81, -6.0, 8.3, 36.6,  644),
+}
+
 
 def _make_router():
     return MultiStrategyRouter(
@@ -386,12 +408,18 @@ def _make_router():
     )
 
 
-def run_baseline():
+def run_baseline(adaptive: bool = False):
     _base      = MarketDataRepository()
     repository = OHLCCache(_base)
     repository.warm_all(BROAD_UNIVERSE)
 
     new_results = {}
+    mode_label  = "Adaptive (LLM)" if adaptive else "EqW  Current"
+
+    if adaptive:
+        out("  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)")
+    else:
+        out("  Mode: EqualWeight (deterministic, no LLM calls)")
 
     for period_label, (start_date, end_date) in PERIODS.items():
         ctx = PeriodContext(repository, start_date, end_date)
@@ -406,28 +434,58 @@ def run_baseline():
         out("=" * (ROW_W + 2))
         out(HEADER)
 
-        out(f"{DIVIDER}  [Current] ATR×2.5 trailing stop + volume filter")
         router = _make_router()
-        result = _run_one(repository, router, ctx, atr_multiplier=2.5)
-        out(_fmt_row("EqW  Current", result))
+
+        if adaptive:
+            out(f"{DIVIDER}  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)")
+            selector = AdaptiveStrategySelector(
+                strategy_names=_STRAT_NAMES,
+                model="gpt-4o-mini",
+                rebalance_frequency_days=5,
+                regime_stability_weeks=2,
+                verbose=True,
+            )
+            result = _run_one(repository, router, ctx, atr_multiplier=2.5,
+                              adaptive_selector=selector)
+        else:
+            out(f"{DIVIDER}  [Current] ATR×2.5 trailing stop + volume filter")
+            result = _run_one(repository, router, ctx, atr_multiplier=2.5)
+
+        out(_fmt_row(mode_label, result))
         new_results[period_label.strip()] = result
 
-    # ── Summary: Part H baseline vs TrendPB exit-only vs 6-Strat RelStr ──
-    # CONFIGS: (label, static_tuple_dict | None)
-    # None → look up from the matching live results dict
-    CONFIGS = [
-        ("Part H baseline", _VOLFILTER_RESULTS),  # hardcoded reference
-        ("Current",         None),                # this fresh run
-    ]
+    # ── Summary ──
+    if adaptive:
+        has_baseline = bool(_ADAPTIVE_BASELINE)
+        CONFIGS = [
+            ("Adaptive baseline", _ADAPTIVE_BASELINE if has_baseline else None),
+            ("Adaptive current",  None),
+        ]
+        summary_note = (
+            "Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).\n"
+            "  Adaptive current: this run — measures LLM prompt improvement.\n"
+            + ("  NOTE: _ADAPTIVE_BASELINE is empty — fill it after the first --adaptive run."
+               if not has_baseline else "")
+        )
+        summary_title = "SUMMARY — Adaptive pre-change vs post-change"
+    else:
+        CONFIGS = [
+            ("Part H baseline", _VOLFILTER_RESULTS),
+            ("EqW Current",     None),
+        ]
+        summary_note = (
+            "Part H: ATR×2.5 trailing stop + volume filter (committed reference).\n"
+            "  EqW Current: this run — confirms no regression from code changes."
+        )
+        summary_title = "SUMMARY — EqualWeight current vs Part H baseline"
 
     out()
     out("=" * (ROW_W + 2))
-    out("  SUMMARY — Current config vs Part H baseline")
-    out("  Part H: ATR×2.5 trailing stop + volume filter (committed reference).")
-    out("  Current: same config — confirms no regression from reverts.")
+    out(f"  {summary_title}")
+    out(f"  {summary_note}")
     out("=" * (ROW_W + 2))
 
-    col_w = 14
+    col_w = 18
 
     def _hdr():
         return ("  " + f"{'Period':<20} " +
@@ -444,11 +502,8 @@ def run_baseline():
         ("Return %",               1, lambda v: f"{v:>{col_w-1}.1f}%"),
         ("MaxDD %  (lower=better)",2, lambda v: f"{v:>{col_w-1}.1f}%"),
         ("Win Rate %",             3, lambda v: f"{v:>{col_w-1}.1f}%"),
-        ("Profit Factor",          None, None),  # placeholder — extracted below
         ("#Trades",                4, lambda v: f"{v:>{col_w}}"),
     ]:
-        if field_idx is None:
-            continue
         out(f"\n  {metric_name}")
         out(_hdr())
         out(f"  {'-' * (20 + len(CONFIGS) * col_w + 2)}")
@@ -461,20 +516,26 @@ def run_baseline():
 
     out()
     out(f"  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    out(f"  Mode: {'--adaptive (LLM)' if adaptive else 'EqualWeight (deterministic)'}")
     out(f"  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)")
     out("=" * (ROW_W + 2))
     out("=" * (ROW_W + 2))
 
 
-def append_results_to_md():
+def append_results_to_md(adaptive: bool = False):
     """Append latest run to the existing MD file."""
     md_path = "docs/baseline_backtest_results.md"
+    mode_desc = (
+        "AdaptiveStrategySelector (gpt-4o-mini, weekly LLM rebalance)."
+        if adaptive else
+        "ATR×2.5 trailing stop + volume filter (vol_ratio>1.2)."
+    )
     results_block = (
         "\n\n---\n\n"
         "## Latest Run\n\n"
-        "> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  \n"
-        "> All experimental changes (regime-conditional stop, RSI threshold, TrendPB exit target) reverted.\n\n"
+        f"> Config: {mode_desc}  \n\n"
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  \n"
+        f"**Mode:** {'--adaptive' if adaptive else 'EqualWeight'}  \n"
         f"**Costs:** 0.10% commission + 0.05% slippage per side\n\n"
         "```\n"
         + "\n".join(_lines)
@@ -486,5 +547,13 @@ def append_results_to_md():
 
 
 if __name__ == "__main__":
-    run_baseline()
+    parser = argparse.ArgumentParser(description="Ujjwal baseline backtest runner")
+    parser.add_argument(
+        "--adaptive",
+        action="store_true",
+        help="Run with AdaptiveStrategySelector (makes OpenAI API calls, ~10-20 min)",
+    )
+    args = parser.parse_args()
+    run_baseline(adaptive=args.adaptive)
+    append_results_to_md(adaptive=args.adaptive)
     append_results_to_md()
