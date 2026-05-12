@@ -177,10 +177,14 @@ class BacktestEngine:
                     effective_downtrend_pct = min(market_downtrend_pct, 0.38)
 
             # --- Risk + execution ---
+            # Process higher-weight strategy signals first so they claim cash
+            # before lower-weight strategies when capital is constrained.
+            proposed_decisions = sorted(
+                (d for d in proposed_decisions if d is not None),
+                key=lambda d: getattr(d, "weight", 1.0),
+                reverse=True,
+            )
             for decision in proposed_decisions:
-
-                if decision is None:
-                    continue
 
                 symbol       = decision.symbol
                 market_state = daily_symbol_states.get(symbol)
