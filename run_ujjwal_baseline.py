@@ -379,16 +379,17 @@ _VOLFILTER_RESULTS = {
     "Live  2025–2026":  (-0.60, -2.98, 4.76, 39.3,  704),
 }
 
-# Pre-change Adaptive baseline — regime_stability_weeks=2, prompt v1 (2026-05-11)
+# Adaptive baseline — prompt v2 + weight-ordering fix (2026-05-13)
+# stability_weeks=2, regime_age hint, inferred trend, SWITCH annotations, BUY sort
 # Format: (sharpe, return_pct, maxdd_pct, win_rate_pct, num_trades)
 _ADAPTIVE_BASELINE: dict = {
-    "Full  2018–2024":  (1.31, 110.0, 16.9, 43.6, 5207),
-    "Bull  2019–2020":  (-0.80, -6.2, 11.0, 39.9, 867),
-    "Crash 2020":       (2.35, 30.4,  7.0, 46.8,  891),
-    "Recov 2020–2021":  (2.84, 77.8,  8.8, 48.5, 1799),
-    "Bear  2022":       (0.84,  6.5,  7.9, 40.5,  615),
-    "Recent2022–2024":  (1.78, 46.4,  7.9, 44.9, 1767),
-    "Live  2025–2026":  (-0.81, -6.0, 8.3, 36.6,  644),
+    "Full  2018–2024":  (1.36, 116.6, 17.1, 44.1, 5191),
+    "Bull  2019–2020":  (-0.71, -5.8, 10.7, 39.4, 886),
+    "Crash 2020":       (2.32, 29.7,  7.5, 47.3,  903),
+    "Recov 2020–2021":  (2.88, 80.3,  9.0, 49.2, 1785),
+    "Bear  2022":       (0.85,  6.5,  7.9, 41.5,  621),
+    "Recent2022–2024":  (1.57, 38.9,  7.8, 43.9, 1753),
+    "Live  2025–2026":  (-0.77, -5.9, 8.1, 36.4,  635),
 }
 
 
