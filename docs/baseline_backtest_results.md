@@ -2729,3 +2729,85 @@ _REGIME_MULTIPLIER = {
 ========================================================================
 ========================================================================
 ```
+
+
+---
+
+## Latest Run
+
+> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  
+
+**Generated:** 2026-05-16 20:28  
+**Mode:** EqualWeight  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+
+==========================================================================================
+  LOW CAPITAL TEST — capital-aware universe price filter
+  Period: Full 2022–2026  (2022-01-01 → 2026-03-24)
+  Strategies: 5 equal-weight (0.20 each)  |  max_pos=10%  |  min_order=₹500 (filtered runs)
+==========================================================================================
+  Capital        Config              Sharpe    Return    MaxDD    WR%  #Trades  Price Ceiling
+  -------------------------------------------------------------------------------------
+  ₹10,000        A) No filter          0.97      7.0%     2.0%  46.3%      624  
+  ₹10,000        B) Price filter       0.00      0.0%     0.0%   0.0%        0  ≤ ₹200
+
+  ₹25,000        A) No filter          0.75     10.1%     3.6%  46.2%     1278  
+  ₹25,000        B) Price filter       0.00      0.0%     0.0%   0.0%        0  ≤ ₹500
+
+  ₹50,000        A) No filter          0.64     12.9%     6.2%  45.8%     2201  
+  ₹50,000        B) Price filter       0.51      9.1%     8.2%  43.8%     1828  ≤ ₹1000
+
+  ₹1,00,000      A) No filter          0.58     15.3%     6.5%  45.3%     3248  
+  ₹1,00,000      B) Price filter       0.59     15.8%     6.5%  45.5%     3243  ≤ ₹2000
+
+
+  INTERPRETATION GUIDE:
+  • #Trades near 0 with 'No filter' = capital too low, all signals sizing to qty=0
+  • 'Price filter' should show meaningful #Trades even at low capital
+  • Sharpe/WR% may differ as the universe shifts to cheaper mid-cap names
+  • ₹1,00,000 rows should be nearly identical (filter ceiling ≫ all stock prices)
+==========================================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  
+
+**Generated:** 2026-05-16 20:40  
+**Mode:** EqualWeight  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+
+==========================================================================================
+  LOW CAPITAL TEST — capital-aware universe price filter
+  Period: Full 2022–2026  (2022-01-01 → 2026-03-24)
+  Strategies: 5 equal-weight (0.20 each)  |  max_pos=10%  |  min_order=₹500 (filtered runs)
+==========================================================================================
+  Capital        Config              Sharpe    Return    MaxDD    WR%  #Trades  Price Ceiling
+  -------------------------------------------------------------------------------------
+  ₹10,000        A) No filter          0.97      7.0%     2.0%  46.3%      624  
+  ₹10,000        B) Price filter       0.91      5.9%     2.5%  43.3%      487  ≤ ₹200  min_order=₹100
+
+  ₹25,000        A) No filter          0.75     10.1%     3.6%  46.2%     1278  
+  ₹25,000        B) Price filter       0.67      8.2%     4.6%  44.0%     1047  ≤ ₹500  min_order=₹250
+
+  ₹50,000        A) No filter          0.64     12.9%     6.2%  45.8%     2201  
+  ₹50,000        B) Price filter       0.51      9.1%     8.2%  43.8%     1828  ≤ ₹1000  min_order=₹500
+
+  ₹1,00,000      A) No filter          0.58     15.3%     6.5%  45.3%     3248  
+  ₹1,00,000      B) Price filter       0.57     14.3%     7.9%  45.3%     2825  ≤ ₹2000  min_order=₹1000
+
+
+  INTERPRETATION GUIDE:
+  • #Trades near 0 with 'No filter' = capital too low, all signals sizing to qty=0
+  • 'Price filter' should show meaningful #Trades even at low capital
+  • Sharpe/WR% may differ as the universe shifts to cheaper mid-cap names
+  • ₹1,00,000 rows should be nearly identical (filter ceiling ≫ all stock prices)
+==========================================================================================
+```
