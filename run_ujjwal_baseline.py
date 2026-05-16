@@ -557,4 +557,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     run_baseline(adaptive=args.adaptive)
     append_results_to_md(adaptive=args.adaptive)
-    append_results_to_md()
