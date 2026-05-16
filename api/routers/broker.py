@@ -138,12 +138,13 @@ def connect_broker(broker: str, body: ConnectRequest):
         now = datetime.utcnow()
 
         if existing:
+            # Clear the old token — access_token_enc = NULL signals "OAuth in progress"
             db.execute(
                 text("""
                     UPDATE broker_connections
                     SET access_token_enc = NULL,
                         token_fetched_at = NULL,
-                        status           = 'connecting',
+                        status           = 'connected',
                         updated_at       = :now
                     WHERE user_id = :uid AND broker = :broker
                 """),
@@ -157,7 +158,7 @@ def connect_broker(broker: str, body: ConnectRequest):
                     INSERT INTO broker_connections
                         (id, user_id, broker, api_key, api_secret_enc, status, created_at, updated_at)
                     VALUES
-                        (gen_random_uuid(), :uid, :broker, :api_key, 'platform_managed', 'connecting', :now, :now)
+                        (gen_random_uuid(), :uid, :broker, :api_key, 'platform_managed', 'connected', :now, :now)
                 """),
                 {
                     "uid":     body.user_id,
@@ -185,8 +186,8 @@ def broker_callback(
 ):
     """
     OAuth callback handler. Zerodha redirects here with ?request_token=xxx.
-    user_id is NOT sent by Zerodha — we resolve the user from the most recent
-    'connecting' row in broker_connections (timing-based, safe for small platforms).
+    user_id is NOT sent by Zerodha — we resolve the user from the most recently
+    initiated row (access_token_enc IS NULL = OAuth in progress, timing-based).
     """
     if broker not in _BROKER_HANDLERS:
         return _html_error("Unsupported broker.")
@@ -218,14 +219,14 @@ def broker_callback(
             ).fetchone()
             resolved_uid = user_id if row else None
         else:
-            # Resolve by timing: find the most recently initiated 'connecting' row.
-            # First try matching broker_user_id (re-auth case), then fall back to
-            # the most recent pending row (first-time auth).
+            # Resolve by timing: find the most recently initiated row where
+            # access_token_enc IS NULL (token not yet received = OAuth in progress).
+            # First try matching broker_user_id (re-auth case), then any recent row.
             row = db.execute(
                 text("""
                     SELECT user_id FROM broker_connections
                     WHERE broker = :broker
-                      AND status = 'connecting'
+                      AND access_token_enc IS NULL
                       AND updated_at > :cutoff
                       AND (:buid = '' OR broker_user_id IS NULL OR broker_user_id = :buid)
                     ORDER BY updated_at DESC
@@ -325,7 +326,7 @@ def broker_status(user_id: str = Query(...), broker: str = Query("zerodha")):
     finally:
         db.close()
 
-    if row is None or row.status == "connecting":
+    if row is None or row.access_token_enc is None:
         return {"connected": False, "broker": broker}
 
     token_valid = _token_is_valid(row.token_fetched_at) and bool(row.access_token_enc)
