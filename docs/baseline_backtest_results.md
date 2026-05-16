@@ -2117,3 +2117,615 @@ _REGIME_MULTIPLIER = {
 ========================================================================
 ========================================================================
 ```
+
+
+---
+
+## Latest Run
+
+> Config: AdaptiveStrategySelector (gpt-4o-mini, weekly LLM rebalance).  
+
+**Generated:** 2026-05-12 18:31  
+**Mode:** --adaptive  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.36   116.62%   17.11%    1.47  44.1%     5191
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.71    -5.79%   10.73%    0.77  39.4%      886
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.32    29.68%    7.51%    1.85  47.3%      903
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.88    80.27%    9.01%    2.02  49.2%     1785
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             0.85     6.45%    7.87%    1.29  41.5%      621
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.57    38.91%    7.80%    1.47  43.9%     1753
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.77    -5.93%    8.06%    0.77  36.4%      635
+
+========================================================================
+  SUMMARY — Adaptive pre-change vs post-change
+  Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).
+  Adaptive current: this run — measures LLM prompt improvement.
+
+========================================================================
+
+  Sharpe ratio
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    1.31              1.36
+  Bull  2019–2020                   -0.80             -0.71
+  Crash 2020                         2.35              2.32
+  Recov 2020–2021                    2.84              2.88
+  Bear  2022                         0.84              0.85
+  Recent2022–2024                    1.78              1.57
+  Live  2025–2026                   -0.81             -0.77
+
+  Return %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                  110.0%            116.6%
+  Bull  2019–2020                   -6.2%             -5.8%
+  Crash 2020                        30.4%             29.7%
+  Recov 2020–2021                   77.8%             80.3%
+  Bear  2022                         6.5%              6.5%
+  Recent2022–2024                   46.4%             38.9%
+  Live  2025–2026                   -6.0%             -5.9%
+
+  MaxDD %  (lower=better)
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   16.9%             17.1%
+  Bull  2019–2020                   11.0%             10.7%
+  Crash 2020                         7.0%              7.5%
+  Recov 2020–2021                    8.8%              9.0%
+  Bear  2022                         7.9%              7.9%
+  Recent2022–2024                    7.9%              7.8%
+  Live  2025–2026                    8.3%              8.1%
+
+  Win Rate %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   43.6%             44.1%
+  Bull  2019–2020                   39.9%             39.4%
+  Crash 2020                        46.8%             47.3%
+  Recov 2020–2021                   48.5%             49.2%
+  Bear  2022                        40.5%             41.5%
+  Recent2022–2024                   44.9%             43.9%
+  Live  2025–2026                   36.6%             36.4%
+
+  #Trades
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    5207              5191
+  Bull  2019–2020                     867               886
+  Crash 2020                          891               903
+  Recov 2020–2021                    1799              1785
+  Bear  2022                          615               621
+  Recent2022–2024                    1767              1753
+  Live  2025–2026                     644               635
+
+  Generated: 2026-05-12 18:31
+  Mode: --adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  
+
+**Generated:** 2026-05-12 18:31  
+**Mode:** EqualWeight  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.36   116.62%   17.11%    1.47  44.1%     5191
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.71    -5.79%   10.73%    0.77  39.4%      886
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.32    29.68%    7.51%    1.85  47.3%      903
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.88    80.27%    9.01%    2.02  49.2%     1785
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             0.85     6.45%    7.87%    1.29  41.5%      621
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.57    38.91%    7.80%    1.47  43.9%     1753
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.77    -5.93%    8.06%    0.77  36.4%      635
+
+========================================================================
+  SUMMARY — Adaptive pre-change vs post-change
+  Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).
+  Adaptive current: this run — measures LLM prompt improvement.
+
+========================================================================
+
+  Sharpe ratio
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    1.31              1.36
+  Bull  2019–2020                   -0.80             -0.71
+  Crash 2020                         2.35              2.32
+  Recov 2020–2021                    2.84              2.88
+  Bear  2022                         0.84              0.85
+  Recent2022–2024                    1.78              1.57
+  Live  2025–2026                   -0.81             -0.77
+
+  Return %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                  110.0%            116.6%
+  Bull  2019–2020                   -6.2%             -5.8%
+  Crash 2020                        30.4%             29.7%
+  Recov 2020–2021                   77.8%             80.3%
+  Bear  2022                         6.5%              6.5%
+  Recent2022–2024                   46.4%             38.9%
+  Live  2025–2026                   -6.0%             -5.9%
+
+  MaxDD %  (lower=better)
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   16.9%             17.1%
+  Bull  2019–2020                   11.0%             10.7%
+  Crash 2020                         7.0%              7.5%
+  Recov 2020–2021                    8.8%              9.0%
+  Bear  2022                         7.9%              7.9%
+  Recent2022–2024                    7.9%              7.8%
+  Live  2025–2026                    8.3%              8.1%
+
+  Win Rate %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   43.6%             44.1%
+  Bull  2019–2020                   39.9%             39.4%
+  Crash 2020                        46.8%             47.3%
+  Recov 2020–2021                   48.5%             49.2%
+  Bear  2022                        40.5%             41.5%
+  Recent2022–2024                   44.9%             43.9%
+  Live  2025–2026                   36.6%             36.4%
+
+  #Trades
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    5207              5191
+  Bull  2019–2020                     867               886
+  Crash 2020                          891               903
+  Recov 2020–2021                    1799              1785
+  Bear  2022                          615               621
+  Recent2022–2024                    1767              1753
+  Live  2025–2026                     644               635
+
+  Generated: 2026-05-12 18:31
+  Mode: --adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: AdaptiveStrategySelector (gpt-4o-mini, weekly LLM rebalance).  
+
+**Generated:** 2026-05-13 01:22  
+**Mode:** --adaptive  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.29   109.44%   16.71%    1.43  43.5%     5020
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.93    -6.88%   10.78%    0.72  39.4%      852
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.26    29.21%    7.84%    1.85  47.3%      867
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.94    84.29%    8.21%    2.08  48.9%     1730
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             0.83     6.27%    7.54%    1.27  42.6%      594
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.57    39.37%    7.50%    1.48  44.2%     1694
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.86    -6.42%    8.74%    0.75  35.9%      621
+
+========================================================================
+  SUMMARY — Adaptive pre-change vs post-change
+  Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).
+  Adaptive current: this run — measures LLM prompt improvement.
+
+========================================================================
+
+  Sharpe ratio
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    1.36              1.29
+  Bull  2019–2020                   -0.71             -0.93
+  Crash 2020                         2.32              2.26
+  Recov 2020–2021                    2.88              2.94
+  Bear  2022                         0.85              0.83
+  Recent2022–2024                    1.57              1.57
+  Live  2025–2026                   -0.77             -0.86
+
+  Return %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                  116.6%            109.4%
+  Bull  2019–2020                   -5.8%             -6.9%
+  Crash 2020                        29.7%             29.2%
+  Recov 2020–2021                   80.3%             84.3%
+  Bear  2022                         6.5%              6.3%
+  Recent2022–2024                   38.9%             39.4%
+  Live  2025–2026                   -5.9%             -6.4%
+
+  MaxDD %  (lower=better)
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   17.1%             16.7%
+  Bull  2019–2020                   10.7%             10.8%
+  Crash 2020                         7.5%              7.8%
+  Recov 2020–2021                    9.0%              8.2%
+  Bear  2022                         7.9%              7.5%
+  Recent2022–2024                    7.8%              7.5%
+  Live  2025–2026                    8.1%              8.7%
+
+  Win Rate %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   44.1%             43.5%
+  Bull  2019–2020                   39.4%             39.4%
+  Crash 2020                        47.3%             47.3%
+  Recov 2020–2021                   49.2%             48.9%
+  Bear  2022                        41.5%             42.6%
+  Recent2022–2024                   43.9%             44.2%
+  Live  2025–2026                   36.4%             35.9%
+
+  #Trades
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    5191              5020
+  Bull  2019–2020                     886               852
+  Crash 2020                          903               867
+  Recov 2020–2021                    1785              1730
+  Bear  2022                          621               594
+  Recent2022–2024                    1753              1694
+  Live  2025–2026                     635               621
+
+  Generated: 2026-05-13 01:22
+  Mode: --adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: ATR×2.5 trailing stop + volume filter (vol_ratio>1.2).  
+
+**Generated:** 2026-05-13 01:22  
+**Mode:** EqualWeight  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)
+
+========================================================================
+  Period: Full  2018–2024   (2018-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.29   109.44%   16.71%    1.43  43.5%     5020
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.93    -6.88%   10.78%    0.72  39.4%      852
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.26    29.21%    7.84%    1.85  47.3%      867
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             2.94    84.29%    8.21%    2.08  48.9%     1730
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             0.83     6.27%    7.54%    1.27  42.6%      594
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)             1.57    39.37%    7.50%    1.48  44.2%     1694
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)
+  Adaptive (LLM)            -0.86    -6.42%    8.74%    0.75  35.9%      621
+
+========================================================================
+  SUMMARY — Adaptive pre-change vs post-change
+  Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).
+  Adaptive current: this run — measures LLM prompt improvement.
+
+========================================================================
+
+  Sharpe ratio
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    1.36              1.29
+  Bull  2019–2020                   -0.71             -0.93
+  Crash 2020                         2.32              2.26
+  Recov 2020–2021                    2.88              2.94
+  Bear  2022                         0.85              0.83
+  Recent2022–2024                    1.57              1.57
+  Live  2025–2026                   -0.77             -0.86
+
+  Return %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                  116.6%            109.4%
+  Bull  2019–2020                   -5.8%             -6.9%
+  Crash 2020                        29.7%             29.2%
+  Recov 2020–2021                   80.3%             84.3%
+  Bear  2022                         6.5%              6.3%
+  Recent2022–2024                   38.9%             39.4%
+  Live  2025–2026                   -5.9%             -6.4%
+
+  MaxDD %  (lower=better)
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   17.1%             16.7%
+  Bull  2019–2020                   10.7%             10.8%
+  Crash 2020                         7.5%              7.8%
+  Recov 2020–2021                    9.0%              8.2%
+  Bear  2022                         7.9%              7.5%
+  Recent2022–2024                    7.8%              7.5%
+  Live  2025–2026                    8.1%              8.7%
+
+  Win Rate %
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                   44.1%             43.5%
+  Bull  2019–2020                   39.4%             39.4%
+  Crash 2020                        47.3%             47.3%
+  Recov 2020–2021                   49.2%             48.9%
+  Bear  2022                        41.5%             42.6%
+  Recent2022–2024                   43.9%             44.2%
+  Live  2025–2026                   36.4%             35.9%
+
+  #Trades
+  Period                Adaptive baseline  Adaptive current
+  ----------------------------------------------------------
+  Full  2018–2024                    5191              5020
+  Bull  2019–2020                     886               852
+  Crash 2020                          903               867
+  Recov 2020–2021                    1785              1730
+  Bear  2022                          621               594
+  Recent2022–2024                    1753              1694
+  Live  2025–2026                     635               621
+
+  Generated: 2026-05-13 01:22
+  Mode: --adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```

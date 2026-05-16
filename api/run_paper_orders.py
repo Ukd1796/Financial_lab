@@ -16,6 +16,7 @@
 #   - Reads sessions from Supabase B paper_trade_sessions (all active)
 #   - Filters signal_queue by session_id — each user's fills are isolated
 
+import os
 import sys
 import uuid
 from datetime import date, datetime
@@ -25,6 +26,7 @@ load_dotenv()
 
 from sqlalchemy import select, and_
 
+from app.broker.base import BrokerAdapter
 from app.broker.paper_adapter import PaperAdapter
 from app.core.database import SessionLocal
 from app.core.notify import send_email
@@ -42,7 +44,8 @@ def _load_active_sessions() -> list[dict]:
     db = SessionLocal()
     try:
         rows = db.execute(text(
-            "SELECT session_id, strategy_id, strategy_name, starting_capital "
+            "SELECT session_id, strategy_id, strategy_name, starting_capital, "
+            "user_id, COALESCE(live_mode, false) AS live_mode, broker "
             "FROM paper_trade_sessions WHERE status = 'active'"
         )).fetchall()
         return [dict(r._mapping) for r in rows]
@@ -53,11 +56,31 @@ def _load_active_sessions() -> list[dict]:
         db.close()
 
 
+def _get_broker(sess: dict) -> BrokerAdapter:
+    """Return KiteAdapter for live sessions, PaperAdapter otherwise."""
+    if sess.get("live_mode") and sess.get("broker") == "zerodha":
+        from api.routers.broker import get_active_access_token
+        from app.broker.kite_adapter import KiteAdapter
+        user_id = sess.get("user_id")
+        if not user_id:
+            raise RuntimeError("live_mode session is missing user_id")
+        token = get_active_access_token(str(user_id), "zerodha")
+        if not token:
+            raise RuntimeError(
+                "Zerodha token expired — re-authenticate before 9:15 AM IST"
+            )
+        api_key = os.environ.get("KITE_API_KEY")
+        if not api_key:
+            raise RuntimeError("KITE_API_KEY not set in environment")
+        return KiteAdapter(api_key, token)
+    return PaperAdapter()
+
+
 # ---------------------------------------------------------------------------
 # Per-session order processing
 # ---------------------------------------------------------------------------
 
-def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapter) -> None:
+def _process_session(sess: dict, today: date, prev_day: date, broker: BrokerAdapter) -> None:
     sid = sess["session_id"]
     print(f"\n  ── Session {sid}  ({sess.get('strategy_name', sess['strategy_id'])}) ──")
 
@@ -135,11 +158,12 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
         ) or "  (none)"
         pending_lines = "\n".join(f"  {r.symbol}" for r in pending) or "  (none)"
 
+        mode_label = "Live" if sess.get("live_mode") else "Paper"
         send_email(
-            subject=(f"[FinLab Paper] {sid} — Orders {today} | "
+            subject=(f"[FinLab {mode_label}] {sid} — Orders {today} | "
                      f"{len(fills)} filled, {len(pending)} pending"),
             body=(
-                f"Paper Trade Order Report — {today}\n\n"
+                f"{mode_label} Trade Order Report — {today}\n\n"
                 f"Session:  {sid}  ({sess.get('strategy_name', '')})\n"
                 f"Signals from: {prev_day}\n\n"
                 f"Filled ({len(fills)}):\n{fill_lines}\n\n"
@@ -157,7 +181,7 @@ def _process_session(sess: dict, today: date, prev_day: date, broker: PaperAdapt
                 sid,
                 title=f"{len(fills)} order(s) filled",
                 body=traded,
-                data={"screen": "PaperTrade"},
+                data={"screen": "Live" if sess.get("live_mode") else "PaperTrade"},
             )
 
     finally:
@@ -188,13 +212,24 @@ def main():
     print(f"  Active sessions: {len(sessions)}")
 
     prev_day = calendar.previous_trading_day(today)
-    broker   = PaperAdapter()
 
     for sess in sessions:
         try:
+            broker = _get_broker(sess)
             _process_session(sess, today, prev_day, broker)
         except Exception as exc:
-            print(f"  [ERROR] Session {sess['session_id']}: {exc}")
+            mode = "live" if sess.get("live_mode") else "paper"
+            print(f"  [ERROR] Session {sess['session_id']} ({mode}): {exc}")
+            if sess.get("live_mode"):
+                try:
+                    send_push_to_session_user(
+                        sess["session_id"],
+                        title="Live trading paused",
+                        body=str(exc)[:120],
+                        data={"screen": "Live"},
+                    )
+                except Exception:
+                    pass
 
     print(f"\n{'='*70}")
     print(f"  Done — {today}")
