@@ -18,7 +18,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -143,7 +143,7 @@ def connect_broker(broker: str, body: ConnectRequest):
                     UPDATE broker_connections
                     SET access_token_enc = NULL,
                         token_fetched_at = NULL,
-                        status           = 'connected',
+                        status           = 'connecting',
                         updated_at       = :now
                     WHERE user_id = :uid AND broker = :broker
                 """),
@@ -157,7 +157,7 @@ def connect_broker(broker: str, body: ConnectRequest):
                     INSERT INTO broker_connections
                         (id, user_id, broker, api_key, api_secret_enc, status, created_at, updated_at)
                     VALUES
-                        (gen_random_uuid(), :uid, :broker, :api_key, 'platform_managed', 'connected', :now, :now)
+                        (gen_random_uuid(), :uid, :broker, :api_key, 'platform_managed', 'connecting', :now, :now)
                 """),
                 {
                     "uid":     body.user_id,
@@ -181,40 +181,62 @@ def connect_broker(broker: str, body: ConnectRequest):
 def broker_callback(
     broker: str,
     request_token: str = Query(...),
-    user_id: str = Query(...),
+    user_id: Optional[str] = Query(None),
 ):
     """
-    OAuth callback handler. Zerodha redirects here with ?request_token=xxx&user_id=yyy.
-    Exchanges request_token → access_token using platform env var credentials.
+    OAuth callback handler. Zerodha redirects here with ?request_token=xxx.
+    user_id is NOT sent by Zerodha — we resolve the user from the most recent
+    'connecting' row in broker_connections (timing-based, safe for small platforms).
     """
     if broker not in _BROKER_HANDLERS:
-        raise HTTPException(status_code=400, detail=f"Unsupported broker: {broker}")
+        return _html_error("Unsupported broker.")
 
     try:
         api_key, api_secret = _get_platform_credentials(broker)
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return _html_error(str(exc))
 
     _, exchange_fn = _BROKER_HANDLERS[broker]
 
-    # Verify a connection row exists for this user
+    try:
+        result = exchange_fn(api_key, api_secret, request_token)
+    except Exception as exc:
+        return _html_error(f"Token exchange failed: {exc}")
+
+    broker_user_id = result.get("broker_user_id", "")
+    now = datetime.utcnow()
+    # Connections initiated in the last 15 minutes are considered pending
+    cutoff = now - timedelta(minutes=15)
+
     db = SessionLocal()
     try:
-        existing = db.execute(
-            text("SELECT id FROM broker_connections WHERE user_id = :uid AND broker = :broker"),
-            {"uid": user_id, "broker": broker},
-        ).fetchone()
+        if user_id:
+            # Explicit user_id provided (e.g., future deep-link flow)
+            row = db.execute(
+                text("SELECT user_id FROM broker_connections WHERE user_id = :uid AND broker = :broker"),
+                {"uid": user_id, "broker": broker},
+            ).fetchone()
+            resolved_uid = user_id if row else None
+        else:
+            # Resolve by timing: find the most recently initiated 'connecting' row.
+            # First try matching broker_user_id (re-auth case), then fall back to
+            # the most recent pending row (first-time auth).
+            row = db.execute(
+                text("""
+                    SELECT user_id FROM broker_connections
+                    WHERE broker = :broker
+                      AND status = 'connecting'
+                      AND updated_at > :cutoff
+                      AND (:buid = '' OR broker_user_id IS NULL OR broker_user_id = :buid)
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                """),
+                {"broker": broker, "cutoff": cutoff, "buid": broker_user_id},
+            ).fetchone()
+            resolved_uid = str(row.user_id) if row else None
 
-        if existing is None:
-            raise HTTPException(
-                status_code=404,
-                detail="No broker connection row found. Initiate connect first.",
-            )
-
-        try:
-            result = exchange_fn(api_key, api_secret, request_token)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Token exchange failed: {exc}")
+        if resolved_uid is None:
+            return _html_error("No pending connection found. Please initiate connect again from the app.")
 
         db.execute(
             text("""
@@ -228,10 +250,10 @@ def broker_callback(
             """),
             {
                 "token_enc":      encrypt(result["access_token"]),
-                "fetched_at":     datetime.utcnow(),
-                "broker_user_id": result.get("broker_user_id", ""),
-                "now":            datetime.utcnow(),
-                "uid":            user_id,
+                "fetched_at":     now,
+                "broker_user_id": broker_user_id,
+                "now":            now,
+                "uid":            resolved_uid,
                 "broker":         broker,
             },
         )
@@ -239,8 +261,45 @@ def broker_callback(
     finally:
         db.close()
 
-    frontend_url = os.environ.get("FRONTEND_URL", "https://tactiq.in")
-    return RedirectResponse(url=f"{frontend_url}/live-trading?connected=true&broker={broker}")
+    return _html_success(broker)
+
+
+def _html_success(broker: str) -> HTMLResponse:
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connected</title>
+<style>body{{font-family:-apple-system,sans-serif;background:#0a0a0a;color:#fff;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}}
+.card{{padding:40px 32px;max-width:360px}}
+.icon{{font-size:48px;margin-bottom:16px}}
+h1{{font-size:22px;margin:0 0 8px}}
+p{{color:#888;font-size:14px;line-height:1.5;margin:0}}
+</style></head>
+<body><div class="card">
+<div class="icon">✓</div>
+<h1>Zerodha Connected</h1>
+<p>You can close this window and return to TacTiq.<br>Your live trading session is ready.</p>
+</div></body></html>""")
+
+
+def _html_error(message: str) -> HTMLResponse:
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Error</title>
+<style>body{{font-family:-apple-system,sans-serif;background:#0a0a0a;color:#fff;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}}
+.card{{padding:40px 32px;max-width:360px}}
+.icon{{font-size:48px;margin-bottom:16px}}
+h1{{font-size:22px;margin:0 0 8px}}
+p{{color:#888;font-size:14px;line-height:1.5;margin:0}}
+</style></head>
+<body><div class="card">
+<div class="icon">✗</div>
+<h1>Connection Failed</h1>
+<p>{message}<br><br>Please return to TacTiq and try again.</p>
+</div></body></html>""", status_code=400)
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +325,7 @@ def broker_status(user_id: str = Query(...), broker: str = Query("zerodha")):
     finally:
         db.close()
 
-    if row is None:
+    if row is None or row.status == "connecting":
         return {"connected": False, "broker": broker}
 
     token_valid = _token_is_valid(row.token_fetched_at) and bool(row.access_token_enc)
