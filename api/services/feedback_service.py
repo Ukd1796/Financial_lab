@@ -175,9 +175,7 @@ def _fetch_news(symbols: list[str]) -> dict[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 def _build_prompt(stats: dict, pos: dict, regime: dict, news: dict) -> str:
-    lines = [
-        "You are a trading coach reviewing a paper trading session on NSE Indian equities.\n"
-    ]
+    lines = [""]
 
     # Signal activity
     if stats["total"] == 0:
@@ -226,11 +224,20 @@ def _build_prompt(stats: dict, pos: dict, regime: dict, news: dict) -> str:
         lines.append("")
 
     lines.append(
+        "You are a friendly financial advisor explaining a paper trading session to someone "
+        "who just started investing. Use warm, plain English. Never use technical jargon — "
+        "avoid words like ATR, regime, breadth, circuit breaker, volatility filter, "
+        "strategy weights, fill rate, or risk parameters. Instead say things like "
+        "'the market was too choppy', 'conditions weren't right', 'the system waited'.\n\n"
         "Write exactly 4 labelled sections (2-3 sentences each):\n"
-        "SIGNAL_HEALTH: Explain in simple terms what happened with signals — whether they fired, why any were blocked, and what it means for the user.\n"
-        "POSITION_INSIGHT: What's working in the portfolio, what to watch, mention any at-risk positions and connect news context if relevant.\n"
-        "REGIME_CONTEXT: What the market is doing right now and how it specifically affects this strategy's entries and exits.\n"
-        "STRATEGY_TIP: One specific, actionable suggestion to improve results — reference concrete settings like strategy weights, regime filters, or risk parameters.\n\n"
+        "SIGNAL_HEALTH: In plain English, what happened with trades this week — "
+        "did any go through, and if some were skipped, why (in simple terms)?\n"
+        "POSITION_INSIGHT: How is the portfolio doing overall? Mention any stock doing "
+        "particularly well or one that needs watching. Keep it reassuring and factual.\n"
+        "REGIME_CONTEXT: What is the overall market doing right now, in one simple sentence "
+        "a beginner would understand? How does that affect this portfolio?\n"
+        "STRATEGY_TIP: One plain-English observation or thing to keep in mind this week. "
+        "No technical settings — just a human suggestion.\n\n"
         "Format exactly as:\n"
         "SIGNAL_HEALTH: <text>\n"
         "POSITION_INSIGHT: <text>\n"
@@ -256,34 +263,45 @@ def _parse_claude(raw: str) -> dict[str, str]:
 
 def _fallback(stats: dict, pos: dict, regime: dict) -> dict[str, str]:
     total, filled, blocked = stats["total"], stats["filled"], stats["blocked"]
-    broad = regime.get("broad_regime", "current market")
+    broad = regime.get("broad_regime", "")
     n_pos = len(pos.get("positions", []))
     at_risk = pos.get("at_risk", [])
 
     if total == 0:
-        sh = "No signals have been generated yet. The strategy is scanning the market and will generate entries when conditions align with your configured regime and risk filters."
+        sh = ("No trades have been placed yet — the system is watching the market and will act "
+              "when the right opportunity appears.")
     elif blocked > filled:
-        sh = (f"{blocked} of {total} signals were blocked by risk filters this week. "
-              "The most common reason is the breadth circuit breaker, which pauses new buys "
-              "when too many stocks are in downtrends. This is a protective feature, not a malfunction.")
+        sh = (f"{blocked} of {total} potential trades were skipped this week. "
+              "The system held back because market conditions weren't quite right — "
+              "this is normal and helps protect your capital during uncertain times.")
     else:
-        sh = (f"{filled} of {total} signals filled successfully this week. "
-              "The strategy is actively generating and executing entries within your risk parameters.")
+        sh = (f"{filled} trade(s) went through this week out of {total} opportunities spotted. "
+              "The system is actively working within your setup.")
 
     if n_pos == 0:
-        pi = "No open positions yet. Capital is preserved in cash while the strategy searches for qualifying entries."
+        pi = ("No open positions yet — your capital is sitting safely in cash while the system "
+              "looks for good entries.")
     elif at_risk:
-        pi = (f"You have {n_pos} open position(s). {', '.join(at_risk)} "
-              "are down more than 2% — consider reviewing whether the original thesis still holds.")
+        risk_word = "is" if len(at_risk) == 1 else "are"
+        pi = (f"You have {n_pos} stock(s) in your portfolio. "
+              f"{', '.join(at_risk)} {risk_word} down a bit right now — "
+              "keep an eye on it, but the system will act if it falls further.")
     else:
-        pi = f"Your {n_pos} open position(s) are performing within expected range. Continue monitoring for regime changes."
+        pi = f"Your {n_pos} stock(s) are holding up well. Nothing urgent to worry about right now."
 
-    rc = (f"The market is currently in a {broad} regime. "
-          "Your strategy's entry rules are calibrated for this — check the Signals tab to see which entries are being generated or blocked.")
+    broad_display = {
+        "BULL":          "mostly rising",
+        "BEAR":          "broadly falling",
+        "BEAR_EARLY":    "starting to pull back",
+        "TRANSITION_UP": "recovering from a dip",
+        "SIDEWAYS":      "moving sideways without a clear direction",
+    }.get(broad, "mixed")
+    rc = (f"The overall market is {broad_display} right now. "
+          "This shapes which opportunities the system spots and how cautiously it acts.")
 
-    st = ("Consider reviewing your strategy weights in the Strategy Builder. "
-          "In sideways or choppy regimes, increasing the mean-reversion weight relative to trend-following "
-          "can improve fill rates and reduce the impact of the breadth circuit breaker.")
+    st = ("Paper trading is a great way to get comfortable with how the system works. "
+          "Check the Signals tab to see what the system spotted this week and why it acted — "
+          "or didn't.")
 
     return {
         "SIGNAL_HEALTH":    sh,
