@@ -36,3 +36,9 @@ class UniverseCandidate:
     return_3d:             float = field(default=0.0)
     rolling_vol_5d:        float = field(default=0.0)
     sma_cross_age:         int   = field(default=0)
+
+    # Latest close price for the candidate's day. Used by AffordabilityFilter
+    # to drop names too expensive to buy ≥ 1 share at low capital.
+    # Defaults to 0.0 so existing call sites that don't supply it stay valid;
+    # AffordabilityFilter treats price <= 0 as "unknown" and keeps the symbol.
+    price:                 float = field(default=0.0)

@@ -151,21 +151,11 @@ class DynamicUniverseAgent:
     # ------------------------------------------------------------------
     # SELECT
     # ------------------------------------------------------------------
-    def select_candidates(self, current_date: datetime) -> list[UniverseCandidate]:
+    def _build_scored_df(self, current_date: datetime):
         """
-        Return the top-N UniverseCandidate objects by cross-sectional
-        opportunity score.
-
-        Score = 0.40 × rank(relative_volume)
-              + 0.30 × rank(|daily_return|)
-              + 0.30 × rank(rolling_vol_5d)
-
-        Ranks are computed across all symbols that have valid data for
-        current_date (0–1 percentile). Returns an empty list when fewer
-        than 2 symbols have data.
-
-        These candidates — carrying all precomputed metrics — are passed
-        directly to UniverseSelectionAgent for threshold filtering.
+        Collect valid rows for current_date and compute cross-sectional
+        opportunity scores. Returns (rows_list, scores_DataFrame) where
+        scores is None when fewer than 2 symbols have data.
         """
         rows = []
 
@@ -187,6 +177,7 @@ class DynamicUniverseAgent:
             sma_20_above_sma50 = row.get("sma_20_above_sma_50", False)
             sma_20_slope_pos   = row.get("sma_20_slope_positive", False)
             sma_cross_age      = row.get("sma_cross_age", 0)
+            close_px           = row.get("close", float("nan"))
 
             rows.append(
                 {
@@ -200,10 +191,60 @@ class DynamicUniverseAgent:
                     "sma_20_above_sma_50":   bool(sma_20_above_sma50),
                     "sma_20_slope_positive": bool(sma_20_slope_pos),
                     "sma_cross_age":         int(sma_cross_age) if not pd.isna(sma_cross_age) else 0,
+                    "price":                 float(close_px) if not pd.isna(close_px) else 0.0,
                 }
             )
 
         if len(rows) < 2:
+            return rows, None
+
+        scores = pd.DataFrame(rows).set_index("symbol")
+        for col in ["relative_volume", "abs_daily_return", "rolling_vol_5d"]:
+            scores[f"{col}_rank"] = scores[col].rank(pct=True)
+        scores["opportunity_score"] = (
+            0.40 * scores["relative_volume_rank"]
+            + 0.30 * scores["abs_daily_return_rank"]
+            + 0.30 * scores["rolling_vol_5d_rank"]
+        )
+        return rows, scores
+
+    def _candidates_from_scores(self, scores, index) -> list[UniverseCandidate]:
+        """Build UniverseCandidate objects for the given symbol index."""
+        return [
+            UniverseCandidate(
+                symbol=symbol,
+                score=float(scores.loc[symbol, "opportunity_score"]),
+                relative_volume=float(scores.loc[symbol, "relative_volume"]),
+                daily_return=float(scores.loc[symbol, "daily_return"]),
+                atr_ratio=float(scores.loc[symbol, "atr_ratio"]),
+                sma_20_above_sma_50=bool(scores.loc[symbol, "sma_20_above_sma_50"]),
+                sma_20_slope_positive=bool(scores.loc[symbol, "sma_20_slope_positive"]),
+                return_3d=float(scores.loc[symbol, "return_3d"]),
+                rolling_vol_5d=float(scores.loc[symbol, "rolling_vol_5d"]),
+                sma_cross_age=int(scores.loc[symbol, "sma_cross_age"]),
+                price=float(scores.loc[symbol, "price"]),
+            )
+            for symbol in index
+        ]
+
+    def select_candidates(self, current_date: datetime) -> list[UniverseCandidate]:
+        """
+        Return the top-N UniverseCandidate objects by cross-sectional
+        opportunity score.
+
+        Score = 0.40 × rank(relative_volume)
+              + 0.30 × rank(|daily_return|)
+              + 0.30 × rank(rolling_vol_5d)
+
+        Ranks are computed across all symbols that have valid data for
+        current_date (0–1 percentile). Returns an empty list when fewer
+        than 2 symbols have data.
+
+        These candidates — carrying all precomputed metrics — are passed
+        directly to UniverseSelectionAgent for threshold filtering.
+        """
+        rows, scores = self._build_scored_df(current_date)
+        if scores is None:
             return [
                 UniverseCandidate(
                     symbol=r["symbol"], score=0.0,
@@ -215,39 +256,43 @@ class DynamicUniverseAgent:
                     return_3d=r["return_3d"],
                     rolling_vol_5d=r["rolling_vol_5d"],
                     sma_cross_age=r["sma_cross_age"],
+                    price=r["price"],
                 )
                 for r in rows
             ]
+        top_index = scores["opportunity_score"].nlargest(self.top_n).index
+        return self._candidates_from_scores(scores, top_index)
 
-        scores = pd.DataFrame(rows).set_index("symbol")
+    def select_all_candidates(self, current_date: datetime) -> list[UniverseCandidate]:
+        """
+        Return ALL scored candidates without the top-N activity gate.
 
-        # Cross-sectional percentile rank (0 → worst, 1 → best)
-        for col in ["relative_volume", "abs_daily_return", "rolling_vol_5d"]:
-            scores[f"{col}_rank"] = scores[col].rank(pct=True)
+        Used by strategy-native universe filters (TrendPB, RSI-MR, DualMA)
+        that need to scan the full 150-symbol universe. Breakout filters
+        should continue using select_candidates() (top-80) since activity
+        bias is intentional for breakout morphology.
 
-        scores["opportunity_score"] = (
-            0.40 * scores["relative_volume_rank"]
-            + 0.30 * scores["abs_daily_return_rank"]
-            + 0.30 * scores["rolling_vol_5d_rank"]
-        )
-
-        top = scores["opportunity_score"].nlargest(self.top_n)
-
-        return [
-            UniverseCandidate(
-                symbol=symbol,
-                score=float(top[symbol]),
-                relative_volume=float(scores.loc[symbol, "relative_volume"]),
-                daily_return=float(scores.loc[symbol, "daily_return"]),
-                atr_ratio=float(scores.loc[symbol, "atr_ratio"]),
-                sma_20_above_sma_50=bool(scores.loc[symbol, "sma_20_above_sma_50"]),
-                sma_20_slope_positive=bool(scores.loc[symbol, "sma_20_slope_positive"]),
-                return_3d=float(scores.loc[symbol, "return_3d"]),
-                rolling_vol_5d=float(scores.loc[symbol, "rolling_vol_5d"]),
-                sma_cross_age=int(scores.loc[symbol, "sma_cross_age"]),
-            )
-            for symbol in top.index
-        ]
+        Returns candidates sorted by opportunity_score descending.
+        """
+        rows, scores = self._build_scored_df(current_date)
+        if scores is None:
+            return [
+                UniverseCandidate(
+                    symbol=r["symbol"], score=0.0,
+                    relative_volume=r["relative_volume"],
+                    daily_return=r["daily_return"],
+                    atr_ratio=r["atr_ratio"],
+                    sma_20_above_sma_50=r["sma_20_above_sma_50"],
+                    sma_20_slope_positive=r["sma_20_slope_positive"],
+                    return_3d=r["return_3d"],
+                    rolling_vol_5d=r["rolling_vol_5d"],
+                    sma_cross_age=r["sma_cross_age"],
+                    price=r["price"],
+                )
+                for r in rows
+            ]
+        all_index = scores["opportunity_score"].sort_values(ascending=False).index
+        return self._candidates_from_scores(scores, all_index)
 
     def select_symbols(self, current_date: datetime) -> list[str]:
         """Convenience wrapper — returns symbol strings from select_candidates()."""

@@ -51,6 +51,7 @@ class UniverseSelectionAgent:
     def select_symbols(
         self,
         candidates: list[UniverseCandidate],
+        all_candidates: list[UniverseCandidate] | None = None,
     ) -> list[str]:
         """Convenience wrapper — returns symbol strings from select_universe()."""
         return [c.symbol for c in self.select_universe(candidates)]

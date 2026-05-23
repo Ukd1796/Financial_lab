@@ -23,10 +23,14 @@ class ExecutionAgent:
         portfolio_engine,
         commission_pct: float = 0.001,   # 0.10% per side (NSE brokerage + STT + charges)
         slippage_pct:   float = 0.0005,  # 0.05% per side market-impact estimate
+        cost_model            = None,    # ZerodhaCostModel; None ⇒ legacy %-model (EQUITY regression-safe)
+        cost_segment:   str   = "equity_delivery",  # "equity_delivery" | "etf" — only used when cost_model set
     ):
         self.portfolio_engine = portfolio_engine
         self.commission_pct   = commission_pct
         self.slippage_pct     = slippage_pct
+        self.cost_model       = cost_model
+        self.cost_segment     = cost_segment
 
     def _serialize_positions(self, positions):
         return {
@@ -49,10 +53,19 @@ class ExecutionAgent:
         #   BUY  : we pay more  → price * (1 + slip) * (1 + comm)
         #   SELL : we receive less → price * (1 - slip) * (1 - comm)
         # ------------------------------------------------------------------
+        # Per-side proportional charge: real Zerodha model when injected
+        # (side-asymmetric — e.g. ETF STT is sell-only), else the legacy
+        # symmetric commission_pct (default → EQUITY regression byte-identical).
+        if self.cost_model is not None:
+            buy_comm  = self.cost_model.pct_charge("BUY",  self.cost_segment)
+            sell_comm = self.cost_model.pct_charge("SELL", self.cost_segment)
+        else:
+            buy_comm = sell_comm = self.commission_pct
+
         if decision.action == "BUY":
-            exec_price = current_price * (1 + self.slippage_pct) * (1 + self.commission_pct)
+            exec_price = current_price * (1 + self.slippage_pct) * (1 + buy_comm)
         elif decision.action == "SELL":
-            exec_price = current_price * (1 - self.slippage_pct) * (1 - self.commission_pct)
+            exec_price = current_price * (1 - self.slippage_pct) * (1 - sell_comm)
         else:
             exec_price = current_price
 
@@ -81,6 +94,7 @@ class ExecutionAgent:
                     exec_quantity,
                     exec_price,
                     atr_at_entry=getattr(decision, "atr_at_entry", 0.0),
+                    entry_date=getattr(market_state, "timestamp", None),
                 )
                 executed = True
 
@@ -102,6 +116,18 @@ class ExecutionAgent:
                 exec_price,
             )
             executed = True
+
+            # Flat DP charge (Zerodha): per-scrip, sell-side, value-independent.
+            # The %-model folds proportional costs into exec_price; the flat
+            # part has no price to fold into, so deduct it explicitly so the
+            # equity curve, realized PnL and trade PnL are all net of it.
+            # No-op when cost_model is None ⇒ legacy/EQUITY path unchanged.
+            if self.cost_model is not None:
+                dp = self.cost_model.flat_charge("SELL", self.cost_segment)
+                if dp:
+                    portfolio.cash         -= dp
+                    portfolio.realized_pnl -= dp
+                    trade_pnl              -= dp
 
         # Snapshot AFTER execution
         portfolio_after = {

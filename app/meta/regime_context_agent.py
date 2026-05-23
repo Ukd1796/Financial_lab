@@ -30,12 +30,17 @@ class RegimeContextAgent:
     # ------------------------------------------------------------------
     # PUBLIC API
     # ------------------------------------------------------------------
-    def build_snapshot(self, daily_symbol_states: dict, current_date: datetime) -> dict:
+    def build_snapshot(
+        self,
+        daily_symbol_states: dict,
+        current_date: datetime,
+        capital: float | None = None,
+    ) -> dict:
         """
         Build enriched regime snapshot for current_date.
         Drop-in replacement for build_regime_snapshot().
         """
-        base  = build_regime_snapshot(daily_symbol_states, current_date)
+        base  = build_regime_snapshot(daily_symbol_states, current_date, capital)
         broad = self._compute_broad_breadth(current_date)
         trend = self._detect_trend()
         # Use the shared classifier so broad_regime and selector._confirmed_regime

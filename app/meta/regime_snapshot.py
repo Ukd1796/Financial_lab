@@ -9,10 +9,35 @@
 
 from datetime import datetime
 
+from app.meta.capital_profile import EQUITY_FLOOR, SMALL_FLOOR
+
+
+def _capital_tier(capital: float | None) -> str:
+    """
+    Map account capital to a tier the LLM uses to decide how concentrated the
+    allocation must be. None → NORMAL so the default path is unchanged.
+
+      MICRO  : < SMALL_FLOOR (₹25k)            — diversification impossible
+      SMALL  : SMALL_FLOOR–EQUITY_FLOOR        — limited diversification
+      NORMAL : ≥ EQUITY_FLOOR (₹1L, == EQUITY profile) — full allocation
+
+    Thresholds come from app/meta/capital_profile.py so the tier never drifts
+    from the profile boundary. NORMAL ≡ EQUITY profile by construction, so the
+    ₹1L regression path is unaffected (still NORMAL, prompt byte-identical).
+    """
+    if capital is None:
+        return "NORMAL"
+    if capital < SMALL_FLOOR:
+        return "MICRO"
+    if capital < EQUITY_FLOOR:
+        return "SMALL"
+    return "NORMAL"
+
 
 def build_regime_snapshot(
     daily_symbol_states: dict,
     current_date: datetime,
+    capital: float | None = None,
 ) -> dict:
     """
     Compute regime statistics across the active universe for a single trading day.
@@ -61,4 +86,6 @@ def build_regime_snapshot(
         "pct_high_vol":   round(pct_high_vol,  3),
         "avg_atr_pct":    round(avg_atr_pct,   4),
         "market_breadth": round(pct_uptrend,   3),  # alias for LLM prompt clarity
+        "capital":        capital,
+        "capital_tier":   _capital_tier(capital),
     }

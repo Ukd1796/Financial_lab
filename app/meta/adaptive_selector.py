@@ -151,6 +151,63 @@ _REGIME_ALLOCATION_RULES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Machine-readable mirror of the HARD ("MUST") bounds in the prose rules above.
+# Used by _apply_regime_bounds() to DETERMINISTICALLY enforce the constraints
+# after the LLM responds — the prompt says "MUST" but gpt-4o-mini does not
+# always comply (e.g. QuietBrk=0 in BULL_SUSTAINED where the rule says ≥0.20,
+# or DualMA omitted in BULL_MEDVOL). Only "MUST" bounds are encoded; soft
+# "can be" ranges are left to the LLM. (lo, hi); None = unbounded that side.
+# Strategy keys must match strategy_names.
+# ---------------------------------------------------------------------------
+_REGIME_WEIGHT_BOUNDS: dict[str, dict[str, tuple]] = {
+    "TRANSITION_UP":  {"Breakout": (0.30, None), "DualMA": (0.20, None),
+                       "TrendPB": (None, 0.15)},
+    "BEAR_CONFIRMED": {"DualMA": (0.55, None), "RSI-MR": (None, 0.05),
+                       "QuietBrk": (None, 0.05), "TrendPB": (None, 0.10)},
+    "BEAR_EARLY":     {"DualMA": (0.40, None), "RSI-MR": (None, 0.05),
+                       "QuietBrk": (None, 0.15), "TrendPB": (None, 0.15)},
+    "CRASH_HIGHVOL":  {"Breakout": (0.30, None), "TrendPB": (0.20, None),
+                       "RSI-MR": (None, 0.05), "QuietBrk": (None, 0.10)},
+    "RECOVERY":       {"Breakout": (0.35, None), "QuietBrk": (0.25, None),
+                       "RSI-MR": (None, 0.05), "TrendPB": (None, 0.15)},
+    "BULL_LOWVOL":    {"QuietBrk": (0.25, None), "TrendPB": (0.20, None),
+                       "RSI-MR": (None, 0.05)},
+    "BULL_SUSTAINED": {"DualMA": (0.25, None), "Breakout": (0.25, None),
+                       "QuietBrk": (0.20, None), "RSI-MR": (None, 0.05)},
+    "BULL_MEDVOL":    {"Breakout": (0.25, None), "QuietBrk": (0.20, None),
+                       "DualMA": (0.20, None), "RSI-MR": (None, 0.05)},
+    "MIXED":          {"RSI-MR": (None, 0.10)},
+}
+
+
+def _apply_regime_bounds(weights: dict, label: str | None) -> dict:
+    """
+    Deterministically enforce the HARD per-regime MUST bounds (the prose rules
+    are advisory to the LLM; this guarantees compliance regardless of model).
+
+    Loose constraints (sum of floors < 1, generous caps) → a few
+    clamp→renormalise iterations converge to satisfy both floors and caps.
+    Returns an un-normalised dict; the caller normalises to sum 1.
+    """
+    bounds = _REGIME_WEIGHT_BOUNDS.get(label or "")
+    if not bounds:
+        return weights
+    w = dict(weights)
+    for _ in range(4):
+        for strat, (lo, hi) in bounds.items():
+            if strat in w:
+                if hi is not None:
+                    w[strat] = min(w[strat], hi)
+                if lo is not None:
+                    w[strat] = max(w[strat], lo)
+        s = sum(w.values())
+        if s <= 0:
+            return weights
+        w = {k: v / s for k, v in w.items()}
+    return w
+
+
 def _classify_regime(snapshot: dict) -> tuple[str, str, str]:
     """
     Classify the current market regime from the snapshot.
@@ -202,6 +259,7 @@ class AdaptiveStrategySelector:
         regime_stability_weeks: int = 2,
         performance_table: str | None = None,
         on_rebalance: Optional[Callable] = None,
+        feedback_agent: object | None = None,
     ):
         self.client                   = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         self.strategy_names           = strategy_names
@@ -218,6 +276,12 @@ class AdaptiveStrategySelector:
         # Optional callback fired after each successful LLM rebalance.
         # Signature: on_rebalance(decided_at, regime, confidence, weights, snapshot, raw_response, model)
         self.on_rebalance             = on_rebalance
+        # Optional pluggable agent that supplies an LLM-prompt feedback block.
+        # Any object exposing `build_feedback_block(date) -> str | None` qualifies.
+        # See app/meta/performance_feedback_agent.py (Phase 1: recent strategy P&L).
+        # When None, _build_prompt emits a byte-identical prompt to the legacy
+        # version — this preserves _ADAPTIVE_BASELINE regression equality.
+        self.feedback_agent           = feedback_agent
 
         n = max(len(strategy_names), 1)
         self.weights: dict[str, float]      = {s: 1.0 / n for s in strategy_names}
@@ -234,6 +298,11 @@ class AdaptiveStrategySelector:
         self._confirmed_weeks: int          = 0
         # Last raw LLM text response — captured in _call_llm, read by rebalance()
         self._last_raw_response: str | None = None
+        # Capital tier from the latest snapshot (MICRO/SMALL/NORMAL). Set in
+        # rebalance(); read by _parse_weights() to relax the DualMA floor when
+        # the low-capital concentration rule is active. Default NORMAL keeps
+        # the original behaviour for accounts that never pass capital.
+        self._capital_tier: str = "NORMAL"
 
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -309,6 +378,10 @@ class AdaptiveStrategySelector:
                     break
             label = effective_label
 
+        # Capture capital tier for this rebalance so _parse_weights() can relax
+        # the DualMA floor at concentration tiers.
+        self._capital_tier = regime_snapshot.get("capital_tier", "NORMAL")
+
         self._last_raw_response = None
         new_weights = self._call_llm(regime_snapshot, label, desc, confidence)
         if new_weights:
@@ -371,6 +444,11 @@ class AdaptiveStrategySelector:
                 model=self.model,
                 max_tokens=128,
                 temperature=0.0,
+                seed=0,   # best-effort determinism (OpenAI) — pins API-side
+                          # sampling so identical prompts → identical outputs;
+                          # combined with PYTHONHASHSEED=0 in the harness this
+                          # is required to make the regime-thrash gate
+                          # measurable (cf. docs/meta_layer_value_leak.md §12b).
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = response.choices[0].message.content.strip()
@@ -381,15 +459,15 @@ class AdaptiveStrategySelector:
                 if raw.startswith("json"):
                     raw = raw[4:]
                 raw = raw.strip()
-            return self._parse_weights(raw)
+            return self._parse_weights(raw, label)
 
         except Exception as exc:
             if self.verbose:
                 print(f"  [AdaptiveSelector] LLM call failed ({exc}). Keeping weights.")
             return None
 
-    def _parse_weights(self, raw: str) -> dict[str, float] | None:
-        """Parse JSON, validate keys, clip negatives, normalise to sum=1.0."""
+    def _parse_weights(self, raw: str, label: str | None = None) -> dict[str, float] | None:
+        """Parse JSON, clip negatives, enforce per-regime MUST bounds, normalise."""
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -403,15 +481,49 @@ class AdaptiveStrategySelector:
         if not clipped:
             return None
 
-        # DualMA floor: positive Sharpe in every regime — never below 0.10
-        if "DualMA" in clipped and clipped["DualMA"] < 0.10:
+        # DualMA floor: positive Sharpe in every regime — never below 0.10.
+        # Skipped at concentration tiers (MICRO/SMALL): forcing DualMA back to
+        # 0.10 would dilute the deliberate 1–2 strategy concentration the
+        # low-capital rule requires (and re-add a strategy the LLM zeroed).
+        if (
+            self._capital_tier not in ("MICRO", "SMALL")
+            and "DualMA" in clipped
+            and clipped["DualMA"] < 0.10
+        ):
             clipped["DualMA"] = 0.10
 
-        total = sum(clipped.values())
+        # Materialise over ALL strategies (missing → 0.0) so a regime FLOOR
+        # also lifts a strategy the LLM omitted entirely (e.g. DualMA absent
+        # in BULL_MEDVOL where the rule says ≥ 0.20).
+        weights = {k: clipped.get(k, 0.0) for k in self.strategy_names}
+
+        # Deterministic MUST-bound enforcement — NORMAL tier only. At
+        # MICRO/SMALL the capital rule deliberately concentrates into 1–2
+        # strategies and MUST NOT be clamped back to the diversification
+        # floors (this also keeps the §9 low-capital results unchanged).
+        if self._capital_tier not in ("MICRO", "SMALL"):
+            weights = _apply_regime_bounds(weights, label)
+
+            # Optional post-LLM weight adjustment from a feedback agent
+            # (e.g. DeterministicPerformanceFeedbackAgent caps bleeders).
+            # Runs AFTER _apply_regime_bounds so the cap overrides the
+            # regime MUST floor — that's the intended semantics: regime
+            # floors assume the strategy is capturing its edge; a
+            # 30d-bleeder isn't, so we override the floor for that strat.
+            # When the agent has no adjust_weights method (e.g. the LLM
+            # prompt-based PerformanceFeedbackAgent) this is a no-op.
+            if self.feedback_agent is not None and hasattr(
+                self.feedback_agent, "adjust_weights"
+            ):
+                adjusted = self.feedback_agent.adjust_weights(weights, label)
+                if adjusted is not None:
+                    weights = adjusted
+
+        total = sum(weights.values())
         if total <= 0:
             return None
 
-        return {k: clipped.get(k, 0.0) / total for k in self.strategy_names}
+        return {k: weights[k] / total for k in self.strategy_names}
 
     def _build_prompt(
         self,
@@ -481,6 +593,69 @@ class AdaptiveStrategySelector:
         elif inferred_trend:
             broad_block = f"\n  Inferred breadth trend: {inferred_trend} (computed from history)\n"
 
+        # --- Capital concentration block (only at MICRO/SMALL tiers) ---
+        # NORMAL tier (or no capital supplied) → both strings empty, so the
+        # prompt is byte-identical to the pre-capital version. This is what
+        # keeps the ₹1L _ADAPTIVE_BASELINE regression valid.
+        capital      = snapshot.get("capital")
+        capital_tier = snapshot.get("capital_tier", "NORMAL")
+        capital_block = ""
+        capital_rule  = ""
+        if capital_tier == "MICRO":
+            capital_block = (
+                f"\nACCOUNT CAPITAL: ₹{capital:,.0f} (MICRO tier)\n"
+                f"  This account is too small to diversify — split 5 ways, each strategy\n"
+                f"  gets too little to buy even one share of most stocks. Concentrate.\n"
+            )
+            capital_rule = (
+                "\n\nCAPITAL CONCENTRATION RULE (this OVERRIDES the diversification "
+                "language in the regime rule above):\n"
+                "- Allocate to AT MOST 2 strategies.\n"
+                "- Put >= 0.60 on the single best strategy for this regime; the "
+                "2nd-best may take the remainder.\n"
+                "- ALL other strategies MUST be exactly 0.0.\n"
+                "- Choose from the strategies the regime rule favours. Do NOT spread "
+                "weight to satisfy minimums — minimums are waived at this tier."
+            )
+        elif capital_tier == "SMALL":
+            capital_block = (
+                f"\nACCOUNT CAPITAL: ₹{capital:,.0f} (SMALL tier)\n"
+                f"  Limited capital — broad 5-way diversification wastes it on\n"
+                f"  sub-one-share slots. Lean concentrated.\n"
+            )
+            capital_rule = (
+                "\n\nCAPITAL CONCENTRATION RULE (this OVERRIDES the diversification "
+                "language in the regime rule above):\n"
+                "- Allocate to AT MOST 3 strategies.\n"
+                "- Put >= 0.45 on the single best strategy for this regime.\n"
+                "- Any strategy that would be below 0.15 MUST instead be 0.0."
+            )
+
+        # --- Optional feedback block (e.g. recent strategy P&L) -----------
+        # When feedback_agent is None OR build_feedback_block() returns None
+        # (not warm), `feedback_block` is "" and the substitution below is
+        # byte-identical to the legacy prompt — guarantees _ADAPTIVE_BASELINE
+        # regression equality at default-off.
+        feedback_block = ""
+        if self.feedback_agent is not None:
+            # Pass the snapshot's string date (the snapshot dict carries
+            # 'date' but not 'date_dt'). The PerformanceFeedbackAgent ignores
+            # this argument anyway, but other future feedback agents may use it.
+            block = self.feedback_agent.build_feedback_block(snapshot.get("date"))
+            if block:
+                feedback_block = "\n\n" + block
+                # One-shot diagnostic so the operator can confirm the agent
+                # is actually reaching the LLM during a backtest. Fires once
+                # per selector instance the first time the block is injected
+                # — regardless of self.verbose, because operators need this
+                # confirmation even when running the (less chatty) RCA path.
+                if not getattr(self, "_paa_announced", False):
+                    print(
+                        f"  [AdaptiveSelector] PAA feedback ACTIVE — first injection "
+                        f"at {snapshot.get('date', '?')} (block_chars={len(block)})"
+                    )
+                    self._paa_announced = True
+
         return f"""You are allocating capital across five NSE Indian equity trading strategies for the next week.
 
 CURRENT REGIME (Python-classified, confidence {confidence}):
@@ -491,7 +666,7 @@ CURRENT REGIME (Python-classified, confidence {confidence}):
   % SIDEWAYS:  {snapshot.get('pct_sideways', 0):.1%}
   % HIGH_VOL:  {snapshot.get('pct_high_vol', 0):.1%}
   Avg ATR%:    {snapshot.get('avg_atr_pct', 0):.2%}
-{broad_block}
+{broad_block}{capital_block}
 {regime_age_note}
 
 {history_block}
@@ -499,7 +674,7 @@ CURRENT REGIME (Python-classified, confidence {confidence}):
 {self._performance_table}
 
 MANDATORY ALLOCATION RULE FOR THIS REGIME:
-{regime_rule}
+{regime_rule}{capital_rule}{feedback_block}
 
 GLOBAL RULES (always apply):
 - Weights sum to 1.0 exactly. All values in [0.0, 1.0].

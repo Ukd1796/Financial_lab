@@ -58,6 +58,16 @@ from app.universe.filters import (
     PullbackUniverseFilter,
     UnionUniverseFilter,
 )
+from app.analytics.trade_annotator import (
+    TradeAnnotator,
+    TradeAttributionTracker,
+    export_enriched_trades_csv,
+)
+from app.analytics.opportunity_quality import (
+    compute_opportunity_quality_metrics,
+    print_opportunity_quality_summary,
+)
+from app.analytics.universe_tracker import compute_universe_diagnostics
 
 # ─── Universe (mirrors Ujjwal's broad150) ──────────────────────────────────
 
@@ -174,7 +184,8 @@ def _make_router():
 
 def _run_one(repository, router, ctx, atr_multiplier=2.0,
              regime_multipliers=None,
-             adaptive_selector=None, regime_context_agent=None):
+             adaptive_selector=None, regime_context_agent=None,
+             attrib_tracker=None):
     if not ctx.historical_dates:
         return None
 
@@ -204,13 +215,14 @@ def _run_one(repository, router, ctx, atr_multiplier=2.0,
         universe_agent=ctx.universe_filter,
         adaptive_selector=adaptive_selector,
         regime_context_agent=regime_context_agent,
+        pnl_tracker=attrib_tracker,
     )
     results, trades = engine.run(BROAD_UNIVERSE, ctx.historical_dates)
 
     evaluator         = EvaluationAgent()
     portfolio_metrics = evaluator.evaluate(results, INITIAL_CAPITAL)
     trade_metrics     = evaluator.evaluate_trades(trades)
-    return {"portfolio_metrics": portfolio_metrics, "trade_metrics": trade_metrics}
+    return {"portfolio_metrics": portfolio_metrics, "trade_metrics": trade_metrics, "trades": trades}
 
 
 def _fmt_row(label, result):
@@ -233,6 +245,49 @@ def _fmt_row(label, result):
         f"{wr * 100:>5.1f}% "
         f"{n:>8}"
     )
+
+
+def _print_router_diagnostics(label: str, router) -> None:
+    counters = getattr(router, "diag_counters", None)
+    if not counters:
+        return
+    if not any(c.get("signals_issued", 0) > 0 for c in counters.values()):
+        return
+    print(f"  {'-' * ROW_W}  [{label} — signal-drop diagnostics]")
+    print(f"  {'Strategy':<12}{'issued':>9}{'won':>8}{'prio_loss':>11}{'own_block':>11}{'buy_rej':>9}{'pass_thru%':>12}")
+    for name, c in counters.items():
+        issued   = c.get("signals_issued", 0)
+        won      = c.get("won_merge", 0)
+        prio     = c.get("dropped_priority", 0)
+        own      = c.get("dropped_ownership", 0)
+        buy_rej  = c.get("buy_rejected", 0)
+        survivors = max(won - buy_rej, 0)
+        pct = (survivors / issued * 100.0) if issued > 0 else 0.0
+        print(f"  {name:<12}{issued:>9}{won:>8}{prio:>11}{own:>11}{buy_rej:>9}{pct:>11.1f}%")
+
+
+def _print_strategy_attribution(attrib: "TradeAttributionTracker", label: str = "") -> None:
+    from collections import defaultdict
+    buckets: dict = defaultdict(list)
+    for _date, pnl, strategy in attrib._sells:
+        buckets[strategy or "Unknown"].append(pnl)
+    if not buckets:
+        return
+    total_pnl = sum(p for ps in buckets.values() for p in ps)
+    title = f"Strategy PnL Attribution — {label}" if label else "Strategy PnL Attribution"
+    print(f"\n  {'-' * ROW_W}  [{title}]")
+    print(f"  {'Strategy':<12} {'Trades':>8} {'PnL (₹)':>12} {'WinRate':>9} {'Avg/trade':>11} {'Share%':>8}")
+    print(f"  {'-' * 64}")
+    for name in sorted(buckets, key=lambda s: sum(buckets[s]), reverse=True):
+        trades = buckets[name]
+        n      = len(trades)
+        pnl    = sum(trades)
+        wins   = sum(1 for p in trades if p > 0)
+        wr     = wins / n * 100 if n else 0.0
+        avg    = pnl / n if n else 0.0
+        share  = pnl / total_pnl * 100 if total_pnl else 0.0
+        print(f"  {name:<12} {n:>8} {pnl:>+12.0f} {wr:>8.1f}% {avg:>+10.0f} {share:>7.1f}%")
+    print(f"  {'TOTAL':<12} {sum(len(v) for v in buckets.values()):>8} {total_pnl:>+12.0f}")
 
 
 # ─── Period context ────────────────────────────────────────────────────────
@@ -446,17 +501,35 @@ def run_baseline(equal_weight_only: bool = False):
         out("=" * (ROW_W + 2))
         out(HEADER)
 
+        # Per-period analytics setup — universe tracker computed once,
+        # passed to annotate() so universe_rank_at_entry is populated.
+        _annotator    = TradeAnnotator(repository, observer=ctx.observer)
+        _univ_tracker = compute_universe_diagnostics(ctx, ctx.universe_filter)
+        _period_enriched = []
+
         # ── EqualWeight ──
         out(f"{DIVIDER}  [EqW] ATR×2.5 trailing stop + volume filter")
-        router = _make_router()
-        eqw_result = _run_one(repository, router, ctx, atr_multiplier=2.5)
+        router     = _make_router()
+        _ew_attrib = TradeAttributionTracker(list(_STRAT_NAMES))
+        eqw_result = _run_one(repository, router, ctx, atr_multiplier=2.5,
+                              attrib_tracker=_ew_attrib)
         out(_fmt_row("EqW  Current", eqw_result))
         eqw_results[period_label.strip()] = eqw_result
+        _print_router_diagnostics("EqW", router)
+        _print_strategy_attribution(_ew_attrib, "EqW")
+        if eqw_result:
+            _period_enriched.extend(_annotator.annotate(
+                eqw_result["trades"],
+                attribution_tracker=_ew_attrib,
+                universe_tracker=_univ_tracker,
+                period_label=period_label.strip(),
+                run_label="EqW",
+            ))
 
         # ── Adaptive (LLM) ──
         if not equal_weight_only:
             out(f"{DIVIDER}  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent")
-            router = _make_router()
+            router   = _make_router()
             selector = AdaptiveStrategySelector(
                 strategy_names=_STRAT_NAMES,
                 model="gpt-4o-mini",
@@ -464,11 +537,29 @@ def run_baseline(equal_weight_only: bool = False):
                 regime_stability_weeks=2,
                 verbose=True,
             )
-            adaptive_result = _run_one(repository, router, ctx, atr_multiplier=2.5,
-                                       adaptive_selector=selector,
-                                       regime_context_agent=ctx.regime_context_agent)
+            _adaptive_attrib = TradeAttributionTracker(list(_STRAT_NAMES))
+            adaptive_result  = _run_one(repository, router, ctx, atr_multiplier=2.5,
+                                        adaptive_selector=selector,
+                                        regime_context_agent=ctx.regime_context_agent,
+                                        attrib_tracker=_adaptive_attrib)
             out(_fmt_row("Adaptive+RCA (LLM)", adaptive_result))
             adaptive_results[period_label.strip()] = adaptive_result
+            _print_router_diagnostics("Adaptive+RCA", router)
+            _print_strategy_attribution(_adaptive_attrib, "Adaptive+RCA")
+            if adaptive_result:
+                _period_enriched.extend(_annotator.annotate(
+                    adaptive_result["trades"],
+                    attribution_tracker=_adaptive_attrib,
+                    universe_tracker=_univ_tracker,
+                    period_label=period_label.strip(),
+                    run_label="Adaptive+RCA",
+                ))
+
+        # ── Period-end analytics ──
+        if _period_enriched:
+            _oqe = compute_opportunity_quality_metrics(_period_enriched)
+            print_opportunity_quality_summary(_oqe)
+            export_enriched_trades_csv(_period_enriched, "trade_analytics.csv")
 
     # ── Summary ──
     if equal_weight_only:

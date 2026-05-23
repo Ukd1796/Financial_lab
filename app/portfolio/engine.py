@@ -6,7 +6,8 @@ class PortfolioEngine:
     def __init__(self, portfolio: Portfolio):
         self.portfolio = portfolio
 
-    def buy(self, symbol: str, quantity: float, price: float, atr_at_entry: float = 0.0):
+    def buy(self, symbol: str, quantity: float, price: float,
+            atr_at_entry: float = 0.0, entry_date=None):
 
         cost = quantity * price
 
@@ -26,7 +27,8 @@ class PortfolioEngine:
             )
             existing.quantity = total_quantity
             existing.average_price = new_avg_price
-            # Keep the original entry ATR and watermark on add-to-position
+            # Keep the original entry ATR, watermark AND entry_date on
+            # add-to-position so the oldest entry governs the min-hold gate.
         else:
             self.portfolio.positions[symbol] = Position(
                 symbol=symbol,
@@ -34,6 +36,7 @@ class PortfolioEngine:
                 average_price=price,
                 atr_at_entry=atr_at_entry,
                 high_watermark=price,   # initialise to entry price; trails up from here
+                entry_date=entry_date,
             )
 
     def sell(self, symbol: str, quantity: float, price: float):

@@ -1,5 +1,8 @@
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.backtest.engine import BacktestEngine
 from app.backtest.observer import MarketObserverAgent
 from app.data.repository import MarketDataRepository
@@ -25,6 +28,20 @@ from app.universe.filters import (
     PullbackUniverseFilter,
     UnionUniverseFilter,
 )
+from app.analytics.trade_annotator import (
+    TradeAnnotator,
+    TradeAttributionTracker,
+    export_enriched_trades_csv,
+)
+from app.analytics.opportunity_quality import (
+    compute_opportunity_quality_metrics,
+    print_opportunity_quality_summary,
+)
+from app.analytics.ensemble_diagnostics import (
+    compute_ensemble_metrics,
+    print_ensemble_summary,
+)
+from app.analytics.universe_tracker import compute_universe_diagnostics
 
 # -----------------------------------------------------------------------
 # Full symbol universe — mirrors scripts/ingest_symbols.py
@@ -263,7 +280,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0, regime_context_agent=None):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0, regime_context_agent=None, pnl_tracker=None):
 
     if not ctx.historical_dates:
         return None
@@ -306,7 +323,8 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         dynamic_universe_agent=ctx.dynamic_universe_agent,
         universe_agent=active_universe_agent,
         adaptive_selector=adaptive_selector,
-        regime_context_agent=regime_context_agent,   # ← new
+        regime_context_agent=regime_context_agent,
+        pnl_tracker=pnl_tracker,
     )
 
     results, trades = engine.run(BROAD_UNIVERSE, ctx.historical_dates)
@@ -315,7 +333,7 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
     portfolio_metrics = evaluator.evaluate(results, INITIAL_CAPITAL)
     trade_metrics     = evaluator.evaluate_trades(trades)
 
-    return {"portfolio_metrics": portfolio_metrics, "trade_metrics": trade_metrics}
+    return {"portfolio_metrics": portfolio_metrics, "trade_metrics": trade_metrics, "trades": trades}
 
 
 # -----------------------------------------------------------------------
@@ -351,6 +369,60 @@ def _print_row(label, result):
         f"{wr * 100:>5.1f}% "
         f"{n:>8}"
     )
+
+
+def _print_router_diagnostics(label: str, router) -> None:
+    """Per-strategy signal-drop counters from MultiStrategyRouter.diag_counters."""
+    counters = getattr(router, "diag_counters", None)
+    if not counters:
+        return
+    if not any(c.get("signals_issued", 0) > 0 for c in counters.values()):
+        return
+    print(f"  {'-' * ROW_W}  [{label} — signal-drop diagnostics]")
+    print(
+        f"  {'Strategy':<12}"
+        f"{'issued':>9}{'won':>8}{'prio_loss':>11}"
+        f"{'own_block':>11}{'buy_rej':>9}{'pass_thru%':>12}"
+    )
+    for name, c in counters.items():
+        issued   = c.get("signals_issued",    0)
+        won      = c.get("won_merge",         0)
+        prio     = c.get("dropped_priority",  0)
+        own      = c.get("dropped_ownership", 0)
+        buy_rej  = c.get("buy_rejected",      0)
+        survivors = max(won - buy_rej, 0)
+        pct = (survivors / issued * 100.0) if issued > 0 else 0.0
+        print(
+            f"  {name:<12}"
+            f"{issued:>9}{won:>8}{prio:>11}{own:>11}{buy_rej:>9}{pct:>11.1f}%"
+        )
+
+
+def _print_strategy_attribution(attrib: "TradeAttributionTracker", label: str = "") -> None:
+    """Print per-strategy PnL contribution breakdown from a TradeAttributionTracker."""
+    from collections import defaultdict
+    buckets: dict = defaultdict(list)
+    for _date, pnl, strategy in attrib._sells:
+        buckets[strategy or "Unknown"].append(pnl)
+    if not buckets:
+        return
+    total_pnl = sum(p for ps in buckets.values() for p in ps)
+    title = f"Strategy PnL Attribution — {label}" if label else "Strategy PnL Attribution"
+    print(f"\n  {'-' * ROW_W}  [{title}]")
+    print(f"  {'Strategy':<12} {'Trades':>8} {'PnL (₹)':>12} {'WinRate':>9} {'Avg/trade':>11} {'Share%':>8}")
+    print(f"  {'-' * 64}")
+    for name in sorted(buckets, key=lambda s: sum(buckets[s]), reverse=True):
+        trades = buckets[name]
+        n      = len(trades)
+        pnl    = sum(trades)
+        wins   = sum(1 for p in trades if p > 0)
+        wr     = wins / n * 100 if n else 0.0
+        avg    = pnl / n if n else 0.0
+        share  = pnl / total_pnl * 100 if total_pnl else 0.0
+        print(
+            f"  {name:<12} {n:>8} {pnl:>+12.0f} {wr:>8.1f}% {avg:>+10.0f} {share:>7.1f}%"
+        )
+    print(f"  {'TOTAL':<12} {sum(len(v) for v in buckets.values()):>8} {total_pnl:>+12.0f}")
 
 
 # -----------------------------------------------------------------------
@@ -812,6 +884,10 @@ def _run_full_periods(repository):
             DualMAUniverseFilter(max_cross_age=5, top_n=30),
         ])
 
+        _annotator      = TradeAnnotator(repository, ctx.observer)
+        _period_enriched: list = []
+
+        _ew_attrib = TradeAttributionTracker(list(multi_router.strategies))
         result_multi = run_experiment(
             repository, multi_router, ctx,
             max_position_pct=0.10,        # per-position cap (further scaled by weight inside RiskAgent)
@@ -820,8 +896,18 @@ def _run_full_periods(repository):
             universe_filter=union_filter, # each strategy sees its own domain candidates
             max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
             min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
+            pnl_tracker=_ew_attrib,
         )
         _print_row("EqualWeight (5-strat)", result_multi)
+        _print_strategy_attribution(_ew_attrib, "EqualWeight")
+        _print_router_diagnostics("EqualWeight", multi_router)
+        if result_multi and result_multi.get("trades"):
+            _period_enriched.extend(_annotator.annotate(
+                result_multi["trades"],
+                attribution_tracker=_ew_attrib,
+                period_label=period_label.strip(),
+                run_label="EqualWeight",
+            ))
 
         # ------------------------------------------------------------------
         # Step 15: Adaptive (LLM-driven) multi-strategy run
@@ -872,6 +958,7 @@ def _run_full_periods(repository):
             DualMAUniverseFilter(max_cross_age=5, top_n=30),
         ])
 
+        _adaptive_attrib = TradeAttributionTracker(list(adaptive_router.strategies))
         result_adaptive = run_experiment(
             repository, adaptive_router, ctx,
             max_position_pct=0.10,
@@ -881,9 +968,19 @@ def _run_full_periods(repository):
             adaptive_selector=selector,
             max_downtrend_pct=0.35,
             min_atr_cost_ratio=3.0,
+            pnl_tracker=_adaptive_attrib,
         )
         _print_row("Adaptive  (5-strat)", result_adaptive)
         print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
+        _print_strategy_attribution(_adaptive_attrib, "Adaptive")
+        _print_router_diagnostics("Adaptive", adaptive_router)
+        if result_adaptive and result_adaptive.get("trades"):
+            _period_enriched.extend(_annotator.annotate(
+                result_adaptive["trades"],
+                attribution_tracker=_adaptive_attrib,
+                period_label=period_label.strip(),
+                run_label="Adaptive",
+            ))
 
         # ------------------------------------------------------------------
         # Step 16: Adaptive + RegimeContextAgent
@@ -932,6 +1029,7 @@ def _run_full_periods(repository):
             MeanReversionUniverseFilter(top_n=20),
             DualMAUniverseFilter(max_cross_age=5, top_n=30),
         ])
+        _rca_attrib = TradeAttributionTracker(list(rca_router.strategies))
         result_rca = run_experiment(
             repository, rca_router, ctx,
             max_position_pct=0.10,
@@ -942,9 +1040,19 @@ def _run_full_periods(repository):
             max_downtrend_pct=0.35,
             min_atr_cost_ratio=3.0,
             regime_context_agent=ctx.regime_context_agent,
+            pnl_tracker=_rca_attrib,
         )
         _print_row("Adaptive+RCA (5-strat)", result_rca)
         print(f"  {'':>{COL_W}} (LLM calls: {rca_selector.call_count})")
+        _print_strategy_attribution(_rca_attrib, "Adaptive+RCA")
+        _print_router_diagnostics("Adaptive+RCA", rca_router)
+        if result_rca and result_rca.get("trades"):
+            _period_enriched.extend(_annotator.annotate(
+                result_rca["trades"],
+                attribution_tracker=_rca_attrib,
+                period_label=period_label.strip(),
+                run_label="Adaptive+RCA",
+            ))
 
         # Delta row: show RCA improvement at a glance
         if result_adaptive and result_rca:
@@ -957,6 +1065,13 @@ def _run_full_periods(repository):
             sign_s  = "+" if delta_s >= 0 else ""
             sign_r  = "+" if delta_r >= 0 else ""
             print(f"  {'RCA delta':<{COL_W}} {sign_s}{delta_s:>5.2f}  {sign_r}{delta_r:>7.2f}%")
+
+        # ── Period-end analytics ─────────────────────────────────────────────
+        _u_tracker = compute_universe_diagnostics(ctx, union_filter)
+        _oqm = compute_opportunity_quality_metrics(_period_enriched, _u_tracker.daily_records)
+        print_opportunity_quality_summary(_oqm, period_label.strip())
+        if _period_enriched:
+            export_enriched_trades_csv(_period_enriched, "trade_analytics.csv")
 
     print(f"\n{'=' * (ROW_W + 2)}\n")
 

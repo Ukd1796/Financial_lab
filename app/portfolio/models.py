@@ -9,6 +9,7 @@ class Position:
     average_price: float
     atr_at_entry: float = 0.0
     high_watermark: float = 0.0  # highest price seen since entry; trailing stop trails this
+    entry_date: object = None    # datetime of first fill; used by the ETF min-hold gate (None ⇒ ungated)
 
 
 @dataclass

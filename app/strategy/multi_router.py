@@ -68,6 +68,8 @@ class MultiStrategyRouter:
         strategies: dict,
         weights: dict | None = None,
         allowed_regimes: dict | None = None,
+        allow_cross_strategy_exits: bool = False,
+        cross_exit_strategies: set | None = None,
     ):
         self.strategies      = strategies
         self.weights         = self._normalise(
@@ -76,6 +78,31 @@ class MultiStrategyRouter:
         # Per-strategy regime allowlists — None means no regime filtering
         self.allowed_regimes = allowed_regimes or {}
 
+        # Experimental: when True, any strategy can SELL any position
+        # (cross-strategy exits allowed). When False (default, legacy
+        # behavior), only the strategy that opened the position may close
+        # it via a strategy signal — though the RiskAgent's ATR trailing
+        # stop already overrides this rule.
+        #
+        # Background: signal-drop diagnostics revealed that TrendPB and
+        # RSI-MR collectively issue ~3,600 blocked SELL signals per period
+        # against Breakout-owned positions in Live 2025-26. Removing the
+        # block lets those exit signals fire. Trade-off: in directional
+        # regimes (Bull, Recovery, Recent) where positions are winning,
+        # cross-strategy exits will prematurely cut winners. A/B test
+        # required to determine net effect.
+        # See docs/next_explorations.md.
+        self.allow_cross_strategy_exits = allow_cross_strategy_exits
+
+        # Selective cross-exit: only named strategies may SELL positions they
+        # did not open. Narrower than allow_cross_strategy_exits (which lifts
+        # the gate for everyone). {"TrendPB"} = only TrendPB can exit Breakout
+        # positions, letting its price-recovery and max-hold-days exit signals
+        # fire on Breakout-owned stock without allowing all strategies to do so.
+        # Requires dispatch to also show cross-exit strategies ALL held positions
+        # (not just their own + regime-matched ones) so signals can generate.
+        self.cross_exit_strategies: set = cross_exit_strategies or set()
+
         # Detect dispatch mode once — avoids repeated introspection per bar
         self._multi_symbol: dict[str, bool] = {
             name: (len(inspect.signature(s.decide).parameters) == 3)
@@ -83,9 +110,32 @@ class MultiStrategyRouter:
         }
 
         # Tracks which strategy entered each open position.
-        # Only the owning strategy (or the ATR stop in RiskAgent) may close it.
-        # Prevents cross-strategy premature exits, e.g. RSI-MR SFelling DualMA holds.
+        # Only the owning strategy (or the ATR stop in RiskAgent) may close it
+        # by default. The allow_cross_strategy_exits flag (above) bypasses
+        # this rule when set.
         self.position_owners: dict[str, str] = {}
+
+        # ----------------------------------------------------------------
+        # Per-strategy signal-drop diagnostics — see docs/next_explorations.md §5.
+        # Counts how often each strategy's raw decisions get filtered/dropped
+        # by the merge mechanism. Surfaces the "solo positive but combined
+        # negative" mystery numerically. Reset is intentional: counters are
+        # cumulative across the whole backtest so the harness can report at
+        # end-of-period. The engine adds a `buy_rejected` counter separately
+        # for post-router cash/breadth/ATR rejections.
+        # ----------------------------------------------------------------
+        self.diag_counters: dict[str, dict] = {
+            name: {
+                "signals_issued":    0,   # raw decisions strategy proposed
+                "won_merge":         0,   # decisions kept after the priority/weight contest
+                "dropped_priority":  0,   # decisions overridden by a competing strategy on same symbol
+                "dropped_ownership": 0,   # SELL skipped because strategy didn't own the position
+                "conflict_count":    0,   # times two strategies proposed different actions on same symbol
+                "conflict_log":      [],  # sample of (symbol, own_action, rival, their_action); capped at 50
+                "cross_exits":       0,   # SELLs that fired on another strategy's position (selective CSX)
+            }
+            for name in strategies
+        }
 
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -136,17 +186,29 @@ class MultiStrategyRouter:
                 if d is None:
                     continue
 
-                # Ownership gate: ignore SELL from a strategy that did not open
-                # this position (the owning strategy or "untracked" positions pass).
-                if d.action == "SELL":
+                # Track every raw decision the strategy issued (excluding None).
+                # This is the denominator for "what % of signals got through".
+                self.diag_counters[name]["signals_issued"] += 1
+
+                # Ownership gate: by default, ignore SELL from a strategy that
+                # did not open this position. The owning strategy and untracked
+                # positions always pass. Two ways to bypass:
+                #   allow_cross_strategy_exits=True  — everyone may SELL anything
+                #   cross_exit_strategies={name}     — only listed strategies may
+                if d.action == "SELL" and not self.allow_cross_strategy_exits:
                     owner = self.position_owners.get(d.symbol)
                     if owner is not None and owner != name:
-                        continue  # cross-strategy exit — skip
+                        if name not in self.cross_exit_strategies:
+                            self.diag_counters[name]["dropped_ownership"] += 1
+                            continue  # cross-strategy exit — blocked
+                        # Selective cross-exit: allowed for this strategy
+                        self.diag_counters[name]["cross_exits"] += 1
 
                 self._merge_into(merged, d, w, name)
 
         # Stamp weight + source onto the winning decision for each symbol;
-        # update ownership tracking.
+        # update ownership tracking. Increment won_merge for the winning
+        # strategy per symbol — this is the post-priority/post-weight survivor.
         result = []
         for sym, (d, w, name) in merged.items():
             d.weight = w
@@ -155,6 +217,7 @@ class MultiStrategyRouter:
                 self.position_owners[sym] = name
             elif d.action == "SELL":
                 self.position_owners.pop(sym, None)
+            self.diag_counters[name]["won_merge"] += 1
             result.append(d)
 
         return result
@@ -194,6 +257,10 @@ class MultiStrategyRouter:
                     sym in portfolio.positions
                     and sym not in self.position_owners
                 )
+                or (                             # cross-exit strategies see ALL held
+                    name in self.cross_exit_strategies
+                    and sym in portfolio.positions
+                )
             }
         else:
             filtered_states = symbol_states
@@ -218,7 +285,14 @@ class MultiStrategyRouter:
         w: float,
         name: str,
     ) -> None:
-        """Apply conflict resolution rules and update `merged` in place."""
+        """Apply conflict resolution rules and update `merged` in place.
+
+        Diagnostic side-effect: when a decision is overridden by another
+        strategy (priority loss or weight loss on a tied action), the losing
+        strategy gets `dropped_priority` incremented. The won_merge counter
+        is incremented in decide() for whichever strategy survives, so this
+        only handles the loser bookkeeping here.
+        """
         sym   = d.symbol
         p_new = _ACTION_PRIORITY.get(d.action, 0)
 
@@ -226,13 +300,29 @@ class MultiStrategyRouter:
             merged[sym] = (d, w, name)
             return
 
-        existing_d, existing_w, _existing_name = merged[sym]
+        existing_d, existing_w, existing_name = merged[sym]
         p_old = _ACTION_PRIORITY.get(existing_d.action, 0)
+
+        # Log competing convictions when two strategies disagree on action
+        if d.action != existing_d.action:
+            for ctr_name, own_action, rival, rival_action in [
+                (name, d.action, existing_name, existing_d.action),
+                (existing_name, existing_d.action, name, d.action),
+            ]:
+                self.diag_counters[ctr_name]["conflict_count"] += 1
+                log = self.diag_counters[ctr_name]["conflict_log"]
+                if len(log) < 50:
+                    log.append((sym, own_action, rival, rival_action))
 
         # Higher-priority action always wins (SELL > BUY > HOLD)
         # Ties broken by strategy weight (higher weight = more capital = more say)
         if p_new > p_old or (p_new == p_old and w > existing_w):
+            # New wins → the existing (now displaced) one loses on priority.
+            self.diag_counters[existing_name]["dropped_priority"] += 1
             merged[sym] = (d, w, name)
+        else:
+            # New loses to existing.
+            self.diag_counters[name]["dropped_priority"] += 1
 
     @staticmethod
     def _normalise(weights: dict) -> dict:
