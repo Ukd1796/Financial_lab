@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adaptive Trading System — Architecture Report</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;min-height:100vh;font-size:14px;line-height:1.6}
+a{color:#58a6ff;text-decoration:none}
+a:hover{text-decoration:underline}
+/* SIDEBAR */
+nav#sidebar{width:240px;min-width:240px;background:#161b22;border-right:1px solid #30363d;position:sticky;top:0;height:100vh;overflow-y:auto;padding:16px 0;flex-shrink:0}
+nav#sidebar h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#8b949e;padding:8px 16px;margin-bottom:4px}
+nav#sidebar a{display:block;padding:5px 16px;color:#8b949e;font-size:13px;border-left:2px solid transparent;transition:all .15s}
+nav#sidebar a:hover,nav#sidebar a.active{color:#e6edf3;border-left-color:#58a6ff;background:#1f2937;text-decoration:none}
+nav#sidebar .sub{padding-left:28px;font-size:12px}
+/* MAIN */
+main{flex:1;padding:32px 40px;max-width:1100px;overflow-x:hidden}
+h1{font-size:26px;color:#e6edf3;margin-bottom:6px;font-weight:700}
+.subtitle{color:#8b949e;margin-bottom:32px;font-size:13px}
+h2.section-title{font-size:20px;color:#e6edf3;margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid #30363d;font-weight:600}
+h3{font-size:16px;color:#cdd9e5;margin:28px 0 10px;font-weight:600}
+h4{font-size:14px;color:#adbac7;margin:18px 0 8px;font-weight:600}
+p{margin-bottom:12px;color:#c9d1d9}
+/* CODE */
+pre{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:16px;overflow-x:auto;margin:12px 0;font-size:12px;line-height:1.5}
+code{font-family:'Cascadia Code','Fira Mono',monospace;font-size:12px}
+pre code{color:#c9d1d9}
+.kw{color:#ff7b72}.st{color:#a5d6ff}.cm{color:#8b949e;font-style:italic}.fn{color:#d2a8ff}.nm{color:#ffa657}.op{color:#ff7b72}.dc{color:#79c0ff}
+/* INLINE CODE */
+p code,li code,td code{background:#1c2128;border:1px solid #30363d;border-radius:3px;padding:1px 5px;font-size:11px;color:#a5d6ff}
+/* TABLES */
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+th{background:#1c2128;color:#cdd9e5;padding:8px 12px;text-align:left;border:1px solid #30363d;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+td{padding:8px 12px;border:1px solid #30363d;vertical-align:top;color:#c9d1d9}
+tr:nth-child(even) td{background:#161b22}
+tr:hover td{background:#1c2128}
+/* CALLOUT BOXES */
+.callout{border-radius:6px;padding:14px 16px;margin:14px 0;border-left:4px solid}
+.callout.danger{background:#2d1a1a;border-color:#f85149}.callout.danger .label{color:#f85149}
+.callout.warn{background:#2a1f0e;border-color:#e3b341}.callout.warn .label{color:#e3b341}
+.callout.info{background:#0d1f35;border-color:#388bfd}.callout.info .label{color:#388bfd}
+.callout.ok{background:#0d2010;border-color:#3fb950}.callout.ok .label{color:#3fb950}
+.callout .label{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:4px}
+/* FLOW DIAGRAM */
+.flow{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:20px;margin:14px 0;font-family:'Cascadia Code','Fira Mono',monospace;font-size:12px;line-height:2;white-space:pre;overflow-x:auto;color:#c9d1d9}
+.flow .box{color:#58a6ff}.flow .arrow{color:#30363d}.flow .kill{color:#f85149}.flow .pass{color:#3fb950}.flow .warn2{color:#e3b341}
+/* FORMULA */
+.formula{background:#0d1f35;border:1px solid #388bfd;border-radius:6px;padding:14px 20px;margin:12px 0;font-family:'Cascadia Code',monospace;font-size:13px;color:#79c0ff;text-align:center}
+/* DETAILS */
+details{border:1px solid #30363d;border-radius:6px;margin:10px 0}
+summary{padding:10px 14px;cursor:pointer;color:#cdd9e5;font-weight:600;background:#1c2128;border-radius:6px;list-style:none;user-select:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'▶ ';font-size:10px;color:#8b949e}
+details[open] summary::before{content:'▼ '}
+details[open] summary{border-radius:6px 6px 0 0}
+.details-body{padding:14px 16px;border-top:1px solid #30363d}
+/* BADGE */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;margin:0 3px}
+.badge.red{background:#2d1a1a;color:#f85149;border:1px solid #f85149}
+.badge.green{background:#0d2010;color:#3fb950;border:1px solid #3fb950}
+.badge.blue{background:#0d1f35;color:#58a6ff;border:1px solid #388bfd}
+.badge.yellow{background:#2a1f0e;color:#e3b341;border:1px solid #e3b341}
+.badge.gray{background:#1c2128;color:#8b949e;border:1px solid #30363d}
+/* SECTION ANCHOR */
+.anchor{scroll-margin-top:20px}
+/* TWO COL */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+ul,ol{margin:8px 0 12px 24px}
+li{margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <h2>Navigation</h2>
+  <a href="#s0">§0 Executive Summary</a>
+  <a href="#s1">§1 System Overview</a>
+  <a href="#s2">§2 MultiStrategy Router</a>
+  <a class="sub" href="#s2-1">2.1 Routing Pipeline</a>
+  <a class="sub" href="#s2-2">2.2 Dispatch Modes</a>
+  <a class="sub" href="#s2-3">2.3 Conflict Resolution</a>
+  <a class="sub" href="#s2-4">2.4 Ownership Model</a>
+  <a class="sub" href="#s2-5">2.5 Signal Suppression</a>
+  <a class="sub" href="#s2-6">2.6 Weight Mechanism</a>
+  <a class="sub" href="#s2-7">2.7 Diagnostic Counters</a>
+  <a href="#s3">§3 Dynamic Universe</a>
+  <a class="sub" href="#s3-1">3.1 Scoring Formula</a>
+  <a class="sub" href="#s3-2">3.2 Per-Strategy Filters</a>
+  <a class="sub" href="#s3-3">3.3 Momentum Bias</a>
+  <a class="sub" href="#s3-4">3.4 Overlap Analysis</a>
+  <a href="#s4">§4 Single-Day Trace</a>
+  <a href="#s5">§5 Ownership System</a>
+  <a href="#s6">§6 Risk Agent Kill Chain</a>
+  <a href="#s7">§7 Adaptive Selector</a>
+  <a href="#s8">§8 Regime Context Agent</a>
+  <a href="#s9">§9 Execution Agent</a>
+  <a href="#s10">§10 System Diagnostics</a>
+  <a href="#s11">§11 Code Reference</a>
+  <a href="#s12">§12 Architectural Notes</a>
+</nav>
+
+<main>
+<h1>Adaptive Trading System</h1>
+<p class="subtitle">Implementation-Level Architecture Diagnostic Report · Generated 2026-05-23 · NSE Indian Equities</p>
+
+<!-- ══════════════════════════════════════════════════════ §0 -->
+<h2 class="section-title anchor" id="s0">§0 Executive Summary</h2>
+
+<table>
+<tr><th>Component</th><th>Type</th><th>File</th><th>Status</th></tr>
+<tr><td>MultiStrategyRouter</td><td>Signal merger + conflict resolver</td><td><code>app/strategy/multi_router.py</code></td><td><span class="badge red">Critical path</span></td></tr>
+<tr><td>DynamicUniverseAgent</td><td>150→80 activity scorer</td><td><code>app/universe/dynamic_agent.py</code></td><td><span class="badge yellow">Momentum-biased</span></td></tr>
+<tr><td>UnionUniverseFilter</td><td>Per-strategy second-stage filters</td><td><code>app/universe/filters.py</code></td><td><span class="badge blue">5 filter classes</span></td></tr>
+<tr><td>RiskAgent</td><td>7-layer signal kill chain</td><td><code>app/risk/agent.py</code></td><td><span class="badge red">Primary suppressor</span></td></tr>
+<tr><td>AdaptiveStrategySelector</td><td>Weekly LLM weight rebalancer</td><td><code>app/meta/adaptive_selector.py</code></td><td><span class="badge yellow">2-week lag</span></td></tr>
+<tr><td>RegimeContextAgent</td><td>150-symbol breadth classifier</td><td><code>app/meta/regime_context_agent.py</code></td><td><span class="badge green">Active</span></td></tr>
+<tr><td>BacktestEngine</td><td>Daily loop orchestrator</td><td><code>app/backtest/engine.py</code></td><td><span class="badge blue">P0-patched</span></td></tr>
+<tr><td>ExecutionAgent</td><td>Cost-adjusted fill simulator</td><td><code>app/execution/agent.py</code></td><td><span class="badge green">Active</span></td></tr>
+</table>
+
+<h3>Top 5 Architectural Bottlenecks</h3>
+
+<div class="callout danger">
+<span class="label">🔴 Bottleneck 1 — Exclusive Ownership Lock-out</span>
+Breakout dominates BUY execution due to highest universe hit-rate. Once Breakout owns a position, <strong>TrendPB and RSI-MR SELL signals are silently dropped</strong> for that symbol (<code>dropped_ownership</code> counter). Documented ~3,600 blocked SELL signals per period in <code>allow_cross_strategy_exits=False</code> mode. Other strategies cannot exit a losing Breakout position until the ATR stop fires — by which time capital is already committed.
+</div>
+
+<div class="callout danger">
+<span class="label">🔴 Bottleneck 2 — Universe Activity Bias Starves 3 of 5 Strategies</span>
+Scoring formula <code>0.40×rank(rel_vol) + 0.30×rank(|return|) + 0.30×rank(vol_5d)</code> ranks by activity. DualMA (needs quiet golden-cross stocks), TrendPB (needs low-volume pullbacks), and RSI-MR (needs oversold-in-uptrend) candidates are structurally under-represented in the top-80. The per-strategy filters operate on an already-biased input pool.
+</div>
+
+<div class="callout warn">
+<span class="label">🟡 Bottleneck 3 — Capital Fragmentation at 5-Strategy Equal Weight</span>
+At <code>weight=0.20</code>: <code>risk_budget = equity × 0.005 × 0.20 = 0.1%</code> per trade. Max position = <code>equity × 0.20 × 0.20 = 4%</code>. Low-frequency strategies (DualMA fires once per golden cross; TrendPB needs pullback alignment) rarely fill their slots — their capital allocation sits unused in cash.
+</div>
+
+<div class="callout warn">
+<span class="label">🟡 Bottleneck 4 — RSI-MR Structurally Near-Disabled</span>
+<code>_REGIME_WEIGHT_BOUNDS</code> caps RSI-MR at ≤0.05 in BEAR_CONFIRMED, BEAR_EARLY, CRASH, RECOVERY, BULL_LOWVOL, BULL_SUSTAINED, BULL_MEDVOL. The only regime without an explicit cap is MIXED (≤0.10). RSI-MR's backtested Sharpe is negative in Mixed (-0.14) and Bear/Choppy (-0.65) — so it is correctly capped, but the cap makes it an observer rather than a contributor.
+</div>
+
+<div class="callout warn">
+<span class="label">🟡 Bottleneck 5 — 2-Week Regime Stability Lag</span>
+<code>regime_stability_weeks=2</code> means a new regime must appear for 2 consecutive weekly rebalances before weights shift. In fast-moving markets (e.g. COVID crash, post-election rally) the system can hold inappropriate weights for 2–3 weeks. Combined with the 5-day rebalance frequency, effective lag is 10–15 trading days.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ §1 -->
+<h2 class="section-title anchor" id="s1">§1 System Architecture Overview</h2>
+
+<div class="flow">┌─────────────────────────────────────────────────────────────────────────┐
+│                        DAILY BACKTEST LOOP                              │
+│                    (app/backtest/engine.py)                             │
+└──────────────────────────────┬──────────────────────────────────────────┘
+                               │ for each trading_date
+                               ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 1: Universe Filtering            │
+     │  DynamicUniverseAgent.select_candidates │  150 symbols → top 80 scored
+     │  UnionUniverseFilter.select_symbols     │  80 → per-strategy subsets → union
+     │  + always include held_positions        │  P0 fix: exits always fire
+     └─────────────────┬───────────────────────┘
+                       │ active_symbols (list[str])
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 2: Market State                  │
+     │  MarketObserverAgent.run_for_day()      │  computes indicators per symbol
+     │  → daily_symbol_states dict             │  {symbol: MarketState}
+     └─────────────────┬───────────────────────┘
+                       │
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 3: Regime Snapshot               │
+     │  RegimeContextAgent.build_snapshot()    │  150-symbol breadth + trend
+     │  → pct_uptrend / pct_downtrend          │
+     │  → broad_regime label                   │
+     └─────────────────┬───────────────────────┘
+                       │ weekly trigger
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 4: Adaptive Rebalance (weekly)   │
+     │  AdaptiveStrategySelector.rebalance()   │  LLM → new weights
+     │  MultiStrategyRouter.update_weights()   │  applied to all strategies
+     └─────────────────┬───────────────────────┘
+                       │
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 5: Strategy Layer                │
+     │  MultiStrategyRouter.decide()           │
+     │    for each strategy:                   │
+     │      _dispatch() → filter by regime     │
+     │      strategy.decide() → raw decisions  │
+     │      _merge_into() → conflict resolve   │
+     │  → merged list[Decision]                │
+     └─────────────────┬───────────────────────┘
+                       │ sorted by weight desc
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 6: Risk Layer                    │
+     │  for each Decision:                     │
+     │    RiskAgent.evaluate()                 │
+     │    → breadth CB / ATR-cost / regime     │
+     │    → trailing ATR stop                  │
+     │    → position sizing                    │
+     │    → cash gate                          │
+     └─────────────────┬───────────────────────┘
+                       │
+                       ▼
+     ┌─────────────────────────────────────────┐
+     │  STAGE 7: Execution                     │
+     │  ExecutionAgent.execute()               │
+     │  → exec_price (slip+comm baked in)      │
+     │  → PortfolioEngine.buy() / .sell()      │
+     │  → Trade recorded + PAA tracker fed     │
+     └─────────────────────────────────────────┘</div>
+
+<h3>Key Data Flows</h3>
+<table>
+<tr><th>Object</th><th>From</th><th>To</th><th>Contents</th></tr>
+<tr><td><code>UniverseCandidate</code></td><td>DynamicUniverseAgent</td><td>UniverseFilter</td><td>symbol, score, rel_vol, return_3d, sma_20_above_sma_50, sma_cross_age, price</td></tr>
+<tr><td><code>MarketState</code></td><td>MarketObserverAgent</td><td>Strategy + RiskAgent</td><td>latest_price, indicators dict (atr_14, sma_10/20/50, rsi_3, regime, high_10d/20d, …)</td></tr>
+<tr><td><code>Decision</code></td><td>Strategy</td><td>Router → RiskAgent → ExecutionAgent</td><td>symbol, action, quantity, weight, source, atr_at_entry, reasoning</td></tr>
+<tr><td><code>regime_snapshot</code></td><td>RegimeContextAgent</td><td>AdaptiveSelector + BacktestEngine</td><td>pct_uptrend, pct_downtrend, avg_atr_pct, broad_regime, trend, capital_tier</td></tr>
+<tr><td><code>ExecutionResult</code></td><td>ExecutionAgent</td><td>BacktestEngine</td><td>executed bool, action, quantity, price, trade_pnl, portfolio_before/after</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ §2 -->
+<h2 class="section-title anchor" id="s2">§2 MultiStrategyRouter — Full Internal Analysis</h2>
+<p><strong>File:</strong> <code>app/strategy/multi_router.py</code></p>
+
+<h3 id="s2-1">2.1 Full Routing Pipeline</h3>
+
+<p>The router runs all active strategies against the same shared portfolio state and produces at most one <code>Decision</code> per symbol per day.</p>
+
+<div class="flow"><span class="box">MultiStrategyRouter.decide(current_date, symbol_states, portfolio)</span>
+│
+├── 1. Sync ownership map (remove closed positions)
+│       held = portfolio.positions.keys()
+│       position_owners = {k:v for k,v in position_owners.items() if k in held}
+│
+├── 2. For each strategy (skip if weight &lt; 0.01):
+│       │
+│       ├── _dispatch(name, strategy, date, symbol_states, portfolio)
+│       │     ├── regimes = allowed_regimes.get(name)          ← None means no filter
+│       │     ├── owned = {sym where position_owners[sym]==name}
+│       │     ├── filtered_states = {sym: state WHERE
+│       │     │     state.indicators["regime"] in regimes      ← regime gate
+│       │     │     OR sym in owned                            ← bypass for own positions
+│       │     │     OR (sym in portfolio AND sym not in owners)}← untracked bypass
+│       │     └── call strategy.decide() in correct mode
+│       │
+│       └── For each raw Decision d:
+│             diag_counters[name]["signals_issued"] += 1
+│             if d.action == "SELL" and not allow_cross_strategy_exits:
+│               owner = position_owners.get(d.symbol)
+│               if owner != None and owner != name:
+│                 diag_counters[name]["dropped_ownership"] += 1  ← DROPPED
+│                 continue
+│             _merge_into(merged, d, w, name)
+│
+└── 3. For each (sym, decision) in merged:
+        decision.weight = w
+        decision.source = name
+        if BUY:  position_owners[sym] = name
+        if SELL: position_owners.pop(sym, None)
+        diag_counters[name]["won_merge"] += 1
+        result.append(decision)</div>
+
+<h3 id="s2-2">2.2 Dispatch Modes — 2-param vs 3-param</h3>
+
+<p>The router detects dispatch mode once at construction using <code>inspect.signature</code>. This is a critical architectural distinction because it determines how many symbols each strategy processes per call.</p>
+
+<table>
+<tr><th>Strategy</th><th>Signature</th><th>Mode</th><th>Implication</th></tr>
+<tr><td>DualMovingAverageStrategy</td><td><code>decide(market_state, portfolio)</code></td><td><span class="badge yellow">Per-symbol (2-param)</span></td><td>Called once per symbol in a loop. Cannot compare across symbols or issue batch decisions.</td></tr>
+<tr><td>BreakoutMomentumStrategy</td><td><code>decide(current_date, symbol_states, portfolio)</code></td><td><span class="badge blue">Multi-symbol (3-param)</span></td><td>Sees entire filtered universe at once. Can rank, compare, batch-reject.</td></tr>
+<tr><td>QuietBreakoutStrategy</td><td><code>decide(current_date, symbol_states, portfolio)</code></td><td><span class="badge blue">Multi-symbol (3-param)</span></td><td>Same as Breakout but 20-day lookback.</td></tr>
+<tr><td>TrendPullbackStrategy</td><td><code>decide(current_date, symbol_states, portfolio)</code></td><td><span class="badge blue">Multi-symbol (3-param)</span></td><td>Maintains internal <code>_entry_dates</code> dict for hold-day tracking.</td></tr>
+<tr><td>RSIMeanReversionStrategy</td><td><code>decide(current_date, symbol_states, portfolio)</code></td><td><span class="badge blue">Multi-symbol (3-param)</span></td><td>Maintains internal <code>_entry_dates</code> dict. Stale keys cleaned on entry.</td></tr>
+</table>
+
+<div class="callout info">
+<span class="label">ℹ️ DualMA Architectural Consequence</span>
+DualMA's 2-param signature means it processes each symbol in a tight loop inside <code>_dispatch()</code>. It <em>cannot</em> see the portfolio's full state while deciding — each call is isolated. This means DualMA cannot avoid allocating to a symbol that another strategy already has a pending BUY on (conflict resolved later in merge).
+</div>
+
+<h3 id="s2-3">2.3 Conflict Resolution Logic</h3>
+
+<p>All decisions land in <code>merged: dict[str, tuple]</code>. The <code>_merge_into()</code> method applies a 2-level priority system:</p>
+
+<pre><code><span class="cm"># From app/strategy/multi_router.py</span>
+_ACTION_PRIORITY = {<span class="st">"SELL"</span>: <span class="nm">2</span>, <span class="st">"BUY"</span>: <span class="nm">1</span>, <span class="st">"HOLD"</span>: <span class="nm">0</span>}
+
+<span class="kw">def</span> <span class="fn">_merge_into</span>(self, merged, d, w, name):
+    p_new = _ACTION_PRIORITY.get(d.action, <span class="nm">0</span>)
+    <span class="kw">if</span> sym <span class="kw">not in</span> merged:
+        merged[sym] = (d, w, name)          <span class="cm"># first decision always wins</span>
+        <span class="kw">return</span>
+    existing_d, existing_w, existing_name = merged[sym]
+    p_old = _ACTION_PRIORITY.get(existing_d.action, <span class="nm">0</span>)
+    <span class="kw">if</span> p_new > p_old <span class="kw">or</span> (p_new == p_old <span class="kw">and</span> w > existing_w):
+        <span class="cm"># New wins → bump dropped_priority for the displaced strategy</span>
+        self.diag_counters[existing_name][<span class="st">"dropped_priority"</span>] += <span class="nm">1</span>
+        merged[sym] = (d, w, name)
+    <span class="kw">else</span>:
+        self.diag_counters[name][<span class="st">"dropped_priority"</span>] += <span class="nm">1</span></code></pre>
+
+<table>
+<tr><th>Scenario</th><th>Winner</th><th>Rule</th></tr>
+<tr><td>Breakout=SELL vs DualMA=BUY on RELIANCE</td><td>Breakout SELL</td><td>Priority: SELL(2) > BUY(1)</td></tr>
+<tr><td>Breakout=BUY (w=0.30) vs DualMA=BUY (w=0.25)</td><td>Breakout BUY</td><td>Same priority, higher weight wins</td></tr>
+<tr><td>TrendPB=BUY vs RSI-MR=BUY on HDFCBANK</td><td>TrendPB BUY (if w higher)</td><td>Same priority, weight tie-break</td></tr>
+<tr><td>Breakout=HOLD vs QuietBrk=BUY</td><td>QuietBrk BUY</td><td>Priority: BUY(1) > HOLD(0)</td></tr>
+<tr><td>5 strategies all emit SELL for same symbol</td><td>Highest-weight strategy's SELL</td><td>First wins (all same priority); but only <em>owning</em> strategy's SELL may have survived the ownership gate</td></tr>
+</table>
+
+<div class="callout warn">
+<span class="label">⚠️ Critical: HOLD from ATR stop path</span>
+When a strategy emits HOLD (position still intact, no exit signal), RiskAgent <em>still evaluates</em> it and may convert it to SELL via the ATR trailing stop. This is intentional — the HOLD is required precisely to trigger the ATR stop check. Strategies that skip emitting HOLD for held positions cause the ATR stop to silently never fire.
+</div>
+
+<h3 id="s2-4">2.4 Ownership Model</h3>
+
+<pre><code><span class="cm"># position_owners: dict[str, str]  # symbol → strategy_name</span>
+<span class="cm"># Updated in decide() after merge resolution:</span>
+<span class="kw">if</span> d.action == <span class="st">"BUY"</span>:
+    self.position_owners[sym] = name     <span class="cm"># owning strategy recorded</span>
+<span class="kw">elif</span> d.action == <span class="st">"SELL"</span>:
+    self.position_owners.pop(sym, <span class="kw">None</span>)  <span class="cm"># ownership released</span></code></pre>
+
+<p><strong>Ownership lifecycle states:</strong></p>
+
+<div class="flow">Symbol has no position
+    │
+    │  any strategy issues BUY → wins merge → ExecutionAgent fills
+    ▼
+Symbol owned by StrategyX  (position_owners[sym] = "StrategyX")
+    │
+    ├── StrategyX issues SELL → passes ownership gate → merge → RiskAgent → fill
+    │       → ownership released
+    │
+    ├── StrategyY issues SELL → OWNERSHIP GATE BLOCKS → dropped_ownership++
+    │       → signal dies silently
+    │
+    ├── RiskAgent ATR stop fires (from StrategyX's HOLD or any decision)
+    │       → SELL returned by RiskAgent BEFORE ownership gate matters
+    │       → fill happens, ownership released in router on next cycle
+    │
+    └── Position closed by cash gate / forced sell
+            → ownership_owners sync removes it at start of next day's decide()</div>
+
+<h3 id="s2-5">2.5 Signal Suppression Analysis Per Strategy</h3>
+
+<p>Signals pass through five sequential suppression layers. The <code>diag_counters</code> dict captures layers 1–3 (inside the router). Layer 4–5 are in the BacktestEngine + RiskAgent (<code>buy_rejected</code> key added lazily).</p>
+
+<table>
+<tr><th>Layer</th><th>Filter</th><th>Code Location</th><th>Strategies most affected</th></tr>
+<tr><td>1</td><td>Regime allowlist filter (<code>_dispatch</code>)</td><td><code>multi_router.py:_dispatch()</code></td><td>RSI-MR (uptrend-only), TrendPB (uptrend-only), QuietBrk (uptrend-only)</td></tr>
+<tr><td>2</td><td>Ownership gate (cross-strategy SELL)</td><td><code>multi_router.py:decide()</code></td><td>TrendPB, RSI-MR (both issue SELLs against Breakout-owned positions)</td></tr>
+<tr><td>3a</td><td>Priority contest (SELL>BUY>HOLD)</td><td><code>multi_router.py:_merge_into()</code></td><td>DualMA (HOLD is lowest priority, always displaced)</td></tr>
+<tr><td>3b</td><td>Weight contest (same action)</td><td><code>multi_router.py:_merge_into()</code></td><td>Any lower-weight strategy on same symbol</td></tr>
+<tr><td>4</td><td>Breadth CB (BUY → HOLD when >40% downtrend)</td><td><code>risk/agent.py:evaluate()</code></td><td>All strategies equally — market-wide gate</td></tr>
+<tr><td>4b</td><td>ATR-to-cost gate (atr% &lt; 3× round-trip)</td><td><code>risk/agent.py:evaluate()</code></td><td>DualMA (smooth SMA signals often in low-ATR environments)</td></tr>
+<tr><td>4c</td><td>Cash gate (quantity → 0)</td><td><code>risk/agent.py:evaluate()</code></td><td>Lower-weight strategies processed last (cash-priority sort)</td></tr>
+<tr><td>5</td><td>Cash at execution (exec_price markup)</td><td><code>execution/agent.py:execute()</code></td><td>Marginal — slippage trims share count by 0–1 shares</td></tr>
+</table>
+
+<h3>Per-Strategy Suppression Profile</h3>
+
+<table>
+<tr><th>Strategy</th><th>Universe advantage</th><th>Main suppression cause</th><th>Expected pass-through</th></tr>
+<tr><td>Breakout</td><td>High — activity-scored top-80 is its native universe</td><td>Cash depletion (it enters first)</td><td><span class="badge green">High</span></td></tr>
+<tr><td>QuietBrk</td><td>Moderate — 20d breakout; relies on DualMAFilter or BreakoutFilter</td><td>Ownership gate (Breakout already holds); low-vol regimes may not spike rel_vol</td><td><span class="badge blue">Moderate</span></td></tr>
+<tr><td>DualMA</td><td>Low — fresh golden-cross stocks (sma_cross_age ≤5) rarely top the activity chart</td><td>Universe starvation; HOLD decisions compete poorly; regime filter may exclude symbols</td><td><span class="badge yellow">Low</span></td></tr>
+<tr><td>TrendPB</td><td>Low-Moderate — PullbackFilter needs low-vol pullback stocks that may not reach top-80</td><td>Ownership gate (Breakout owns the uptrend stocks TrendPB wants to exit); regime filter</td><td><span class="badge yellow">Low</span></td></tr>
+<tr><td>RSI-MR</td><td>Low — MeanReversionFilter needs oversold-in-uptrend; rarely makes top-80 activity list</td><td>Weight cap (≤0.05 by AdaptiveSelector); universe starvation; 5-day hold limit vs ATR stop race</td><td><span class="badge red">Very Low</span></td></tr>
+</table>
+
+<h3 id="s2-6">2.6 Weight Scaling Mechanism</h3>
+
+<p>Strategy weights flow from <code>AdaptiveStrategySelector → MultiStrategyRouter → Decision.weight → RiskAgent._size_position()</code>.</p>
+
+<div class="formula">risk_budget   = total_equity × risk_per_trade_pct × strategy_weight
+stop_distance = atr_multiplier × atr
+vol_quantity  = risk_budget / stop_distance
+max_quantity  = (total_equity × max_position_pct × strategy_weight) // price
+quantity      = min(int(vol_quantity), int(max_quantity))</div>
+
+<table>
+<tr><th>Scenario</th><th>weight</th><th>risk_budget (₹10L equity)</th><th>max_position_pct</th><th>max_shares @ ₹1000 stock</th></tr>
+<tr><td>Solo strategy</td><td>1.00</td><td>₹5,000</td><td>20%</td><td>200 shares (₹2L)</td></tr>
+<tr><td>5-strategy equal weight</td><td>0.20</td><td>₹1,000</td><td>4%</td><td>40 shares (₹40k)</td></tr>
+<tr><td>Breakout dominant (BULL)</td><td>0.35</td><td>₹1,750</td><td>7%</td><td>70 shares (₹70k)</td></tr>
+<tr><td>RSI-MR (typical cap)</td><td>0.05</td><td>₹250</td><td>1%</td><td>10 shares (₹10k)</td></tr>
+</table>
+
+<div class="callout warn">
+<span class="label">⚠️ Integer floor effect at low weight</span>
+At weight=0.05 with a ₹5L portfolio, max_position = ₹2,500. Any stock above ₹2,500/share results in 0 shares — the decision becomes a HOLD even though the strategy issued a BUY. RSI-MR is effectively zero-allocation on mid/high-cap stocks.
+</div>
+
+<h3 id="s2-7">2.7 Diagnostic Counters Schema</h3>
+
+<pre><code><span class="cm"># Initialized per strategy in __init__:</span>
+self.diag_counters: <span class="dc">dict</span>[<span class="dc">str</span>, <span class="dc">dict</span>[<span class="dc">str</span>, <span class="dc">int</span>]] = {
+    name: {
+        <span class="st">"signals_issued"</span>:    <span class="nm">0</span>,   <span class="cm"># every non-None decision from strategy</span>
+        <span class="st">"won_merge"</span>:         <span class="nm">0</span>,   <span class="cm"># survived priority + weight contest</span>
+        <span class="st">"dropped_priority"</span>:  <span class="nm">0</span>,   <span class="cm"># lost to higher-priority or higher-weight action</span>
+        <span class="st">"dropped_ownership"</span>: <span class="nm">0</span>,   <span class="cm"># SELL blocked: strategy doesn't own position</span>
+        <span class="cm"># "buy_rejected": 0  ← added lazily by BacktestEngine on first post-router rejection</span>
+    }
+    <span class="kw">for</span> name <span class="kw">in</span> strategies
+}</code></pre>
+
+<table>
+<tr><th>Counter</th><th>Meaning</th><th>Formula for pass-through rate</th></tr>
+<tr><td><code>signals_issued</code></td><td>Raw decisions including HOLD</td><td>denominator</td></tr>
+<tr><td><code>won_merge</code></td><td>Survived to BacktestEngine</td><td><code>won_merge / signals_issued</code></td></tr>
+<tr><td><code>dropped_priority</code></td><td>Lost to another strategy's higher-action or weight</td><td>adds to denominator losses</td></tr>
+<tr><td><code>dropped_ownership</code></td><td>SELL blocked by ownership rule</td><td>adds to denominator losses</td></tr>
+<tr><td><code>buy_rejected</code></td><td>BUY survived router but killed by RiskAgent/cash</td><td>post-router kill rate</td></tr>
+</table>
+
+<p>Expected signal-drop breakdown for <strong>Breakout-dominant BULL_SUSTAINED period</strong>:</p>
+<ul>
+<li>Breakout: <code>signals_issued ≈ 1200, dropped_priority ≈ 80, dropped_ownership ≈ 0, won_merge ≈ 1100</code></li>
+<li>TrendPB: <code>signals_issued ≈ 600, dropped_priority ≈ 120, dropped_ownership ≈ 380, won_merge ≈ 100</code></li>
+<li>RSI-MR: <code>signals_issued ≈ 200, dropped_priority ≈ 40, dropped_ownership ≈ 90, won_merge ≈ 70, buy_rejected ≈ 60</code> (sizing rounds to 0)</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════ §3 -->
+<h2 class="section-title anchor" id="s3">§3 Dynamic Universe — Full Scoring Analysis</h2>
+<p><strong>Files:</strong> <code>app/universe/dynamic_agent.py</code>, <code>app/universe/filters.py</code>, <code>app/universe/models.py</code></p>
+
+<h3 id="s3-1">3.1 Exact Scoring Formula</h3>
+
+<div class="formula">opportunity_score = 0.40 × percentile_rank(relative_volume)
+                  + 0.30 × percentile_rank(|daily_return|)
+                  + 0.30 × percentile_rank(rolling_vol_5d)</div>
+
+<p>All three inputs are <strong>cross-sectionally rank-normalised</strong> to [0,1] across all symbols with valid data on the current date. No raw values reach the scoring function — only percentile ranks.</p>
+
+<pre><code><span class="cm"># app/universe/dynamic_agent.py — select_candidates()</span>
+<span class="kw">for</span> col <span class="kw">in</span> [<span class="st">"relative_volume"</span>, <span class="st">"abs_daily_return"</span>, <span class="st">"rolling_vol_5d"</span>]:
+    scores[<span class="nm">f"{col}_rank"</span>] = scores[col].rank(pct=<span class="kw">True</span>)    <span class="cm"># 0→worst, 1→best</span>
+
+scores[<span class="st">"opportunity_score"</span>] = (
+    <span class="nm">0.40</span> * scores[<span class="st">"relative_volume_rank"</span>]
+  + <span class="nm">0.30</span> * scores[<span class="st">"abs_daily_return_rank"</span>]
+  + <span class="nm">0.30</span> * scores[<span class="st">"rolling_vol_5d_rank"</span>]
+)
+top = scores[<span class="st">"opportunity_score"</span>].nlargest(self.top_n)</code></pre>
+
+<h3>Feature Construction (shift(1) look-ahead prevention)</h3>
+
+<table>
+<tr><th>Feature</th><th>Formula</th><th>Lag</th><th>Window</th></tr>
+<tr><td><code>relative_volume</code></td><td><code>volume / rolling_mean(volume.shift(1), 20)</code></td><td>1-day</td><td>20d</td></tr>
+<tr><td><code>daily_return</code></td><td><code>close.pct_change(1)</code></td><td>—</td><td>1d</td></tr>
+<tr><td><code>abs_daily_return</code></td><td><code>|daily_return|</code></td><td>—</td><td>—</td></tr>
+<tr><td><code>rolling_vol_5d</code></td><td><code>std(daily_return, 5d)</code></td><td>—</td><td>5d min</td></tr>
+<tr><td><code>return_3d</code></td><td><code>close.pct_change(3)</code></td><td>—</td><td>3d</td></tr>
+<tr><td><code>sma_20</code></td><td><code>rolling_mean(close, 20)</code></td><td>—</td><td>20d min</td></tr>
+<tr><td><code>sma_50</code></td><td><code>rolling_mean(close, 50)</code></td><td>—</td><td>50d min</td></tr>
+<tr><td><code>sma_20_above_sma_50</code></td><td><code>sma_20 > sma_50</code></td><td>—</td><td>—</td></tr>
+<tr><td><code>sma_cross_age</code></td><td>consecutive days sma_20 > sma_50 (resets on cross-under)</td><td>—</td><td>cumulative</td></tr>
+<tr><td><code>atr_14</code></td><td><code>rolling_mean(true_range, 14)</code></td><td>1-day prev_close</td><td>14d</td></tr>
+<tr><td><code>atr_ratio</code></td><td><code>atr_14 / close</code></td><td>—</td><td>—</td></tr>
+</table>
+
+<h3>Universe Generation Flow</h3>
+
+<div class="flow">150 symbols (NIFTY_50 + NIFTY_NEXT_50 + MIDCAP_50)
+    │
+    │  DynamicUniverseAgent.preload()
+    │  Bulk fetch OHLCV · 90-day buffer prepended
+    │  _compute_signals() per symbol — all features
+    │
+    ▼
+select_candidates(current_date):
+    For each symbol: asof lookup → extract row
+    Drop if any of {rel_vol, daily_ret, vol_5d} is NaN
+    Compute cross-sectional percentile ranks
+    Score = 0.40×rel_vol_rank + 0.30×abs_ret_rank + 0.30×vol_rank
+    nlargest(80) → list[UniverseCandidate]
+    │
+    ├── BreakoutUniverseFilter.select_universe(candidates)
+    │     rel_vol > 1.5 AND |daily_ret| > 1.5%
+    │     sort by candidate.score → top 20
+    │
+    ├── PullbackUniverseFilter.select_universe(candidates)
+    │     sma_20_above_sma_50 AND sma_20_slope_positive
+    │     AND return_3d in [-12%, -1.5%]
+    │     AND rel_vol < 1.4
+    │     sort by return_3d asc (deepest pullback first) → top 20
+    │
+    ├── MeanReversionUniverseFilter.select_universe(candidates)
+    │     sma_20_above_sma_50 AND sma_cross_age >= 10
+    │     AND return_3d in [-15%, -3%]
+    │     sort by return_3d asc → top 20
+    │
+    ├── DualMAUniverseFilter.select_universe(candidates)
+    │     sma_20_above_sma_50 AND sma_cross_age in [1,5]
+    │     AND rel_vol >= 0.8
+    │     sort by sma_cross_age asc (freshest first) → top 30
+    │
+    └── (QuietBrkUniverseFilter: uses BreakoutFilter with relaxed thresholds)
+          rel_vol > 1.2 AND |daily_ret| > 0.8%
+
+UnionUniverseFilter: de-duplicate union of all above → final universe (≤110 unique symbols)
+BacktestEngine: union ∪ held_positions → active_symbols</div>
+
+<h3 id="s3-2">3.2 Per-Strategy Filter Deep Analysis</h3>
+
+<details open>
+<summary>BreakoutUniverseFilter — Activity-primary, well-aligned</summary>
+<div class="details-body">
+<p><strong>Intent:</strong> High-volume, high-return stocks most likely to break 10-day highs.</p>
+<table>
+<tr><th>Criterion</th><th>Value</th><th>Rationale</th></tr>
+<tr><td>relative_volume threshold</td><td>&gt; 1.5×</td><td>50% above 20d average — institutional participation</td></tr>
+<tr><td>|daily_return| threshold</td><td>&gt; 1.5%</td><td>Active repricing — market is moving</td></tr>
+<tr><td>Scoring</td><td>DynamicAgent opportunity_score</td><td>Already the right metric — no re-ranking needed</td></tr>
+<tr><td>top_n</td><td>20</td><td>Standard</td></tr>
+</table>
+<div class="callout ok"><span class="label">✅ Well-aligned</span>DynamicAgent scores by activity → Breakout wants activity → minimal tension. These stocks naturally appear in the top-80.</div>
+</div>
+</details>
+
+<details>
+<summary>PullbackUniverseFilter — Adversarial tension with DynamicAgent scoring</summary>
+<div class="details-body">
+<p><strong>Intent:</strong> Stocks in a confirmed uptrend that have pulled back quietly (declining volume).</p>
+<table>
+<tr><th>Criterion</th><th>Value</th><th>Conflict with scoring</th></tr>
+<tr><td>sma_20_above_sma_50</td><td>True</td><td>No conflict — trend flag available</td></tr>
+<tr><td>sma_20_slope_positive</td><td>True</td><td>No conflict</td></tr>
+<tr><td>return_3d</td><td>[-12%, -1.5%]</td><td>Moderate — a 3d pullback stock had lower abs_return on those days → lower score</td></tr>
+<tr><td>relative_volume</td><td>&lt; 1.4× (MAX)</td><td><strong>ADVERSARIAL</strong> — filter WANTS low volume, DynamicAgent REWARDS high volume. A perfect pullback candidate (rel_vol=0.8) ranks near the bottom of the top-80.</td></tr>
+</table>
+<div class="callout danger"><span class="label">🔴 Structural Tension</span>
+The ideal PullbackFilter candidate has: low volume (healthy rotation), 3-day decline (lower abs_return), stable realised vol (lower vol_5d rank). All three DynamicAgent scoring inputs point AWAY from this candidate. Result: TrendPB's ideal entries often don't appear in the top-80 at all.
+</div>
+</div>
+</details>
+
+<details>
+<summary>MeanReversionUniverseFilter — Partially compatible</summary>
+<div class="details-body">
+<p><strong>Intent:</strong> Oversold stocks within a confirmed, established uptrend (RSI_3 proxy: 3d drop).</p>
+<table>
+<tr><th>Criterion</th><th>Value</th><th>Notes</th></tr>
+<tr><td>sma_20_above_sma_50</td><td>True</td><td>Required — "oversold in downtrend = falling knife"</td></tr>
+<tr><td>sma_cross_age</td><td>≥ 10</td><td>Prevents fresh-crossover false signals (R2 improvement)</td></tr>
+<tr><td>return_3d</td><td>[-15%, -3%]</td><td>Extreme oversold proxy — correlates with RSI_3 &lt; 10</td></tr>
+</table>
+<p>A 3-day drop of 3% typically involves elevated realised vol (vol_5d picks it up) and possibly some volume. So RSI-MR candidates may appear in the top-80, but the vol filter (sma_cross_age ≥ 10) is a hard gate that can dramatically limit the pool on any given day.</p>
+</div>
+</details>
+
+<details>
+<summary>DualMAUniverseFilter — Chronically starved</summary>
+<div class="details-body">
+<p><strong>Intent:</strong> Stocks at or near a fresh golden cross (SMA_20 just crossed SMA_50).</p>
+<table>
+<tr><th>Criterion</th><th>Value</th><th>Notes</th></tr>
+<tr><td>sma_cross_age</td><td>[1, 5]</td><td>5-day window to catch stocks absent from top-80 on cross day</td></tr>
+<tr><td>relative_volume</td><td>≥ 0.8× (MIN)</td><td>Relaxed — crossover doesn't require volume spike</td></tr>
+<tr><td>top_n</td><td>30</td><td>Widened to compensate for rarity</td></tr>
+</table>
+<div class="callout danger"><span class="label">🔴 Chronically Starved</span>
+Golden crosses are rare events. On a typical day, 0–3 of 150 stocks have sma_cross_age ∈ [1,5]. Of those, only a fraction appear in the activity top-80 (golden-cross stocks are often in a quiet drift phase). DualMA can go many days with 0 BUY candidates — its signal is structurally infrequent.
+</div>
+</div>
+</details>
+
+<h3 id="s3-3">3.3 Momentum Bias Diagnostics</h3>
+
+<div class="callout danger">
+<span class="label">🔴 Structural Momentum Bias — All 3 scoring inputs</span>
+<ul style="margin-top:8px">
+<li><strong>relative_volume rank</strong> (40% weight): rewards volume spikes — momentum precursor</li>
+<li><strong>|abs_daily_return| rank</strong> (30% weight): rewards price magnitude — momentum confirmation</li>
+<li><strong>rolling_vol_5d rank</strong> (30% weight): rewards recent activity — momentum persistence</li>
+</ul>
+Stable low-volatility compounders (low rel_vol, low abs_return, low vol_5d) score ≈ 0.0 every day and never enter the top-80. Mean-reversion and pullback candidates are <em>systematically excluded</em> unless they experienced a recent sell-off large enough to boost their vol metrics.
+</div>
+
+<h3 id="s3-4">3.4 Universe Overlap Analysis</h3>
+
+<table>
+<tr><th>Filter Pair</th><th>Expected Overlap</th><th>Reason</th></tr>
+<tr><td>Breakout ∩ QuietBrk</td><td>Low–Moderate (~10–30%)</td><td>Both want high-activity breakouts but different lookback (10d vs 20d) and thresholds (1.5% vs 0.8%)</td></tr>
+<tr><td>Breakout ∩ TrendPB</td><td>Very Low (~5%)</td><td>Breakout wants high volume; TrendPB wants low volume — adversarial</td></tr>
+<tr><td>Breakout ∩ RSI-MR</td><td>Low (~5%)</td><td>RSI-MR needs oversold; Breakout needs upward breakout — different price action</td></tr>
+<tr><td>TrendPB ∩ RSI-MR</td><td>Moderate (~20–30%)</td><td>Both need sma_20 &gt; sma_50; RSI-MR needs deeper 3d drop than TrendPB minimum</td></tr>
+<tr><td>DualMA ∩ any</td><td>Very Low (~2–5%)</td><td>sma_cross_age ≤5 is rare; a stock on golden cross day may also show a volume spike (Breakout cross-over)</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ §4 -->
+<h2 class="section-title anchor" id="s4">§4 Full Single-Day Execution Trace</h2>
+
+<p>Reconstructed representative trace for a <strong>BULL_SUSTAINED</strong> market day. Portfolio: ₹10L equity, 3 held positions (Breakout-owned). Active weights: Breakout=0.30, QuietBrk=0.25, DualMA=0.20, TrendPB=0.15, RSI-MR=0.05 (capped by AdaptiveSelector regime bounds, then renorm → Breakout=0.316, QuietBrk=0.263, DualMA=0.211, TrendPB=0.158, RSI-MR=0.053).</p>
+
+<h3>Step 1 — Universe Generation</h3>
+
+<table>
+<tr><th>Stage</th><th>Count</th><th>Example symbols</th></tr>
+<tr><td>All symbols (BROAD_UNIVERSE)</td><td>150</td><td>RELIANCE, HDFCBANK, INFY, TCS, ICICIBANK, …</td></tr>
+<tr><td>Top-80 by opportunity_score</td><td>80</td><td>Stocks with rel_vol&gt;1.3 today; quiet names dropped</td></tr>
+<tr><td>BreakoutFilter output</td><td>12</td><td>TATASTEEL(rel_vol=2.1, ret=+2.3%), BAJAJFINSV, COALINDIA, …</td></tr>
+<tr><td>PullbackFilter output</td><td>6</td><td>HDFCBANK(ret_3d=-2.1%, sma_cross_age=45, rel_vol=0.9), ASIANPAINT, …</td></tr>
+<tr><td>MeanRevFilter output</td><td>3</td><td>WIPRO(ret_3d=-4.1%, sma_cross_age=22), TECHM, …</td></tr>
+<tr><td>DualMAFilter output</td><td>2</td><td>SUNPHARMA(sma_cross_age=1), POWERGRID(sma_cross_age=3)</td></tr>
+<tr><td>Union (de-duplicated)</td><td>22</td><td>All unique symbols from above filters</td></tr>
+<tr><td>+ held positions added</td><td>3</td><td>RELIANCE, BAJAJ-AUTO, TITAN (all Breakout-owned)</td></tr>
+<tr><td><strong>active_symbols</strong></td><td><strong>25</strong></td><td>Fed into MarketObserverAgent</td></tr>
+</table>
+
+<h3>Step 2 — Per-Strategy Signals</h3>
+
+<table>
+<tr><th>Strategy</th><th>Sees (after regime filter)</th><th>BUY signals</th><th>SELL signals</th><th>HOLD signals</th></tr>
+<tr><td>Breakout</td><td>25 symbols (no regime filter)</td><td>TATASTEEL (price &gt; high_10d, vol=2.1), COALINDIA</td><td>RELIANCE (price &lt; SMA_10)</td><td>BAJAJ-AUTO, TITAN</td></tr>
+<tr><td>QuietBrk</td><td>25 symbols (no regime filter)</td><td>BAJAJFINSV (price &gt; high_20d), SUNPHARMA</td><td>—</td><td>RELIANCE, TITAN</td></tr>
+<tr><td>DualMA</td><td>25 symbols (no regime filter); per-symbol loop</td><td>SUNPHARMA (sma_cross_age=1, golden cross detected)</td><td>—</td><td>22 × HOLD</td></tr>
+<tr><td>TrendPB</td><td>18 symbols in UPTREND regimes only (regime filter applied)</td><td>HDFCBANK (pullback+trend entry)</td><td>RELIANCE (held 12d, exit_target hit) — <strong>BLOCKED (Breakout owns RELIANCE)</strong></td><td>BAJAJ-AUTO (hold day 4)</td></tr>
+<tr><td>RSI-MR</td><td>18 symbols in UPTREND/SIDEWAYS regimes</td><td>WIPRO (RSI_3=7)</td><td>—</td><td>—</td></tr>
+</table>
+
+<h3>Step 3 — Router Merge Processing</h3>
+
+<table>
+<tr><th>Symbol</th><th>Decisions arriving</th><th>Resolution</th><th>Winner</th><th>Loser counter</th></tr>
+<tr><td>RELIANCE</td><td>Breakout=SELL, QuietBrk=HOLD, TrendPB=SELL(blocked), DualMA=HOLD</td><td>TrendPB SELL blocked (dropped_ownership). Breakout SELL vs QuietBrk HOLD: SELL wins (priority 2&gt;0). DualMA HOLD displaced.</td><td><strong>Breakout SELL</strong></td><td>QuietBrk: dropped_priority+1. DualMA: dropped_priority+1. TrendPB: dropped_ownership+1.</td></tr>
+<tr><td>SUNPHARMA</td><td>QuietBrk=BUY, DualMA=BUY</td><td>Same action (BUY). Tie-break by weight: QuietBrk(0.263) &gt; DualMA(0.211).</td><td><strong>QuietBrk BUY</strong></td><td>DualMA: dropped_priority+1.</td></tr>
+<tr><td>TATASTEEL</td><td>Breakout=BUY only</td><td>Uncontested.</td><td><strong>Breakout BUY</strong></td><td>—</td></tr>
+<tr><td>HDFCBANK</td><td>TrendPB=BUY only</td><td>Uncontested.</td><td><strong>TrendPB BUY</strong></td><td>—</td></tr>
+<tr><td>WIPRO</td><td>RSI-MR=BUY only</td><td>Uncontested.</td><td><strong>RSI-MR BUY</strong></td><td>—</td></tr>
+<tr><td>BAJAJ-AUTO</td><td>Breakout=HOLD, TrendPB=HOLD</td><td>Both HOLD, Breakout owns position. Breakout HOLD wins (higher weight), TrendPB dropped_priority+1.</td><td><strong>Breakout HOLD</strong></td><td>TrendPB: dropped_priority+1.</td></tr>
+</table>
+
+<h3>Step 4 — RiskAgent Processing (sorted by weight desc)</h3>
+
+<p>Pre-sort: Breakout(0.316), QuietBrk(0.263), DualMA(0.211), TrendPB(0.158), RSI-MR(0.053)</p>
+<p>Market breadth: 28% downtrend → CB threshold 40% not hit → CB inactive.</p>
+
+<table>
+<tr><th>Decision</th><th>Weight</th><th>RiskAgent result</th><th>Reason</th></tr>
+<tr><td>Breakout SELL RELIANCE</td><td>0.316</td><td><span class="badge green">SELL executed</span></td><td>Position exists; RELIANCE is in portfolio at avg 2420, exec_price 2385 after slip</td></tr>
+<tr><td>Breakout BUY TATASTEEL</td><td>0.316</td><td><span class="badge green">BUY executed</span></td><td>qty=int(min(1000×0.316/stop, 200k×0.316/price)); after RELIANCE SELL cash = ₹7.2L; sufficient</td></tr>
+<tr><td>QuietBrk BUY SUNPHARMA</td><td>0.263</td><td><span class="badge green">BUY executed</span></td><td>Cash remaining ₹6.1L; qty sized at weight=0.263</td></tr>
+<tr><td>TrendPB BUY HDFCBANK</td><td>0.158</td><td><span class="badge red">→ HOLD (cash insufficient)</span></td><td>Cash ₹4.8L; RiskAgent sizes qty=12 but cash gate: ₹4.8L available, HDFCBANK=₹1650, 12×₹1650=₹19,800 fine — actually executes. Cash ₹4.6L.</td></tr>
+<tr><td>RSI-MR BUY WIPRO</td><td>0.053</td><td><span class="badge yellow">→ HOLD (qty=0)</span></td><td>risk_budget=₹10L×0.005×0.053=₹265; ATR=8.5; stop=2×8.5=17; qty=265/17=15. But max_qty=(₹10L×0.20×0.053)/350=30 shares, so qty=15. Actually executes. Cash ₹4.4L.</td></tr>
+<tr><td>Breakout HOLD BAJAJ-AUTO</td><td>0.316</td><td><span class="badge blue">ATR stop check</span></td><td>high_watermark=4250, stop=4250-2×ATR(42)=4166. current=4190 &gt; 4166 → no stop. HOLD preserved.</td></tr>
+</table>
+
+<h3>Step 5 — Signal Loss Trace</h3>
+
+<table>
+<tr><th>Signal</th><th>Died at</th><th>Killer</th><th>Counter incremented</th></tr>
+<tr><td>TrendPB SELL RELIANCE</td><td>Router ownership gate</td><td>Breakout owns RELIANCE</td><td><code>TrendPB.dropped_ownership</code></td></tr>
+<tr><td>DualMA BUY SUNPHARMA</td><td>Router weight contest</td><td>QuietBrk same action, higher weight</td><td><code>DualMA.dropped_priority</code></td></tr>
+<tr><td>DualMA HOLD RELIANCE</td><td>Router priority contest</td><td>Breakout SELL (priority 2 &gt; 0)</td><td><code>DualMA.dropped_priority</code></td></tr>
+<tr><td>QuietBrk HOLD RELIANCE</td><td>Router priority contest</td><td>Breakout SELL wins</td><td><code>QuietBrk.dropped_priority</code></td></tr>
+<tr><td>TrendPB HOLD BAJAJ-AUTO</td><td>Router weight contest</td><td>Breakout same action, higher weight</td><td><code>TrendPB.dropped_priority</code></td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ §5 -->
+<h2 class="section-title anchor" id="s5">§5 Position Ownership System</h2>
+
+<h3>5.1 Ownership Lifecycle</h3>
+
+<pre><code><span class="cm"># App: app/strategy/multi_router.py</span>
+<span class="cm"># position_owners persists across days, reset only for closed positions</span>
+
+<span class="cm"># Day N: Breakout wins BUY contest for TATASTEEL</span>
+self.position_owners[<span class="st">"TATASTEEL"</span>] = <span class="st">"Breakout"</span>
+
+<span class="cm"># Day N+3: TrendPB issues SELL for TATASTEEL (ATR pattern)</span>
+owner = self.position_owners.get(<span class="st">"TATASTEEL"</span>)  <span class="cm"># → "Breakout"</span>
+<span class="kw">if</span> owner <span class="kw">is not None and</span> owner != <span class="st">"TrendPB"</span>:
+    self.diag_counters[<span class="st">"TrendPB"</span>][<span class="st">"dropped_ownership"</span>] += <span class="nm">1</span>
+    <span class="kw">continue</span>   <span class="cm"># ← signal dies here, silently</span>
+
+<span class="cm"># Day N+3: Breakout emits HOLD (price above SMA_10, no SELL signal)</span>
+<span class="cm"># RiskAgent ATR stop: watermark=352, current=338, stop=352-2×ATR(6)=340</span>
+<span class="cm"># 338 &lt; 340 → RiskAgent returns SELL (ATR stop override)</span>
+<span class="cm"># ATR stop fires regardless of ownership — this is the safety valve</span></code></pre>
+
+<h3>5.2 Ensemble Intelligence Impact</h3>
+
+<p>The ownership model was designed to prevent premature exits (e.g. RSI-MR selling a trending Breakout position because RSI crossed 80 mid-rally). This is <em>architecturally sound</em> for clean 1-strategy scenarios. In a 5-strategy ensemble it has unintended side effects:</p>
+
+<table>
+<tr><th>Impact</th><th>Mechanism</th><th>Severity</th></tr>
+<tr><td>Cross-strategy exit intelligence wasted</td><td>TrendPB recognises a trend-break in a Breakout position; its SELL is dropped</td><td><span class="badge red">High</span></td></tr>
+<tr><td>RSI overbought exit blocked</td><td>RSI-MR issues SELL when RSI_3 &gt; 70 on a Breakout-owned position near peak</td><td><span class="badge red">High</span></td></tr>
+<tr><td>Ensemble concentration</td><td>Breakout wins most BUYs → owns most positions → all exit signals are Breakout exits → system behaves like a single-strategy Breakout</td><td><span class="badge red">Critical</span></td></tr>
+<tr><td>Ensemble diversity preserved on entry</td><td>Any strategy can BUY (no ownership on entry); diversity on BUY is maintained</td><td><span class="badge green">Mitigated</span></td></tr>
+</table>
+
+<h3>5.3 Alternative Architecture Concepts (Analysis Only)</h3>
+
+<details>
+<summary>Concept A — Shared Ownership (conviction voting)</summary>
+<div class="details-body">
+<p>Remove exclusive ownership. Any strategy may SELL any held position. Conflict resolution remains SELL &gt; BUY &gt; HOLD (an exit from any strategy beats a hold from the owner). Opens the door for cross-strategy exit confirmation: if 2+ strategies agree the position should be exited, it exits faster. Risk: high-frequency strategies (RSI-MR 5-day hold) may prematurely exit long-duration Breakout trends.</p>
+<p><strong>Existing flag:</strong> <code>allow_cross_strategy_exits=True</code> already implements this — it's a one-line configuration change. A/B test noted in code comments.</p>
+</div>
+</details>
+
+<details>
+<summary>Concept B — Conviction Aggregation (vote weighting)</summary>
+<div class="details-body">
+<p>Rather than first-past-the-post conflict resolution, accumulate conviction scores per symbol. A SELL from 3 strategies scores higher than a BUY from 1. The highest-conviction action wins, scaled by the sum of agreeing strategy weights. This is architecturally incompatible with the current <code>Decision</code> dataclass (no multi-source field) and would require a new merge layer.</p>
+</div>
+</details>
+
+<details>
+<summary>Concept C — Probabilistic Voting</summary>
+<div class="details-body">
+<p>Each strategy emits a probability vector [P(SELL), P(BUY), P(HOLD)]. The router multiplies by strategy weight and sums across strategies. The action with the highest weighted probability wins. This requires strategies to output calibrated probabilities rather than hard decisions — a significant interface change.</p>
+</div>
+</details>
+
+<!-- ══════════════════════════════════════════════════════ §6 -->
+<h2 class="section-title anchor" id="s6">§6 Risk Agent — Signal Kill Chain</h2>
+<p><strong>File:</strong> <code>app/risk/agent.py</code></p>
+
+<div class="flow"><span class="box">RiskAgent.evaluate(decision, portfolio, market_state, equity_prices, market_downtrend_pct, regime_label)</span>
+│
+├── [1] BREADTH CIRCUIT BREAKER (BUY only)
+│     if decision.action == "BUY"
+│       AND breadth_circuit_breaker == True
+│       AND market_downtrend_pct &gt;= max_downtrend_pct (default 40%):
+│         → return HOLD  "Market breadth CB: XX% in DOWNTREND"
+│
+├── [2] ATR-TO-COST GATE (BUY only)
+│     if min_atr_cost_ratio &gt; 0 AND atr AND price:
+│       atr_pct = atr / price
+│       min_atr = round_trip_cost_pct × min_atr_cost_ratio  (0.0015 × 3 = 0.45%)
+│       if atr_pct &lt; min_atr:
+│         → return HOLD  "ATR X.XXX% below min cost ratio (0.450%)"
+│
+├── [3] REGIME FILTER (BUY only)
+│     if allowed_regimes is not None:
+│       if regime not in allowed_regimes:
+│         → return HOLD  "Blocked by regime filter (regime)"
+│
+├── [4] TRAILING ATR STOP (any action with position)
+│     if symbol in portfolio.positions AND atr:
+│       entry_atr = position.atr_at_entry or atr
+│       high_watermark = max(prev_watermark, current_price)  ← trails up
+│       stop_mult = regime_multipliers[regime] or atr_multiplier
+│       stop_price = high_watermark - (stop_mult × entry_atr)
+│       if current_price &lt;= stop_price:
+│         → return SELL  "Trailing ATR stop hit"  ← overrides ALL strategy signals
+│
+├── [5] HOLD pass-through
+│     → return HOLD unchanged
+│
+├── [6] BUY — POSITION SIZING + CASH GATE
+│     if symbol already in portfolio: → return HOLD (no add-to-position)
+│     strategy_weight = decision.weight
+│     quantity = _size_position(equity, price, atr, strategy_weight)
+│     if quantity &lt;= 0:
+│       if allow_min_one_share AND price &lt;= equity × max_position_pct: quantity=1
+│       else: → return HOLD
+│     max_cash_qty = portfolio.cash // price
+│     quantity = min(quantity, max_cash_qty)
+│     if quantity &lt;= 0: → return HOLD  ← cash gate
+│     → return BUY(quantity, atr_at_entry)
+│
+└── [7] SELL — POSITION EXISTS CHECK + MIN-HOLD GATE
+      if symbol not in portfolio: → return HOLD
+      if min_hold_days &gt; 0:
+        if held_days &lt; min_hold_days: → return HOLD  (ETF profile only)
+      → return SELL(quantity=position.quantity)</div>
+
+<h3>Trailing ATR Stop Regime Multipliers</h3>
+
+<table>
+<tr><th>Regime</th><th>Stop Multiplier</th><th>Interpretation</th></tr>
+<tr><td>LOW_VOL_UPTREND</td><td>2.5×</td><td>Smooth trend — wide stop, let it run</td></tr>
+<tr><td>MID_VOL_UPTREND</td><td>2.0×</td><td>Normal</td></tr>
+<tr><td>HIGH_VOL_UPTREND</td><td>1.5×</td><td>Lock in gains faster</td></tr>
+<tr><td>LOW/MID_VOL_SIDEWAYS</td><td>1.5×</td><td>Choppy — tighter stop</td></tr>
+<tr><td>HIGH_VOL_SIDEWAYS</td><td>1.0×</td><td>Exit quickly</td></tr>
+<tr><td>ANY_DOWNTREND</td><td>1.0×</td><td>Exit at first signal</td></tr>
+</table>
+
+<h3>Breadth CB Relaxation (BacktestEngine)</h3>
+
+<pre><code><span class="cm"># app/backtest/engine.py — before RiskAgent.evaluate()</span>
+effective_downtrend_pct = market_downtrend_pct
+<span class="kw">if</span> regime_snapshot:
+    broad_regime = regime_snapshot.get(<span class="st">"broad_regime"</span>)
+    <span class="kw">if</span> broad_regime == <span class="st">"TRANSITION_UP"</span>:
+        effective_downtrend_pct = min(market_downtrend_pct, <span class="nm">0.30</span>)  <span class="cm"># cap at 30%</span>
+    <span class="kw">elif</span> broad_regime == <span class="st">"BEAR_EARLY"</span>:
+        effective_downtrend_pct = min(market_downtrend_pct, <span class="nm">0.38</span>)  <span class="cm"># cap at 38%</span></code></pre>
+
+<p>This ensures the CB (threshold=40%) does not block ALL buys during early recovery, when breadth is genuinely improving but pct_downtrend may still be 50%+.</p>
+
+<!-- ══════════════════════════════════════════════════════ §7 -->
+<h2 class="section-title anchor" id="s7">§7 Adaptive Strategy Selector</h2>
+<p><strong>File:</strong> <code>app/meta/adaptive_selector.py</code></p>
+
+<h3>7.1 Weekly Rebalance Pipeline</h3>
+
+<div class="flow">Every 5 calendar days (rebalance_frequency_days=5):
+│
+├── 1. _classify_regime(snapshot) — deterministic Python classification
+│     Evaluates _REGIME_RULES in order (first match wins):
+│     CRASH_HIGHVOL → TRANSITION_UP → BEAR_CONFIRMED → BEAR_EARLY
+│     → RECOVERY → BULL_SUSTAINED → BULL_LOWVOL → BULL_MEDVOL → MIXED
+│     Returns: (label, description, confidence)
+│
+├── 2. Regime stability gate
+│     if label == confirmed_regime: confirmed_weeks++, use label
+│     elif label == pending_regime: pending_count++
+│          if pending_count &gt;= regime_stability_weeks (2):
+│            confirm transition → use new label
+│          else: hold previous confirmed_regime  ← stale weights
+│
+├── 3. _call_llm(snapshot, label, desc, confidence)
+│     Build prompt: regime + rolling 4-week history + performance table
+│                    + hard allocation rule + feedback block (if PAA active)
+│     OpenAI GPT-4o-mini (temperature=0, seed=0)
+│     Parse JSON response
+│     → _parse_weights(raw, label)
+│           clip negatives
+│           enforce DualMA floor &gt;= 0.10 (unless MICRO/SMALL tier)
+│           fill missing strategies → 0.0
+│           _apply_regime_bounds(weights, label)  ← deterministic clamp
+│           (optional feedback_agent.adjust_weights)
+│           normalise to sum=1.0
+│
+└── 4. MultiStrategyRouter.update_weights(new_weights)</div>
+
+<h3>7.2 Regime Classification Rules</h3>
+
+<table>
+<tr><th>Label</th><th>Condition (first match)</th><th>Confidence</th></tr>
+<tr><td>CRASH_HIGHVOL</td><td>pct_downtrend &gt; 35% AND avg_atr_pct &gt; 2.3%</td><td>HIGH</td></tr>
+<tr><td>TRANSITION_UP</td><td>trend == "IMPROVING" AND pct_downtrend &gt; 20%</td><td>MEDIUM</td></tr>
+<tr><td>BEAR_CONFIRMED</td><td>pct_downtrend &gt; 45%</td><td>HIGH</td></tr>
+<tr><td>BEAR_EARLY</td><td>35% ≤ pct_downtrend ≤ 45%</td><td>MEDIUM</td></tr>
+<tr><td>RECOVERY</td><td>pct_uptrend &gt; 60% AND avg_atr_pct &gt; 2.2%</td><td>HIGH</td></tr>
+<tr><td>BULL_SUSTAINED</td><td>pct_uptrend &gt; 60% AND avg_atr_pct ≤ 2.2%</td><td>HIGH</td></tr>
+<tr><td>BULL_LOWVOL</td><td>pct_uptrend &gt; 55% AND avg_atr_pct &lt; 1.5%</td><td>HIGH</td></tr>
+<tr><td>BULL_MEDVOL</td><td>pct_uptrend &gt; 55%</td><td>MEDIUM</td></tr>
+<tr><td>MIXED</td><td>fallback (always True)</td><td>LOW</td></tr>
+</table>
+
+<h3>7.3 Hard Allocation Bounds (Post-LLM Enforcement)</h3>
+
+<table>
+<tr><th>Regime</th><th>DualMA</th><th>Breakout</th><th>QuietBrk</th><th>TrendPB</th><th>RSI-MR</th></tr>
+<tr><td>CRASH_HIGHVOL</td><td>—</td><td>≥0.30</td><td>≤0.10</td><td>≥0.20</td><td>≤0.05</td></tr>
+<tr><td>BEAR_CONFIRMED</td><td>≥0.55</td><td>—</td><td>≤0.05</td><td>≤0.10</td><td>≤0.05</td></tr>
+<tr><td>BEAR_EARLY</td><td>≥0.40</td><td>—</td><td>≤0.15</td><td>≤0.15</td><td>≤0.05</td></tr>
+<tr><td>TRANSITION_UP</td><td>≥0.20</td><td>≥0.30</td><td>—</td><td>≤0.15</td><td>—</td></tr>
+<tr><td>RECOVERY</td><td>—</td><td>≥0.35</td><td>≥0.25</td><td>≤0.15</td><td>≤0.05</td></tr>
+<tr><td>BULL_LOWVOL</td><td>—</td><td>—</td><td>≥0.25</td><td>≥0.20</td><td>≤0.05</td></tr>
+<tr><td>BULL_SUSTAINED</td><td>≥0.25</td><td>≥0.25</td><td>≥0.20</td><td>—</td><td>≤0.05</td></tr>
+<tr><td>BULL_MEDVOL</td><td>≥0.20</td><td>≥0.25</td><td>≥0.20</td><td>—</td><td>≤0.05</td></tr>
+<tr><td>MIXED</td><td>—</td><td>—</td><td>—</td><td>—</td><td>≤0.10</td></tr>
+</table>
+
+<div class="callout info">
+<span class="label">ℹ️ RSI-MR is structurally capped in every regime</span>
+RSI-MR is capped at ≤0.05 in 7 of 9 regimes and ≤0.10 in MIXED. Its backtested Sharpe is negative in Bear/Choppy (-0.65) and Mixed (-0.14). The caps are intentional — but they effectively reduce RSI-MR to an observer. At ₹10L and weight=0.05, most NSE mid/large-cap stocks yield 0–15 shares per trade.
+</div>
+
+<!-- ══════════════════════════════════════════════════════ §8 -->
+<h2 class="section-title anchor" id="s8">§8 Regime Context Agent</h2>
+<p><strong>File:</strong> <code>app/meta/regime_context_agent.py</code></p>
+
+<p>Augments the base <code>build_regime_snapshot()</code> (active 24–80 traded symbols) with 150-symbol breadth signals from <code>DynamicUniverseAgent._cache</code>.</p>
+
+<table>
+<tr><th>Signal</th><th>Computation</th><th>Usage</th></tr>
+<tr><td><code>pct_above_sma50_broad</code></td><td>% of 150 symbols where close &gt; SMA_50</td><td>Breadth health indicator for LLM + trend detection</td></tr>
+<tr><td><code>advance_decline_ratio</code></td><td>% of 150 symbols with positive daily_return</td><td>Single-day buying pressure</td></tr>
+<tr><td><code>avg_rolling_vol_5d</code></td><td>Mean 5-day realised vol across broad universe</td><td>Market activity level</td></tr>
+<tr><td><code>trend</code></td><td>5-day direction of breadth + downtrend changes</td><td>TRANSITION_UP detection; LLM prompt context</td></tr>
+<tr><td><code>broad_regime</code></td><td><code>_classify_regime(merged_snapshot)</code> — same rules as AdaptiveSelector</td><td>CB relaxation in BacktestEngine; regime_gating in RiskAgent (ETF profile)</td></tr>
+</table>
+
+<h3>Trend Detection Algorithm</h3>
+
+<pre><code><span class="cm"># Last 5 days of history required</span>
+bd = breadth[-<span class="nm">1</span>] - breadth[<span class="nm">0</span>]     <span class="cm"># Δ pct_above_sma50_broad</span>
+dd = downtrend[-<span class="nm">1</span>] - downtrend[<span class="nm">0</span>]  <span class="cm"># Δ pct_downtrend</span>
+
+<span class="kw">if</span> bd &gt; <span class="nm">0.05</span> <span class="kw">and</span> dd &lt; <span class="nm">-0.04</span>:    <span class="cm"># breadth +5pp AND downtrend -4pp</span>
+    <span class="kw">return</span> <span class="st">"IMPROVING"</span>
+<span class="kw">if</span> bd &lt; <span class="nm">-0.05</span> <span class="kw">and</span> dd &gt; <span class="nm">0.04</span>:   <span class="cm"># breadth -5pp AND downtrend +4pp</span>
+    <span class="kw">return</span> <span class="st">"DETERIORATING"</span>
+<span class="kw">return</span> <span class="st">"STABLE"</span></code></pre>
+
+<!-- ══════════════════════════════════════════════════════ §9 -->
+<h2 class="section-title anchor" id="s9">§9 Execution Agent</h2>
+<p><strong>File:</strong> <code>app/execution/agent.py</code></p>
+
+<h3>Cost Model</h3>
+
+<div class="formula">BUY exec_price  = market_price × (1 + slippage_pct) × (1 + commission_pct)
+SELL exec_price = market_price × (1 − slippage_pct) × (1 − commission_pct)
+
+Default: slippage=0.05%, commission=0.10% per side
+Round-trip cost: ≈ 0.30% of trade value</div>
+
+<p>Costs are baked into <code>exec_price</code> so that <code>portfolio.cash</code>, <code>position.average_price</code>, and <code>trade_pnl</code> are all automatically post-cost. No separate cost ledger required.</p>
+
+<p>The Zerodha <code>cost_model</code> path adds a flat per-scrip DP charge on SELL (₹5.5 for equity delivery) deducted explicitly from <code>portfolio.cash</code> and <code>portfolio.realized_pnl</code> — this is the only cost not foldable into the per-share price.</p>
+
+<!-- ══════════════════════════════════════════════════════ §10 -->
+<h2 class="section-title anchor" id="s10">§10 System-Level Diagnostics</h2>
+
+<h3>Strategy Starvation Analysis</h3>
+
+<table>
+<tr><th>Strategy</th><th>Signal frequency</th><th>Universe availability</th><th>Capital utilisation</th><th>Starvation risk</th></tr>
+<tr><td>Breakout</td><td>High (daily breakouts in large universe)</td><td>High (aligned with activity scorer)</td><td>High (enters first, cash priority)</td><td><span class="badge green">None</span></td></tr>
+<tr><td>QuietBrk</td><td>Moderate (20d breakout rarer than 10d)</td><td>Moderate (relaxed activity thresholds)</td><td>Moderate</td><td><span class="badge blue">Low</span></td></tr>
+<tr><td>DualMA</td><td>Low (golden cross is an infrequent event)</td><td>Low (activity scorer excludes quiet-trend stocks)</td><td>Low (rarely fills slots)</td><td><span class="badge red">High</span></td></tr>
+<tr><td>TrendPB</td><td>Low-Moderate (pullback in uptrend; low-vol filter)</td><td>Low (adversarial to activity scorer)</td><td>Low (ownership blocks exits → capital stuck)</td><td><span class="badge red">High</span></td></tr>
+<tr><td>RSI-MR</td><td>Low (RSI_3 &lt; 10 is extreme; max 5d hold)</td><td>Low (needs established uptrend + oversold)</td><td>Very Low (weight cap 5%; integer rounding kills shares)</td><td><span class="badge red">Critical</span></td></tr>
+</table>
+
+<h3>Execution Bandwidth Dominance</h3>
+
+<p>In BULL_SUSTAINED regime (typical period):</p>
+<ul>
+<li><strong>Breakout</strong> claims ~60–70% of executed trades by count (high universe hit-rate + cash priority)</li>
+<li><strong>QuietBrk</strong> claims ~20–25% (second largest filter output)</li>
+<li><strong>TrendPB</strong> claims ~5–10% (PullbackFilter output small; ownership blocks exits)</li>
+<li><strong>DualMA</strong> claims ~3–5% (few golden crosses per day)</li>
+<li><strong>RSI-MR</strong> claims &lt;2% (weight too low for meaningful sizing on most stocks)</li>
+</ul>
+
+<h3>Router Entropy</h3>
+
+<p>In an ideal 5-strategy ensemble with equal execution, router entropy would be log₂(5)≈2.32 bits. In practice:</p>
+<ul>
+<li>Breakout dominates ~65% of execution → entropy ≈ 1.4 bits (significantly below ideal)</li>
+<li>The ensemble is effectively a Breakout-primary system with occasional QuietBrk overlap</li>
+<li>DualMA, TrendPB, RSI-MR contribute &lt;10% combined</li>
+</ul>
+
+<h3>Signal Collision Rate</h3>
+
+<p>On a typical day with 25 active symbols and 5 strategies, expected collision rate:</p>
+<ul>
+<li>Breakout + QuietBrk: ~30% symbol overlap (both activity-based, different lookbacks)</li>
+<li>Breakout + TrendPB: ~5% overlap (adversarial filters)</li>
+<li>All 5 strategies on same symbol: rare (&lt;1% of symbols per day)</li>
+<li>Per-symbol conflict resolution runs ~10–15 times per day (2–3 per overlapping symbol pair)</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════ §11 -->
+<h2 class="section-title anchor" id="s11">§11 Code Reference Index</h2>
+
+<table>
+<tr><th>Component</th><th>File</th><th>Key classes / functions</th></tr>
+<tr><td>Signal Decision</td><td><code>app/strategy/models.py</code></td><td><code>Decision(symbol, action, quantity, weight, source, atr_at_entry)</code></td></tr>
+<tr><td>MultiStrategyRouter</td><td><code>app/strategy/multi_router.py</code></td><td><code>decide()</code>, <code>_dispatch()</code>, <code>_merge_into()</code>, <code>update_weights()</code>, <code>position_owners</code>, <code>diag_counters</code>, <code>allow_cross_strategy_exits</code></td></tr>
+<tr><td>Breakout Strategy</td><td><code>app/strategy/breakout_momentum.py</code></td><td><code>BreakoutMomentumStrategy.decide(date, states, portfolio)</code> — 10d high, SMA_10 exit</td></tr>
+<tr><td>Quiet Breakout</td><td><code>app/strategy/quiet_breakout.py</code></td><td><code>QuietBreakoutStrategy.decide()</code> — 20d high, SMA_20 exit</td></tr>
+<tr><td>Dual MA</td><td><code>app/strategy/dual_ma.py</code></td><td><code>DualMovingAverageStrategy.decide(market_state, portfolio)</code> — 2-param, per-symbol</td></tr>
+<tr><td>Trend Pullback</td><td><code>app/strategy/trend_pullback.py</code></td><td><code>TrendPullbackStrategy.decide()</code> — internal <code>_entry_dates</code> dict</td></tr>
+<tr><td>RSI Mean Reversion</td><td><code>app/strategy/rsi_mean_reversion.py</code></td><td><code>RSIMeanReversionStrategy.decide()</code> — RSI_3 &lt; 10 entry, &gt; 70 exit, 5d max hold</td></tr>
+<tr><td>Dynamic Universe</td><td><code>app/universe/dynamic_agent.py</code></td><td><code>DynamicUniverseAgent</code>: <code>preload()</code>, <code>_compute_signals()</code>, <code>select_candidates()</code></td></tr>
+<tr><td>Universe Filters</td><td><code>app/universe/filters.py</code></td><td><code>BreakoutUniverseFilter</code>, <code>PullbackUniverseFilter</code>, <code>MeanReversionUniverseFilter</code>, <code>DualMAUniverseFilter</code>, <code>UnionUniverseFilter</code>, <code>AffordabilityFilter</code></td></tr>
+<tr><td>Universe Model</td><td><code>app/universe/models.py</code></td><td><code>UniverseCandidate</code> dataclass — all scoring fields</td></tr>
+<tr><td>Risk Agent</td><td><code>app/risk/agent.py</code></td><td><code>RiskAgent.evaluate()</code>, <code>_size_position()</code>, <code>_stop_multiplier()</code>, <code>_DEFAULT_REGIME_MULTIPLIERS</code></td></tr>
+<tr><td>Portfolio</td><td><code>app/portfolio/models.py</code></td><td><code>Portfolio(cash, positions, realized_pnl)</code>, <code>Position(symbol, quantity, average_price, atr_at_entry, high_watermark, entry_date)</code></td></tr>
+<tr><td>Portfolio Engine</td><td><code>app/portfolio/engine.py</code></td><td><code>PortfolioEngine.buy()</code>, <code>.sell()</code></td></tr>
+<tr><td>Backtest Engine</td><td><code>app/backtest/engine.py</code></td><td><code>BacktestEngine.run()</code> — main daily loop, breadth CB relaxation, ExposureGate, PAA tracker hooks</td></tr>
+<tr><td>Adaptive Selector</td><td><code>app/meta/adaptive_selector.py</code></td><td><code>AdaptiveStrategySelector.rebalance()</code>, <code>_classify_regime()</code>, <code>_apply_regime_bounds()</code>, <code>_REGIME_RULES</code>, <code>_REGIME_WEIGHT_BOUNDS</code></td></tr>
+<tr><td>Regime Context</td><td><code>app/meta/regime_context_agent.py</code></td><td><code>RegimeContextAgent.build_snapshot()</code>, <code>_compute_broad_breadth()</code>, <code>_detect_trend()</code></td></tr>
+<tr><td>Execution Agent</td><td><code>app/execution/agent.py</code></td><td><code>ExecutionAgent.execute()</code> — exec_price markup, DP charge</td></tr>
+<tr><td>CQE Analytics</td><td><code>app/analytics/cqe.py</code></td><td><code>CQEEngine</code>, <code>WindowMetrics</code>, <code>_classify_morphology()</code> — observational only</td></tr>
+<tr><td>Trade Annotator</td><td><code>app/analytics/trade_annotator.py</code></td><td><code>TradeAnnotator.annotate()</code>, <code>TradeAttributionTracker</code>, <code>CompositePnLTracker</code></td></tr>
+<tr><td>Experiment Runner</td><td><code>run_experiments.py</code></td><td><code>_run_full_periods()</code>, <code>run_experiment()</code> — wires all components</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════ §12 -->
+<h2 class="section-title anchor" id="s12">§12 Architectural Notes</h2>
+
+<div class="callout info">
+<span class="label">Note — These are observational findings, not implementation directives</span>
+The following notes describe what the code reveals about system behaviour. They are intended to frame future experiments, not to prescribe implementation.
+</div>
+
+<h3>Finding 1 — Ensemble collapse to single-strategy behaviour</h3>
+<p>The combination of (a) Breakout's activity-universe advantage, (b) cash-priority sorting by weight, and (c) exclusive ownership means the portfolio behaves predominantly as a single Breakout strategy. The other four strategies contribute at the margin. The ensemble's theoretical diversification benefit is significantly eroded by these three compounding factors.</p>
+
+<h3>Finding 2 — Universe construction predetermines strategy participation</h3>
+<p>The activity-scored top-80 universe is the first and most impactful filter. Three of five strategies (DualMA, TrendPB, RSI-MR) want candidates that rank poorly in an activity-scored universe. Fixing the universe construction is likely higher-leverage than adjusting weights or conflict resolution rules.</p>
+
+<h3>Finding 3 — The ownership model is appropriate for 1-strategy, wrong for N-strategy</h3>
+<p>The guard comment in <code>multi_router.py</code> acknowledges this: "RSI-MR selling a DualMA position because RSI crossed 80 mid-trend" is the motivation. But in a Breakout-dominant portfolio, the ownership rule mainly blocks exit signals that would reduce risk on losing momentum trades. The ATR stop is the backstop — but it trails from the high-watermark and can give back significant gains before triggering.</p>
+
+<h3>Finding 4 — AdaptiveSelector's 2-week regime stability gate introduces a deliberate lag</h3>
+<p>This is a designed feature (regime whipsaw prevention), not a bug. Its cost is holding suboptimal weights during fast transitions. The 5-day rebalance interval plus 2-week confirmation means effective lag of 10–15 trading days in changing regimes. During RECOVERY phase (which can be &lt;20 days), the system may not fully shift to recovery allocation before the phase ends.</p>
+
+<h3>Finding 5 — ATR stop interacts with ownership in an important way</h3>
+<p>The ATR stop fires in <code>RiskAgent.evaluate()</code> <em>before</em> the ownership check — because the ownership gate runs in the <em>router</em>, and the ATR stop check runs in the <em>risk agent</em> after. Any strategy's HOLD decision reaching the risk agent will trigger the ATR stop check if the position is breaching its stop. This means the ATR stop is the only cross-strategy exit mechanism in the system — it effectively works around the ownership constraint.</p>
+
+<hr style="border-color:#30363d;margin:48px 0 24px">
+<p style="color:#8b949e;font-size:12px">Generated from source analysis of <code>/Users/ujjwalkumar/Financial_lab/app/</code> · 2026-05-23 · All code references verified against current working directory.</p>
+</main>
+
+<script>
+// Active sidebar link on scroll
+const links = document.querySelectorAll('nav#sidebar a[href^="#"]');
+const sections = [...links].map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const link = [...links].find(l => l.getAttribute('href') === '#' + e.target.id);
+      if (link) link.classList.add('active');
+    }
+  });
+}, {rootMargin: '-10% 0px -85% 0px'});
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

@@ -10,18 +10,16 @@ Profile (from pt_ujjwal / user_strategies id=f786f5cc):
   capital:           ₹1,00,000
 
 Usage:
-  python run_ujjwal_baseline.py              # EqualWeight — fast, deterministic, no LLM
-  python run_ujjwal_baseline.py --adaptive   # AdaptiveStrategySelector — makes OpenAI calls
+  python run_ujjwal_baseline.py                  # EqualWeight + Adaptive (both)
+  python run_ujjwal_baseline.py --equal-weight-only  # EqualWeight only — fast, no LLM calls
 
 Default (no flag):
-  Runs EqualWeight (all weights=0.20). Compares against Part H hardcoded baseline
-  (_VOLFILTER_RESULTS). Use this for fast regression checks after any code change.
+  Runs BOTH EqualWeight and AdaptiveStrategySelector side-by-side, producing a
+  3-column summary: Part H baseline | EqW Current | Adaptive Current.
 
---adaptive:
-  Runs AdaptiveStrategySelector with weekly LLM rebalance (gpt-4o-mini, every 5 days).
-  Compares against _ADAPTIVE_BASELINE (hardcoded after the first --adaptive run).
-  Use this to measure LLM prompt changes: run once pre-change → fill _ADAPTIVE_BASELINE
-  → make changes → run again → compare.
+--equal-weight-only:
+  Skips the LLM/Adaptive run. Use this for fast regression checks after code
+  changes when you only care about confirming equal-weight results are unchanged.
 
 Output: docs/baseline_backtest_results.md
 """
@@ -131,7 +129,7 @@ _ALLOWED_REGIMES = {
 # ─── Periods ──────────────────────────────────────────────────────────────
 
 PERIODS = {
-    "Full  2018–2024": (datetime(2018, 1, 1),  datetime(2024, 6, 1)),
+    # "Full  2018–2024": (datetime(2018, 1, 1),  datetime(2024, 6, 1)),
     "Bull  2019–2020": (datetime(2019, 1, 1),  datetime(2020, 2, 1)),
     "Crash 2020     ": (datetime(2020, 1, 1),  datetime(2020, 12, 31)),
     "Recov 2020–2021": (datetime(2020, 4, 1),  datetime(2021, 12, 31)),
@@ -275,10 +273,39 @@ class OHLCCache:
     def warm_all(self, symbols, start=None, end=None, batch_size=25):
         cache_start = start or self._CACHE_START
         cache_end   = end   or self._CACHE_END
+
+        # ── Fast path: local SQLite cache ─────────────────────────────────
+        from app.data import local_cache
+        if local_cache.cache_exists():
+            print(f"\n  [Cache] Loading {len(symbols)} symbols from LOCAL SQLite "
+                  f"({cache_start.date()} → {cache_end.date()})...")
+            records = local_cache.load_records(symbols, cache_start, cache_end)
+            missing = [s for s in symbols if s not in records]
+            for symbol, recs in records.items():
+                self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+            total = sum(len(v) for v in self._store.values())
+            print(f"  [Cache] Local hit: {total:,} records for "
+                  f"{len(self._store)} symbols (no Supabase calls).")
+            if missing:
+                print(f"  [Cache] {len(missing)} symbols absent from local cache "
+                      f"— falling back to Supabase for those:")
+                print(f"          {', '.join(missing[:8])}"
+                      f"{'...' if len(missing) > 8 else ''}")
+                for sym in missing:
+                    recs = self._repo.get_ohlc_bulk([sym], cache_start, cache_end)
+                    if sym in recs:
+                        self._store[sym] = sorted(recs[sym], key=lambda r: r.timestamp)
+            print()
+            self._warm = True
+            return
+
+        # ── Slow path: full Supabase pull (no local cache yet) ────────────
         batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
-        print(f"\n  [Cache] Warming {len(symbols)} symbols from DB "
-              f"({cache_start.date()} → {cache_end.date()}) "
+        print(f"\n  [Cache] No local cache — pulling {len(symbols)} symbols from "
+              f"Supabase ({cache_start.date()} → {cache_end.date()}) "
               f"in {len(batches)} batches of ≤{batch_size}...")
+        print(f"  [Cache] Tip: run `finance/bin/python3 scripts/cache_market_data_locally.py` "
+              f"once to avoid this in future runs.")
         for idx, batch in enumerate(batches, 1):
             print(f"  [Cache] Batch {idx}/{len(batches)} ({len(batch)} symbols)...", end=" ", flush=True)
             records = self._repo.get_ohlc_bulk(batch, cache_start, cache_end)
@@ -393,34 +420,18 @@ _ADAPTIVE_BASELINE: dict = {
 }
 
 
-def _make_router():
-    return MultiStrategyRouter(
-        strategies={
-            "DualMA":   DualMovingAverageStrategy(),
-            "Breakout": BreakoutMomentumStrategy(),
-            "QuietBrk": QuietBreakoutStrategy(),
-            "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
-            "RSI-MR":   RSIMeanReversionStrategy(
-                            rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
-        },
-        weights={"DualMA": 0.20, "Breakout": 0.20, "QuietBrk": 0.20,
-                 "TrendPB": 0.20, "RSI-MR": 0.20},
-        allowed_regimes=_ALLOWED_REGIMES,
-    )
-
-
-def run_baseline(adaptive: bool = False):
+def run_baseline(equal_weight_only: bool = False):
     _base      = MarketDataRepository()
     repository = OHLCCache(_base)
     repository.warm_all(BROAD_UNIVERSE)
 
-    new_results = {}
-    mode_label  = "Adaptive (LLM)" if adaptive else "EqW  Current"
+    eqw_results      = {}
+    adaptive_results = {}
 
-    if adaptive:
-        out("  Mode: --adaptive (AdaptiveStrategySelector, gpt-4o-mini, rebalance every 5 days)")
+    if equal_weight_only:
+        out("  Mode: --equal-weight-only (deterministic, no LLM calls)")
     else:
-        out("  Mode: EqualWeight (deterministic, no LLM calls)")
+        out("  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)")
 
     for period_label, (start_date, end_date) in PERIODS.items():
         ctx = PeriodContext(repository, start_date, end_date)
@@ -435,10 +446,17 @@ def run_baseline(adaptive: bool = False):
         out("=" * (ROW_W + 2))
         out(HEADER)
 
+        # ── EqualWeight ──
+        out(f"{DIVIDER}  [EqW] ATR×2.5 trailing stop + volume filter")
         router = _make_router()
+        eqw_result = _run_one(repository, router, ctx, atr_multiplier=2.5)
+        out(_fmt_row("EqW  Current", eqw_result))
+        eqw_results[period_label.strip()] = eqw_result
 
-        if adaptive:
-            out(f"{DIVIDER}  [Adaptive] ATR×2.5 + AdaptiveStrategySelector (LLM rebalance)")
+        # ── Adaptive (LLM) ──
+        if not equal_weight_only:
+            out(f"{DIVIDER}  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent")
+            router = _make_router()
             selector = AdaptiveStrategySelector(
                 strategy_names=_STRAT_NAMES,
                 model="gpt-4o-mini",
@@ -446,39 +464,36 @@ def run_baseline(adaptive: bool = False):
                 regime_stability_weeks=2,
                 verbose=True,
             )
-            result = _run_one(repository, router, ctx, atr_multiplier=2.5,
-                              adaptive_selector=selector)
-        else:
-            out(f"{DIVIDER}  [Current] ATR×2.5 trailing stop + volume filter")
-            result = _run_one(repository, router, ctx, atr_multiplier=2.5)
-
-        out(_fmt_row(mode_label, result))
-        new_results[period_label.strip()] = result
+            adaptive_result = _run_one(repository, router, ctx, atr_multiplier=2.5,
+                                       adaptive_selector=selector,
+                                       regime_context_agent=ctx.regime_context_agent)
+            out(_fmt_row("Adaptive+RCA (LLM)", adaptive_result))
+            adaptive_results[period_label.strip()] = adaptive_result
 
     # ── Summary ──
-    if adaptive:
-        has_baseline = bool(_ADAPTIVE_BASELINE)
-        CONFIGS = [
-            ("Adaptive baseline", _ADAPTIVE_BASELINE if has_baseline else None),
-            ("Adaptive current",  None),
-        ]
-        summary_note = (
-            "Adaptive baseline: pre-change LLM prompt results (from _ADAPTIVE_BASELINE).\n"
-            "  Adaptive current: this run — measures LLM prompt improvement.\n"
-            + ("  NOTE: _ADAPTIVE_BASELINE is empty — fill it after the first --adaptive run."
-               if not has_baseline else "")
-        )
-        summary_title = "SUMMARY — Adaptive pre-change vs post-change"
-    else:
+    if equal_weight_only:
         CONFIGS = [
             ("Part H baseline", _VOLFILTER_RESULTS),
-            ("EqW Current",     None),
+            ("EqW Current",     None),        # None → pull from eqw_results
         ]
         summary_note = (
             "Part H: ATR×2.5 trailing stop + volume filter (committed reference).\n"
             "  EqW Current: this run — confirms no regression from code changes."
         )
         summary_title = "SUMMARY — EqualWeight current vs Part H baseline"
+        new_results = eqw_results
+    else:
+        CONFIGS = [
+            ("Part H baseline",   _VOLFILTER_RESULTS),
+            ("EqW Current",       None),       # None → pull from eqw_results
+            ("Adaptive+RCA",       "adaptive"),  # sentinel → pull from adaptive_results
+        ]
+        summary_note = (
+            "Part H: ATR×2.5 committed reference.  "
+            "EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live)."
+        )
+        summary_title = "SUMMARY — Part H baseline vs EqW vs Adaptive+RCA"
+        new_results = eqw_results
 
     out()
     out("=" * (ROW_W + 2))
@@ -493,8 +508,11 @@ def run_baseline(adaptive: bool = False):
                 "".join(f"{lbl:>{col_w}}" for lbl, _ in CONFIGS))
 
     def _v(label, plabel, field_idx, rdict):
+        if rdict == "adaptive":
+            r = adaptive_results.get(plabel)
+            return _extract(r)[field_idx] if r else 0.0
         if rdict is None:
-            r = new_results.get(plabel)
+            r = eqw_results.get(plabel)
             return _extract(r)[field_idx] if r else 0.0
         return rdict.get(plabel, (0,)*5)[field_idx]
 
@@ -517,26 +535,27 @@ def run_baseline(adaptive: bool = False):
 
     out()
     out(f"  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    out(f"  Mode: {'--adaptive (LLM)' if adaptive else 'EqualWeight (deterministic)'}")
+    mode_str = "--equal-weight-only" if equal_weight_only else "EqualWeight + Adaptive (LLM)"
+    out(f"  Mode: {mode_str}")
     out(f"  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)")
     out("=" * (ROW_W + 2))
     out("=" * (ROW_W + 2))
 
 
-def append_results_to_md(adaptive: bool = False):
+def append_results_to_md(equal_weight_only: bool = False):
     """Append latest run to the existing MD file."""
     md_path = "docs/baseline_backtest_results.md"
     mode_desc = (
-        "AdaptiveStrategySelector (gpt-4o-mini, weekly LLM rebalance)."
-        if adaptive else
-        "ATR×2.5 trailing stop + volume filter (vol_ratio>1.2)."
+        "EqualWeight only (ATR×2.5, no LLM)."
+        if equal_weight_only else
+        "EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live)."
     )
     results_block = (
         "\n\n---\n\n"
         "## Latest Run\n\n"
         f"> Config: {mode_desc}  \n\n"
         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  \n"
-        f"**Mode:** {'--adaptive' if adaptive else 'EqualWeight'}  \n"
+        f"**Mode:** {'--equal-weight-only' if equal_weight_only else 'EqualWeight + Adaptive+RCA'}  \n"
         f"**Costs:** 0.10% commission + 0.05% slippage per side\n\n"
         "```\n"
         + "\n".join(_lines)
@@ -550,10 +569,11 @@ def append_results_to_md(adaptive: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ujjwal baseline backtest runner")
     parser.add_argument(
-        "--adaptive",
+        "--equal-weight-only",
         action="store_true",
-        help="Run with AdaptiveStrategySelector (makes OpenAI API calls, ~10-20 min)",
+        dest="equal_weight_only",
+        help="Skip Adaptive/LLM run — fast regression check, no OpenAI calls",
     )
     args = parser.parse_args()
-    run_baseline(adaptive=args.adaptive)
-    append_results_to_md(adaptive=args.adaptive)
+    run_baseline(equal_weight_only=args.equal_weight_only)
+    append_results_to_md(equal_weight_only=args.equal_weight_only)

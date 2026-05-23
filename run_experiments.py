@@ -395,11 +395,47 @@ class OHLCCache:
         """
         cache_start = start or self._CACHE_START
         cache_end   = end   or self._CACHE_END
-        print(f"\n  [Cache] Warming {len(symbols)} symbols from DB "
-              f"({cache_start.date()} → {cache_end.date()})...")
-        records = self._repo.get_ohlc_bulk(symbols, cache_start, cache_end)
-        for symbol, recs in records.items():
-            self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+
+        # ── Fast path: local SQLite cache ─────────────────────────────────
+        from app.data import local_cache
+        if local_cache.cache_exists():
+            print(f"\n  [Cache] Loading {len(symbols)} symbols from LOCAL SQLite "
+                  f"({cache_start.date()} → {cache_end.date()})...")
+            records = local_cache.load_records(symbols, cache_start, cache_end)
+            missing = [s for s in symbols if s not in records]
+            for symbol, recs in records.items():
+                self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+            total = sum(len(v) for v in self._store.values())
+            print(f"  [Cache] Local hit: {total:,} records for "
+                  f"{len(self._store)} symbols (no Supabase calls).")
+            if missing:
+                print(f"  [Cache] {len(missing)} symbols absent from local cache "
+                      f"— falling back to Supabase for those:")
+                print(f"          {', '.join(missing[:8])}"
+                      f"{'...' if len(missing) > 8 else ''}")
+                for sym in missing:
+                    recs = self._repo.get_ohlc_bulk([sym], cache_start, cache_end)
+                    if sym in recs:
+                        self._store[sym] = sorted(recs[sym], key=lambda r: r.timestamp)
+            print()
+            self._warm = True
+            return
+
+        # ── Slow path: full Supabase pull (no local cache yet) ────────────
+        batch_size = 25
+        batches = [symbols[i:i + batch_size] for i in range(0, len(symbols), batch_size)]
+        print(f"\n  [Cache] No local cache — pulling {len(symbols)} symbols from "
+              f"Supabase ({cache_start.date()} → {cache_end.date()}) "
+              f"in {len(batches)} batches of ≤{batch_size}...")
+        print(f"  [Cache] Tip: run `finance/bin/python3 scripts/cache_market_data_locally.py` "
+              f"once to avoid this in future runs.")
+        for idx, batch in enumerate(batches, 1):
+            print(f"  [Cache] Batch {idx}/{len(batches)} ({len(batch)} symbols)...",
+                  end=" ", flush=True)
+            records = self._repo.get_ohlc_bulk(batch, cache_start, cache_end)
+            for symbol, recs in records.items():
+                self._store[symbol] = sorted(recs, key=lambda r: r.timestamp)
+            print("done")
         total = sum(len(v) for v in self._store.values())
         print(f"  [Cache] Loaded {total:,} records for {len(self._store)} symbols "
               f"— all subsequent fetches served from memory.\n")
