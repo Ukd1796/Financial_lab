@@ -3559,3 +3559,1187 @@ _REGIME_MULTIPLIER = {
 ========================================================================
 ========================================================================
 ```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-23 22:21  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.57    -3.39%    7.27%    0.83  42.6%     1093
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.52    -5.27%   10.62%    0.77  38.1%      716
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.19    19.56%    4.71%    1.83  51.2%     1040
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.35    31.62%    7.52%    1.85  47.2%      861
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.62    46.09%    6.30%    1.92  51.0%     2067
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.77    76.85%    9.03%    1.94  48.3%     1746
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.36     1.93%    5.76%    1.11  42.7%      728
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.17    10.24%    7.43%    1.43  41.6%      570
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.24    21.24%    5.76%    1.39  46.6%     2046
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.64    42.78%    7.74%    1.51  44.7%     1699
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.60    -2.98%    4.76%    0.83  39.3%      704
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.54    -4.95%    7.46%    0.83  34.8%      564
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.57             -0.52
+  Crash 2020                         2.19              2.19              2.35
+  Recov 2020–2021                    2.62              2.62              2.77
+  Bear  2022                         0.36              0.36              1.17
+  Recent2022–2024                    1.24              1.24              1.64
+  Live  2025–2026                   -0.60             -0.60             -0.54
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.4%             -5.3%
+  Crash 2020                        19.6%             19.6%             31.6%
+  Recov 2020–2021                   46.1%             46.1%             76.9%
+  Bear  2022                         1.9%              1.9%             10.2%
+  Recent2022–2024                   21.2%             21.2%             42.8%
+  Live  2025–2026                   -3.0%             -3.0%             -4.9%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.3%             10.6%
+  Crash 2020                         4.7%              4.7%              7.5%
+  Recov 2020–2021                    6.3%              6.3%              9.0%
+  Bear  2022                         5.8%              5.8%              7.4%
+  Recent2022–2024                    5.8%              5.8%              7.7%
+  Live  2025–2026                    4.8%              4.8%              7.5%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             42.6%             38.1%
+  Crash 2020                        51.2%             51.2%             47.2%
+  Recov 2020–2021                   51.0%             51.0%             48.3%
+  Bear  2022                        42.7%             42.7%             41.6%
+  Recent2022–2024                   46.6%             46.6%             44.7%
+  Live  2025–2026                   39.3%             39.3%             34.8%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093              1093               716
+  Crash 2020                         1040              1040               861
+  Recov 2020–2021                    2067              2067              1746
+  Bear  2022                          728               728               570
+  Recent2022–2024                    2046              2046              1699
+  Live  2025–2026                     704               704               564
+
+  Generated: 2026-05-23 22:21
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-23 23:22  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.68    -4.16%    7.80%    0.79  41.9%     1174
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.25    -2.80%    8.64%    0.86  38.7%      783
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.23    19.37%    4.74%    1.77  51.6%     1056
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.26    29.94%    7.37%    1.84  47.0%      843
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.62    45.36%    6.51%    1.88  51.3%     2076
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.73    76.89%    9.34%    1.93  49.3%     1748
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.29     1.57%    7.44%    1.08  42.8%      814
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         0.86     6.98%    7.58%    1.28  39.3%      616
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.38    24.58%    7.44%    1.42  46.9%     2239
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.48    37.48%    7.79%    1.44  44.2%     1764
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.49    -2.87%    4.70%    0.86  41.1%      845
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.56    -5.29%    7.55%    0.83  36.2%      599
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.68             -0.25
+  Crash 2020                         2.19              2.23              2.26
+  Recov 2020–2021                    2.62              2.62              2.73
+  Bear  2022                         0.36              0.29              0.86
+  Recent2022–2024                    1.24              1.38              1.48
+  Live  2025–2026                   -0.60             -0.49             -0.56
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -4.2%             -2.8%
+  Crash 2020                        19.6%             19.4%             29.9%
+  Recov 2020–2021                   46.1%             45.4%             76.9%
+  Bear  2022                         1.9%              1.6%              7.0%
+  Recent2022–2024                   21.2%             24.6%             37.5%
+  Live  2025–2026                   -3.0%             -2.9%             -5.3%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.8%              8.6%
+  Crash 2020                         4.7%              4.7%              7.4%
+  Recov 2020–2021                    6.3%              6.5%              9.3%
+  Bear  2022                         5.8%              7.4%              7.6%
+  Recent2022–2024                    5.8%              7.4%              7.8%
+  Live  2025–2026                    4.8%              4.7%              7.6%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             41.9%             38.7%
+  Crash 2020                        51.2%             51.6%             47.0%
+  Recov 2020–2021                   51.0%             51.3%             49.3%
+  Bear  2022                        42.7%             42.8%             39.3%
+  Recent2022–2024                   46.6%             46.9%             44.2%
+  Live  2025–2026                   39.3%             41.1%             36.2%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093              1174               783
+  Crash 2020                         1040              1056               843
+  Recov 2020–2021                    2067              2076              1748
+  Bear  2022                          728               814               616
+  Recent2022–2024                    2046              2239              1764
+  Live  2025–2026                     704               845               599
+
+  Generated: 2026-05-23 23:22
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 00:56  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.59    -3.45%    6.97%    0.76  42.7%      837
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.61    -4.62%    8.39%    0.62  34.0%      403
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.74    16.68%    5.45%    1.68  51.9%      796
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.05    23.76%    5.70%    1.95  47.3%      601
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.40    44.94%    5.54%    2.11  52.8%     1543
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.72    62.30%    6.39%    2.43  51.1%     1231
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.08    -0.68%    6.49%    0.96  40.2%      547
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.06    -0.81%    7.87%    0.96  35.4%      347
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.27    23.75%    6.49%    1.51  47.6%     1535
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.28    27.89%    7.60%    1.52  45.9%     1084
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.04    -0.33%    2.90%    0.98  42.1%      516
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         0.10     0.46%    4.33%    1.02  37.4%      404
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.59             -0.61
+  Crash 2020                         2.19              1.74              2.05
+  Recov 2020–2021                    2.62              2.40              2.72
+  Bear  2022                         0.36             -0.08             -0.06
+  Recent2022–2024                    1.24              1.27              1.28
+  Live  2025–2026                   -0.60             -0.04              0.10
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.4%             -4.6%
+  Crash 2020                        19.6%             16.7%             23.8%
+  Recov 2020–2021                   46.1%             44.9%             62.3%
+  Bear  2022                         1.9%             -0.7%             -0.8%
+  Recent2022–2024                   21.2%             23.8%             27.9%
+  Live  2025–2026                   -3.0%             -0.3%              0.5%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.0%              8.4%
+  Crash 2020                         4.7%              5.5%              5.7%
+  Recov 2020–2021                    6.3%              5.5%              6.4%
+  Bear  2022                         5.8%              6.5%              7.9%
+  Recent2022–2024                    5.8%              6.5%              7.6%
+  Live  2025–2026                    4.8%              2.9%              4.3%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             42.7%             34.0%
+  Crash 2020                        51.2%             51.9%             47.3%
+  Recov 2020–2021                   51.0%             52.8%             51.1%
+  Bear  2022                        42.7%             40.2%             35.4%
+  Recent2022–2024                   46.6%             47.6%             45.9%
+  Live  2025–2026                   39.3%             42.1%             37.4%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093               837               403
+  Crash 2020                         1040               796               601
+  Recov 2020–2021                    2067              1543              1231
+  Bear  2022                          728               547               347
+  Recent2022–2024                    2046              1535              1084
+  Live  2025–2026                     704               516               404
+
+  Generated: 2026-05-24 00:56
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 01:16  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.94    -3.85%    5.59%    0.71  45.1%      716
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.66    -2.68%    5.65%    0.68  39.3%      295
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.94    12.22%    3.99%    1.77  56.0%      695
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.75    13.72%    4.90%    1.74  48.8%      496
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.45    28.93%    4.02%    2.09  56.4%     1340
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.27    33.67%    4.77%    2.08  52.0%      952
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.07     0.21%    4.29%    1.01  44.9%      459
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         0.34     1.76%    6.00%    1.13  41.9%      279
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.16    13.78%    4.29%    1.44  51.7%     1274
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.32    21.14%    6.39%    1.59  48.3%      829
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.27    -0.95%    2.18%    0.91  44.8%      415
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.35    -1.58%    3.48%    0.87  36.0%      236
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.94             -0.66
+  Crash 2020                         2.19              1.94              1.75
+  Recov 2020–2021                    2.62              2.45              2.27
+  Bear  2022                         0.36              0.07              0.34
+  Recent2022–2024                    1.24              1.16              1.32
+  Live  2025–2026                   -0.60             -0.27             -0.35
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.8%             -2.7%
+  Crash 2020                        19.6%             12.2%             13.7%
+  Recov 2020–2021                   46.1%             28.9%             33.7%
+  Bear  2022                         1.9%              0.2%              1.8%
+  Recent2022–2024                   21.2%             13.8%             21.1%
+  Live  2025–2026                   -3.0%             -1.0%             -1.6%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              5.6%              5.7%
+  Crash 2020                         4.7%              4.0%              4.9%
+  Recov 2020–2021                    6.3%              4.0%              4.8%
+  Bear  2022                         5.8%              4.3%              6.0%
+  Recent2022–2024                    5.8%              4.3%              6.4%
+  Live  2025–2026                    4.8%              2.2%              3.5%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             45.1%             39.3%
+  Crash 2020                        51.2%             56.0%             48.8%
+  Recov 2020–2021                   51.0%             56.4%             52.0%
+  Bear  2022                        42.7%             44.9%             41.9%
+  Recent2022–2024                   46.6%             51.7%             48.3%
+  Live  2025–2026                   39.3%             44.8%             36.0%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093               716               295
+  Crash 2020                         1040               695               496
+  Recov 2020–2021                    2067              1340               952
+  Bear  2022                          728               459               279
+  Recent2022–2024                    2046              1274               829
+  Live  2025–2026                     704               415               236
+
+  Generated: 2026-05-24 01:16
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 13:08  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.69    -3.85%    7.36%    0.75  41.9%      821
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -1.22    -9.00%   12.33%    0.52  30.7%      410
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.84    16.71%    5.19%    1.68  52.1%      774
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.10    23.35%    5.68%    1.85  47.8%      594
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.37    42.07%    5.20%    2.07  52.2%     1512
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.65    57.77%    6.14%    2.32  50.0%     1211
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.15    -1.14%    6.61%    0.93  40.7%      548
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.13    -1.31%    8.28%    0.93  36.3%      353
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.32    24.37%    6.61%    1.54  48.3%     1522
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.39    30.93%    8.28%    1.57  45.7%     1068
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.00    -0.12%    2.82%    0.99  42.1%      508
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.53    -3.85%    5.72%    0.80  34.9%      335
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.69             -1.22
+  Crash 2020                         2.19              1.84              2.10
+  Recov 2020–2021                    2.62              2.37              2.65
+  Bear  2022                         0.36             -0.15             -0.13
+  Recent2022–2024                    1.24              1.32              1.39
+  Live  2025–2026                   -0.60             -0.00             -0.53
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.8%             -9.0%
+  Crash 2020                        19.6%             16.7%             23.4%
+  Recov 2020–2021                   46.1%             42.1%             57.8%
+  Bear  2022                         1.9%             -1.1%             -1.3%
+  Recent2022–2024                   21.2%             24.4%             30.9%
+  Live  2025–2026                   -3.0%             -0.1%             -3.9%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.4%             12.3%
+  Crash 2020                         4.7%              5.2%              5.7%
+  Recov 2020–2021                    6.3%              5.2%              6.1%
+  Bear  2022                         5.8%              6.6%              8.3%
+  Recent2022–2024                    5.8%              6.6%              8.3%
+  Live  2025–2026                    4.8%              2.8%              5.7%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             41.9%             30.7%
+  Crash 2020                        51.2%             52.1%             47.8%
+  Recov 2020–2021                   51.0%             52.2%             50.0%
+  Bear  2022                        42.7%             40.7%             36.3%
+  Recent2022–2024                   46.6%             48.3%             45.7%
+  Live  2025–2026                   39.3%             42.1%             34.9%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093               821               410
+  Crash 2020                         1040               774               594
+  Recov 2020–2021                    2067              1512              1211
+  Bear  2022                          728               548               353
+  Recent2022–2024                    2046              1522              1068
+  Live  2025–2026                     704               508               335
+
+  Generated: 2026-05-24 13:08
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 13:48  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.57    -3.39%    7.27%    0.83  42.6%     1093
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.52    -5.06%   10.06%    0.78  36.7%      701
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.19    19.56%    4.71%    1.83  51.2%     1040
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.34    31.28%    8.19%    1.88  46.6%      844
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.62    46.11%    6.30%    1.92  51.0%     2067
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.86    81.47%    9.40%    1.98  48.1%     1765
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.36     1.93%    5.76%    1.11  42.7%      728
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         0.91     7.63%    7.18%    1.32  40.4%      572
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.23    20.96%    5.76%    1.38  46.6%     2046
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.56    40.62%    7.97%    1.48  43.7%     1660
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.60    -2.98%    4.76%    0.83  39.3%      704
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.62    -5.56%    7.86%    0.81  34.7%      551
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.57             -0.52
+  Crash 2020                         2.19              2.19              2.34
+  Recov 2020–2021                    2.62              2.62              2.86
+  Bear  2022                         0.36              0.36              0.91
+  Recent2022–2024                    1.24              1.23              1.56
+  Live  2025–2026                   -0.60             -0.60             -0.62
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.4%             -5.1%
+  Crash 2020                        19.6%             19.6%             31.3%
+  Recov 2020–2021                   46.1%             46.1%             81.5%
+  Bear  2022                         1.9%              1.9%              7.6%
+  Recent2022–2024                   21.2%             21.0%             40.6%
+  Live  2025–2026                   -3.0%             -3.0%             -5.6%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.3%             10.1%
+  Crash 2020                         4.7%              4.7%              8.2%
+  Recov 2020–2021                    6.3%              6.3%              9.4%
+  Bear  2022                         5.8%              5.8%              7.2%
+  Recent2022–2024                    5.8%              5.8%              8.0%
+  Live  2025–2026                    4.8%              4.8%              7.9%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             42.6%             36.7%
+  Crash 2020                        51.2%             51.2%             46.6%
+  Recov 2020–2021                   51.0%             51.0%             48.1%
+  Bear  2022                        42.7%             42.7%             40.4%
+  Recent2022–2024                   46.6%             46.6%             43.7%
+  Live  2025–2026                   39.3%             39.3%             34.7%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093              1093               701
+  Crash 2020                         1040              1040               844
+  Recov 2020–2021                    2067              2067              1765
+  Bear  2022                          728               728               572
+  Recent2022–2024                    2046              2046              1660
+  Live  2025–2026                     704               704               551
+
+  Generated: 2026-05-24 13:48
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 14:34  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.57    -3.39%    7.27%    0.83  42.6%     1093
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.45    -4.54%    9.71%    0.80  38.6%      730
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.19    19.56%    4.71%    1.83  51.2%     1040
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.28    31.03%    7.53%    1.88  46.0%      852
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.62    46.09%    6.30%    1.92  51.0%     2067
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         2.82    79.93%    8.95%    2.00  48.3%     1764
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.36     1.93%    5.76%    1.11  42.7%      728
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         0.88     7.38%    7.22%    1.30  40.0%      577
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.24    21.23%    5.76%    1.39  46.6%     2046
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)         1.74    46.89%    7.49%    1.57  44.7%     1710
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.60    -2.98%    4.76%    0.83  39.3%      704
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent
+  Adaptive+RCA (LLM)        -0.77    -6.65%    8.57%    0.77  32.7%      542
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.57             -0.45
+  Crash 2020                         2.19              2.19              2.28
+  Recov 2020–2021                    2.62              2.62              2.82
+  Bear  2022                         0.36              0.36              0.88
+  Recent2022–2024                    1.24              1.24              1.74
+  Live  2025–2026                   -0.60             -0.60             -0.77
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.4%             -4.5%
+  Crash 2020                        19.6%             19.6%             31.0%
+  Recov 2020–2021                   46.1%             46.1%             79.9%
+  Bear  2022                         1.9%              1.9%              7.4%
+  Recent2022–2024                   21.2%             21.2%             46.9%
+  Live  2025–2026                   -3.0%             -3.0%             -6.7%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.3%              9.7%
+  Crash 2020                         4.7%              4.7%              7.5%
+  Recov 2020–2021                    6.3%              6.3%              9.0%
+  Bear  2022                         5.8%              5.8%              7.2%
+  Recent2022–2024                    5.8%              5.8%              7.5%
+  Live  2025–2026                    4.8%              4.8%              8.6%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             42.6%             38.6%
+  Crash 2020                        51.2%             51.2%             46.0%
+  Recov 2020–2021                   51.0%             51.0%             48.3%
+  Bear  2022                        42.7%             42.7%             40.0%
+  Recent2022–2024                   46.6%             46.6%             44.7%
+  Live  2025–2026                   39.3%             39.3%             32.7%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093              1093               730
+  Crash 2020                         1040              1040               852
+  Recov 2020–2021                    2067              2067              1764
+  Bear  2022                          728               728               577
+  Recent2022–2024                    2046              2046              1710
+  Live  2025–2026                     704               704               542
+
+  Generated: 2026-05-24 14:34
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```
+
+
+---
+
+## Latest Run
+
+> Config: EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live).  
+
+**Generated:** 2026-05-24 18:03  
+**Mode:** EqualWeight + Adaptive+RCA  
+**Costs:** 0.10% commission + 0.05% slippage per side
+
+```
+  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)
+
+========================================================================
+  Period: Bull  2019–2020   (2019-01-01 → 2020-02-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.57    -3.39%    7.27%    0.83  42.6%     1093
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)        -0.52    -5.34%   10.13%    0.78  38.3%      700
+
+========================================================================
+  Period: Crash 2020   (2020-01-01 → 2020-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.19    19.56%    4.71%    1.83  51.2%     1040
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)         2.29    29.71%    6.97%    1.83  46.0%      819
+
+========================================================================
+  Period: Recov 2020–2021   (2020-04-01 → 2021-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               2.62    46.11%    6.30%    1.92  51.0%     2067
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)         2.68    72.62%    8.88%    1.98  49.3%     1644
+
+========================================================================
+  Period: Bear  2022   (2022-01-01 → 2022-12-31)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               0.36     1.93%    5.76%    1.11  42.7%      728
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)         0.65     5.24%    7.21%    1.22  41.6%      562
+
+========================================================================
+  Period: Recent2022–2024   (2022-01-01 → 2024-06-01)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current               1.24    21.24%    5.76%    1.39  46.6%     2046
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)         1.53    38.95%    7.24%    1.50  44.6%     1635
+
+========================================================================
+  Period: Live  2025–2026   (2025-01-01 → 2026-03-24)
+  Universe: 150 symbols → DynamicUniverse top 80 → UnionFilter
+  Risk: capital=₹100,000  max_pos=10%  risk/trade=0.5%  CB=35%
+  Costs: 0.10% commission + 0.05% slippage per side
+========================================================================
+  Config                   Sharpe    Return    MaxDD      PF     WR  #Trades
+  ----------------------------------------------------------------------  [EqW] ATR×2.5 trailing stop + volume filter
+  EqW  Current              -0.60    -2.98%    4.76%    0.83  39.3%      704
+  ----------------------------------------------------------------------  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent + WR-override
+  Adaptive+RCA (LLM)        -0.71    -6.45%    8.85%    0.79  35.1%      556
+
+========================================================================
+  SUMMARY — Part H baseline vs EqW vs Adaptive+RCA
+  Part H: ATR×2.5 committed reference.  EqW: equal-weight this run.  Adaptive+RCA: LLM-rebalanced + RegimeContextAgent (matches live).
+========================================================================
+
+  Sharpe ratio
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -0.57             -0.57             -0.52
+  Crash 2020                         2.19              2.19              2.29
+  Recov 2020–2021                    2.62              2.62              2.68
+  Bear  2022                         0.36              0.36              0.65
+  Recent2022–2024                    1.24              1.24              1.53
+  Live  2025–2026                   -0.60             -0.60             -0.71
+
+  Return %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   -3.4%             -3.4%             -5.3%
+  Crash 2020                        19.6%             19.6%             29.7%
+  Recov 2020–2021                   46.1%             46.1%             72.6%
+  Bear  2022                         1.9%              1.9%              5.2%
+  Recent2022–2024                   21.2%             21.2%             38.9%
+  Live  2025–2026                   -3.0%             -3.0%             -6.4%
+
+  MaxDD %  (lower=better)
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    7.3%              7.3%             10.1%
+  Crash 2020                         4.7%              4.7%              7.0%
+  Recov 2020–2021                    6.3%              6.3%              8.9%
+  Bear  2022                         5.8%              5.8%              7.2%
+  Recent2022–2024                    5.8%              5.8%              7.2%
+  Live  2025–2026                    4.8%              4.8%              8.9%
+
+  Win Rate %
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                   42.6%             42.6%             38.3%
+  Crash 2020                        51.2%             51.2%             46.0%
+  Recov 2020–2021                   51.0%             51.0%             49.3%
+  Bear  2022                        42.7%             42.7%             41.6%
+  Recent2022–2024                   46.6%             46.6%             44.6%
+  Live  2025–2026                   39.3%             39.3%             35.1%
+
+  #Trades
+  Period                  Part H baseline       EqW Current      Adaptive+RCA
+  ----------------------------------------------------------------------------
+  Bull  2019–2020                    1093              1093               700
+  Crash 2020                         1040              1040               819
+  Recov 2020–2021                    2067              2067              1644
+  Bear  2022                          728               728               562
+  Recent2022–2024                    2046              2046              1635
+  Live  2025–2026                     704               704               556
+
+  Generated: 2026-05-24 18:03
+  Mode: EqualWeight + Adaptive (LLM)
+  Config ID: f786f5cc-09f7-43b2-afbb-4f0b688f55d2 (Ujjwal's Portfolio)
+========================================================================
+========================================================================
+```

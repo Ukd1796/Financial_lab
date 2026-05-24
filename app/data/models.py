@@ -65,6 +65,13 @@ class MarketState:
     previous_price: Optional[float]
     indicators: Dict[str, float]
     previous_indicators: Dict[str, float]
+    # Today's bar OHLC. None during warm-up or when constructed without bar context.
+    # Strategies use these for candle-quality filtering (close-in-range position,
+    # body strength). latest_price already mirrors today_close.
+    today_open:   Optional[float] = None
+    today_high:   Optional[float] = None
+    today_low:    Optional[float] = None
+    today_volume: Optional[float] = None
 
 
 

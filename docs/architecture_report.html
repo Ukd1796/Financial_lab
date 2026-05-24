@@ -77,6 +77,7 @@ li{margin-bottom:4px}
 <nav id="sidebar">
   <h2>Navigation</h2>
   <a href="#s0">§0 Executive Summary</a>
+  <a class="sub" href="#layer-attribution">Layer Attribution</a>
   <a href="#s1">§1 System Overview</a>
   <a href="#s2">§2 MultiStrategy Router</a>
   <a class="sub" href="#s2-1">2.1 Routing Pipeline</a>
@@ -131,6 +132,8 @@ Breakout dominates BUY execution due to highest universe hit-rate. Once Breakout
 <div class="callout danger">
 <span class="label">🔴 Bottleneck 2 — Universe Activity Bias Starves 3 of 5 Strategies</span>
 Scoring formula <code>0.40×rank(rel_vol) + 0.30×rank(|return|) + 0.30×rank(vol_5d)</code> ranks by activity. DualMA (needs quiet golden-cross stocks), TrendPB (needs low-volume pullbacks), and RSI-MR (needs oversold-in-uptrend) candidates are structurally under-represented in the top-80. The per-strategy filters operate on an already-biased input pool.
+<br><br>
+<strong>Update 2026-05-24 — tested and ruled out as the source of the universal entry-quality defects.</strong> A 6-factor quality-weighted rebalance (0.20 rel_vol + 0.10 abs_daily_return + 0.20 rolling_vol_5d + 0.25 trend_persistence + 0.15 trend_intact + 0.10 pullback_quality) was implemented in <code>app/universe/dynamic_agent.py</code> and replayed across the six periods. The three universal metrics — MFE efficiency (still −0.12 to −0.30), persistence half-life (still 0.0 days), false breakout rate (max −1.4pp move) — <strong>did not budge</strong>. Regime composition did shift (Bull 2019 improved +2.5pp return, Bear 2022 regressed −3.3pp return as trend-quality factors over-selected uptrending stocks during a bear market). Change rolled back. The activity bias is real and worth fixing, but it is a downstream amplifier of Bottleneck 6, not the root cause of the entry-quality numbers.
 </div>
 
 <div class="callout warn">
@@ -146,6 +149,28 @@ At <code>weight=0.20</code>: <code>risk_budget = equity × 0.005 × 0.20 = 0.1%<
 <div class="callout warn">
 <span class="label">🟡 Bottleneck 5 — 2-Week Regime Stability Lag</span>
 <code>regime_stability_weeks=2</code> means a new regime must appear for 2 consecutive weekly rebalances before weights shift. In fast-moving markets (e.g. COVID crash, post-election rally) the system can hold inappropriate weights for 2–3 weeks. Combined with the 5-day rebalance frequency, effective lag is 10–15 trading days.
+</div>
+
+<div class="callout warn">
+<span class="label">🟡 Bottleneck 6 — Same-Bar Breakout Entry (HYPOTHESIS FALSIFIED 2026-05-24)</span>
+<code>BreakoutMomentumStrategy.decide()</code> and <code>QuietBreakoutStrategy.decide()</code> both fire BUY on the <em>same bar</em> that closes above their N-day high with only a <code>vol_ratio &gt; 1.2</code> filter. This was initially hypothesised as the source of the universal opportunity-quality defects (persistence ½-life = 0, MFE eff &lt; 0, false breakout 27-37%) and tested via a two-bar confirmation + candle-quality + tighter-volume intervention on both strategies. <strong>The intervention produced a system-wide regression of ≈ −50pp cumulative return across the six periods</strong> — five of six periods regressed, average loss-per-trade <em>worsened</em> on the surviving trades, and Bear 2022 flipped from +10.24% to −1.31%. Both strategies have been reverted. See §12 Finding 6 for the full post-mortem. The universal metrics appear to be <em>descriptive of momentum systems running through difficult regimes</em>, not addressable strategy-layer defects.
+</div>
+
+<h3 id="layer-attribution">Layer Attribution — Where Each Defect Lives (revised 2026-05-24 after Finding 6 negative result)</h3>
+
+<table>
+<tr><th>Defect</th><th>Layer</th><th>File</th><th>Role</th><th>Evidence basis</th></tr>
+<tr><td>Persistence ½-life = 0 d (every period)</td><td><span class="badge gray">Descriptive, not addressable</span></td><td>—</td><td>Inherent property of same-bar momentum entries</td><td>Two-bar confirmation tested 2026-05-24 → −50pp system regression; filtering noise also filters signal</td></tr>
+<tr><td>MFE efficiency negative (every period)</td><td><span class="badge gray">Descriptive, not addressable</span></td><td>—</td><td>Inherent property of momentum trail-stop exits</td><td>Did not respond to universe rebalance or two-bar confirmation experiments</td></tr>
+<tr><td>False breakout 27–37% (every period)</td><td><span class="badge gray">Descriptive, not addressable</span></td><td>—</td><td>Base rate in the Indian-equity 150-symbol universe</td><td>Tight band across all six regimes; not a defect that ranks vary with</td></tr>
+<tr><td><strong>Adaptive amplifies losses in regime-mismatched periods (Bull '19, Live '25-26)</strong></td><td><span class="badge red">Meta + stale tables</span></td><td><code>app/meta/adaptive_selector.py</code> + <code>_STRATEGY_REGIME_PERFORMANCE</code> (lines 32-43)</td><td>LLM weights reflect 2018-2024 Sharpe; no rolling-WR gate</td><td>Adaptive Breakout share 89%/109% of period loss in bad periods; EqW shows same per-trade quality but less concentration damage</td></tr>
+<tr><td>Universe biased toward already-moved stocks</td><td><span class="badge yellow">Universe (regime-composition side effect)</span></td><td><code>app/universe/dynamic_agent.py:204-208</code></td><td>0.40 rel_vol + 0.30 |return| + 0.30 vol_5d scoring</td><td>Regime-composition effect: helped Bull '19 (+2.5pp), hurt Bear '22 (−3.3pp). Not directly addressable without regime-conditional weighting.</td></tr>
+<tr><td>3 of 5 strategies starved (DualMA, TrendPB, RSI-MR contribute &lt; 10% PnL)</td><td><span class="badge yellow">Universe + Router</span></td><td><code>app/universe/filters.py</code> + ownership lock-out</td><td>Activity bias + Breakout-priority ownership</td><td><code>own_block</code> counts 1.7k-8.9k per period on TrendPB/RSI-MR exits</td></tr>
+</table>
+
+<div class="callout warn">
+<span class="label">⚠️ The system is regime-bound (concluded 2026-05-24 after three failed iterations)</span>
+The opportunity-quality metrics (persistence, MFE eff, false breakout) cannot be lifted by filtering at the strategy layer without breaking system PnL — Finding 6's lesson. The Adaptive concentration into a degrading workhorse <em>looked</em> like the remaining addressable defect, but a deterministic rolling-WR override was tested and refuted: it fired once in 15 months of Live 2025-26 weekly rebalances and produced a 0.25pp Live improvement (within LLM noise). The deeper issue is structural — alternative strategies are signal-bound, not weight-bound: even if Breakout is capped, freed capital sits in cash because the universe filters don't surface enough non-Breakout candidates in Live's regime. See §12 Findings 7 &amp; 8. The remaining lever is <strong>capital-preservation</strong> (reduce total deployment in untrusted regimes), not redistribution.
 </div>
 
 <!-- ══════════════════════════════════════════════════════ §1 -->
@@ -878,6 +903,11 @@ effective_downtrend_pct = market_downtrend_pct
 RSI-MR is capped at ≤0.05 in 7 of 9 regimes and ≤0.10 in MIXED. Its backtested Sharpe is negative in Bear/Choppy (-0.65) and Mixed (-0.14). The caps are intentional — but they effectively reduce RSI-MR to an observer. At ₹10L and weight=0.05, most NSE mid/large-cap stocks yield 0–15 shares per trade.
 </div>
 
+<div class="callout warn">
+<span class="label">⚠️ <code>_STRATEGY_REGIME_PERFORMANCE</code> table is stale (flagged 2026-05-24)</span>
+The Sharpe-by-regime table at <code>app/meta/adaptive_selector.py:32-43</code> (header: "hard-coded from 2018-2024 backtests, updated 2026-03-21") shows Breakout Bull/LowVol Sharpe = 0.93 and Breakout Recovery Sharpe = 3.18. Live 2025-26 actual results have Breakout <em>losing money</em> in BULL_LOWVOL-classified weeks (period total: −5.29% return, Breakout share 109%). The LLM relies on this table to choose floors and weights; a stale table causes the meta layer to over-weight a degraded strategy. This is one of two ingredients in the "Adaptive amplifies losses in regime-mismatched periods" defect — the other being the absence of a rolling-WR override (see §12 Finding 6).
+</div>
+
 <!-- ══════════════════════════════════════════════════════ §8 -->
 <h2 class="section-title anchor" id="s8">§8 Regime Context Agent</h2>
 <p><strong>File:</strong> <code>app/meta/regime_context_agent.py</code></p>
@@ -1015,8 +1045,120 @@ The following notes describe what the code reveals about system behaviour. They 
 <h3>Finding 5 — ATR stop interacts with ownership in an important way</h3>
 <p>The ATR stop fires in <code>RiskAgent.evaluate()</code> <em>before</em> the ownership check — because the ownership gate runs in the <em>router</em>, and the ATR stop check runs in the <em>risk agent</em> after. Any strategy's HOLD decision reaching the risk agent will trigger the ATR stop check if the position is breaching its stop. This means the ATR stop is the only cross-strategy exit mechanism in the system — it effectively works around the ownership constraint.</p>
 
+<h3>Finding 6 — The universal entry-quality defects live in the strategy layer, not the universe (added 2026-05-24)</h3>
+<p>A 6-factor quality-weighted rebalance of the universe scoring formula (Bottleneck 2) was implemented and replayed across the six backtest periods. Three structural metrics — MFE efficiency (still −0.12 to −0.30), persistence half-life (still 0.0 days in every period), false-breakout rate (max −1.4pp move) — did not budge. The same pattern is observed in both EqualWeight and Adaptive+RCA modes, ruling out the universe layer as the source of these specific metrics. The universe rebalance did have a measurable <em>side effect</em>: regime composition shifted toward HIGH_VOL_UPTREND in bull regimes (helped Bull 2019 by +2.5pp return) and toward LOW_VOL_UPTREND in bear regimes (hurt Bear 2022 by −3.3pp return). Any future universe-layer work should be regime-conditional rather than apply a single static weight set. Change was rolled back after the replay.</p>
+
+<div class="callout danger">
+<span class="label">⚠️ Finding 6 Update — strategy-layer fix was attempted and reversed (2026-05-24)</span>
+A follow-up experiment hypothesised Bottleneck 6 (Breakout same-bar BUY) as the strategy-layer source of the universal metrics, and tested a two-bar confirmation + candle-quality filter pattern on <code>BreakoutMomentumStrategy</code> and <code>QuietBreakoutStrategy</code>. <strong>The intervention produced a system-wide regression of approximately −50pp cumulative return across the six periods</strong>:
+<br><br>
+<table style="margin-top:8px">
+<tr><th>Period</th><th>Baseline Adaptive+RCA</th><th>Post-fix Adaptive+RCA</th><th>Δ</th></tr>
+<tr><td>Bull 2019</td><td>−5.27%</td><td>−9.00%</td><td><span style="color:#f85149">−3.73pp</span></td></tr>
+<tr><td>Crash 2020</td><td>+28.85%</td><td>+23.35%</td><td><span style="color:#f85149">−5.50pp</span></td></tr>
+<tr><td>Recovery 2020-21</td><td>+76.85%</td><td>+57.77%</td><td><span style="color:#f85149">−19.08pp</span></td></tr>
+<tr><td>Bear 2022</td><td>+10.24%</td><td>−1.31%</td><td><span style="color:#f85149">−11.55pp (turned negative)</span></td></tr>
+<tr><td>Recent 2022-24</td><td>+42.78%</td><td>+30.93%</td><td><span style="color:#f85149">−11.85pp</span></td></tr>
+<tr><td>Live 2025-26</td><td>−4.95%</td><td>−3.85%</td><td><span style="color:#3fb950">+1.10pp</span></td></tr>
+</table>
+<br>
+Trade counts dropped 30-43% per period, but average loss-per-trade <em>worsened</em> (Bull 2019: −7/trade → −22/trade; Bear 2022: +18/trade → −4/trade). The filters were keeping the wrong half of the distribution. Three forces compounded the regression:
+<ol>
+<li><strong>Candle-quality filters selected late-stage moves, not early ones.</strong> "Close in upper third of range" + "decisive body" are signatures of <em>exhausted</em> breakouts (FOMO buyers piling in at the top) at least as often as they are signatures of healthy breakouts.</li>
+<li><strong>Two-bar confirmation cost more than modelled in trending regimes.</strong> Recovery 20-21 dropped 19pp because waiting one bar in a V-shape means buying at materially higher prices.</li>
+<li><strong>Substitution downstream broke other regimes.</strong> With Breakout and QuietBrk suppressed, DualMA and TrendPB won more router priority contests. Their per-regime WRs are sometimes worse than what was replaced (Bear 2022 going profit-negative is a DualMA/TrendPB composition shift, not a Breakout effect).</li>
+</ol>
+<strong>Conclusion:</strong> The universal opportunity-quality metrics (persistence ½-life = 0, MFE efficiency &lt; 0, false-breakout rate 27-37%) appear to be <em>descriptive of running a momentum system in challenging market regimes</em> rather than <em>addressable defects</em>. Same-bar breakout entries are noisy by construction, but they are also how the strategy captures momentum <em>while it is happening</em>. Filtering the noise also filters the signal. <strong>Both <code>BreakoutMomentumStrategy</code> and <code>QuietBreakoutStrategy</code> have been reverted to their original same-bar form. The OHLC plumbing on <code>MarketState</code> (added in this PR for candle inspection) is retained as harmless data infrastructure available for future work.</strong>
+</div>
+
+<h3>Finding 7 — Meta-layer concentration-defect hypothesis: tested and refuted (added 2026-05-24, revised after WR-override negative result)</h3>
+
+<p><strong>Original hypothesis (now refuted):</strong> Live 2025-26 underperformance is the LLM concentrating capital into a strategy whose recent WR has degraded; a rolling-WR override would cap the bleeder and redirect capital to alternatives.</p>
+
+<p>The hypothesis was tested by implementing <code>DeterministicPerformanceFeedbackAgent</code> at <code>app/meta/performance_feedback_agent.py</code>, wired through the existing <code>feedback_agent.adjust_weights()</code> hook in <code>AdaptiveStrategySelector._parse_weights()</code> (line 515-520). Configured to cap any strategy's weight at 0.10 when its rolling 20-day WR dropped 10pp below its 90-day WR, with sample-size guards (min 5 short, min 15 long).</p>
+
+<div class="callout danger">
+<span class="label">⚠️ Experimental result: hypothesis refuted</span>
+
+<strong>Live 2025-26 verbose log shows the override fired exactly ONCE in 67 weekly rebalances</strong> (at 2026-01-04, capping Breakout 0.37 → 0.10 when 20d WR was 23.1% vs 90d WR 37.3%). The very next rebalance, Breakout went back to 0.55 and never capped again across the rest of the 15-month period.
+
+<br><br>
+<strong>Result table (Adaptive+RCA, run 2026-05-24 18:03 with override vs 14:34 baseline):</strong>
+<table style="margin-top:8px">
+<tr><th>Period</th><th>Baseline</th><th>WR-override</th><th>Δ</th></tr>
+<tr><td>Bull 2019</td><td>−4.5%</td><td>−5.3%</td><td><span style="color:#f85149">−0.8pp</span></td></tr>
+<tr><td>Crash 2020</td><td>+31.0%</td><td>+29.7%</td><td><span style="color:#f85149">−1.3pp</span></td></tr>
+<tr><td>Recovery 2020-21</td><td>+79.9%</td><td>+72.6%</td><td><span style="color:#f85149">−7.3pp</span></td></tr>
+<tr><td>Bear 2022</td><td>+7.4%</td><td>+5.2%</td><td><span style="color:#f85149">−2.2pp</span></td></tr>
+<tr><td>Recent 2022-24</td><td>+46.9%</td><td>+38.9%</td><td><span style="color:#f85149">−8.0pp</span></td></tr>
+<tr><td>Live 2025-26</td><td>−6.7%</td><td>−6.45%</td><td><span style="color:#3fb950">+0.25pp</span></td></tr>
+</table>
+<br>
+Live improved by 0.25pp — below the 2pp acceptance threshold and well within LLM noise. Good periods all regressed 1-8pp, but the override never fired in those periods, so the regression is pure LLM run-to-run variance.
+</div>
+
+<p><strong>Why the override didn't fire — structural reason:</strong> The override looks for <em>acceleration</em> of WR degradation (20d below 90d by 10pp). But Breakout in Live 2025-26 has been <em>uniformly</em> bad throughout the period, not recently-worse-than-baseline. The 90d WR was already 37.3%; the 20d WR mostly hovered 30-37%, only briefly dipping to 23.1% in late December. There is no inflection point because there was no inflection — the WR collapse predates the backtest window and is the new normal.</p>
+
+<p><strong>Second structural finding (revealed by the experiment):</strong> Per-strategy Live attribution shows alternatives <em>cannot scale</em> even if Breakout's weight is freed up:</p>
+<ul>
+<li>DualMA: 10 trades over 15 months (+₹251)</li>
+<li>TrendPB: 11 trades (−₹77)</li>
+<li>QuietBrk: 3 trades (−₹361)</li>
+<li>RSI-MR: 21 trades (+₹81)</li>
+</ul>
+<p>The non-Breakout strategies are <em>signal-bound</em>, not weight-bound. The universe filters don't surface enough candidates for them to deploy 80% of capital effectively, regardless of what the LLM allocates. Even with a working override, freed Breakout capital would mostly sit in cash.</p>
+
+<p><strong>Conclusion:</strong> The "concentration into degrading workhorse" hypothesis is rejected. Live 2025-26 underperformance is not a meta-layer routing problem — it is a structural property of running a momentum-strategy ensemble on Indian equities through a regime that doesn't produce the momentum-signal frequency the system was designed for. The remaining engineering options are limited:</p>
+
+<h3>Finding 8 — The system is regime-bound; the remaining lever is capital-preservation, not redistribution (added 2026-05-24)</h3>
+
+<p>Three failed iterations (universe rebalance, strategy-layer filtering, meta-layer rolling-WR override) all confirm the same underlying constraint: <strong>the alternative strategies in the ensemble cannot substitute for Breakout in regimes where Breakout fails.</strong> Redistributing weight away from Breakout does not produce profitable trades elsewhere because the signal isn't there to capture.</p>
+
+<p>The realistic engineering responses going forward, in order of complexity:</p>
+
+<ol>
+<li><strong>Accept and document the regime constraint.</strong> The system works in 4 of 6 backtest periods (Crash, Recovery, Bear, Recent). Bull 2019 and Live 2025-26 represent the cost of running momentum-on-Indian-equity through difficult regimes. The Calmar / Sharpe over a multi-year horizon remains strong despite these losses.</li>
+<li><strong>Production divergence monitor.</strong> Track live rolling Breakout WR; alert when it diverges &gt; 10pp below the 90d baseline. Operator decides whether to pause; system doesn't auto-redistribute (we've now confirmed twice that auto-redistribution makes things worse).</li>
+<li><strong>Capital-preservation gate (untested).</strong> When divergence is detected, reduce <em>total</em> capital deployment rather than redistribute weights — e.g. cut <code>max_position_pct</code> from 10% to 5% globally. This protects capital in regimes the system isn't suited for, instead of trying to find alternative signals that don't exist. Larger change than anything attempted so far; would require backtest sweep to size correctly.</li>
+</ol>
+
+<p><strong>What we explicitly should NOT do again</strong> (each documented as memory feedback notes for future sessions):</p>
+<ul>
+<li>Add strategy-layer filters (candle quality, two-bar confirmation, tighter floors) to BreakoutMomentumStrategy or QuietBreakoutStrategy — tested, produced −50pp cumulative system regression.</li>
+<li>Rebalance universe scoring weights — tested, didn't move opportunity-quality metrics.</li>
+<li>Add rolling-WR override at the meta layer — tested, fired once in 15 months, no material Live improvement.</li>
+<li>Refresh the <code>_STRATEGY_REGIME_PERFORMANCE</code> Sharpe table — likely to share the same fate as the WR-override (no signal to redistribute to). If attempted, run twice for LLM-noise control.</li>
+<li><strong>Enable cross-strategy exits in any form</strong> — see Finding 9. Three variants tested (unconditional V1, performance-gated V1c, gated-with-positive-momentum-override V1c+A). All produced material regressions in Crash 2020 and Recov 2020-21 on the deterministic EqW path.</li>
+</ul>
+
+<h3>Finding 9 — Cross-strategy exit unlocking: three variants tested, all net-negative (added 2026-05-25)</h3>
+
+<p>The <code>MultiStrategyRouter</code>'s <strong>ownership rule</strong> blocks ~22k–45k TrendPB SELL signals per period against Breakout-owned positions (per the <code>dropped_ownership</code> diagnostic counter). Live 2025-26 attribution shows TrendPB achieves 75% WR on the small slice of signals that do fire — suggesting its exit judgement might be useful. Three variants were tested to unlock these signals; all failed.</p>
+
+<p><strong>Test design.</strong> Each variant added <code>cross_exit_strategies={"TrendPB"}</code> to the <code>MultiStrategyRouter</code> constructor, gated by progressively more conditions. Backtests run with <code>PYTHONHASHSEED=0</code> for deterministic comparison on EqW (the only path unaffected by LLM variance).</p>
+
+<table>
+<tr><th>Variant</th><th>Gate logic</th><th>EqW Crash Δ Return</th><th>EqW Recov Δ Return</th><th>Adapt+RCA Live Δ Return</th></tr>
+<tr><td><strong>V1</strong> — Unconditional</td><td>TrendPB can always SELL Breakout positions</td><td><strong>−17.7pp</strong> (+26.34% → +8.64%)</td><td>not measured (predicted worse)</td><td>+2.1pp (−5.86% → −3.74%)</td></tr>
+<tr><td><strong>V1c</strong> — Performance gate</td><td>Cross-exit allowed only when rolling-20-trade WR(Breakout) &lt; 0.40</td><td>−1.1pp (acceptable on EqW; Sharpe actually +0.28)</td><td><strong>−14.6pp</strong> (+64.61% → +50.00%)</td><td>not re-measured</td></tr>
+<tr><td><strong>V1c+A</strong> — Gate + positive-momentum override</td><td>V1c plus: gate forcibly CLOSED if recent-5-trade WR(Breakout) ≥ 0.60</td><td>not measured</td><td><strong>−25.1pp</strong> (+64.61% → +39.49%) — worse than V1c</td><td>not re-measured</td></tr>
+</table>
+
+<p><strong>Why each variant failed:</strong></p>
+<ol>
+<li><strong>V1 cuts Breakout winners in trending periods.</strong> Crash 2020 is largely a recovery rally (March 2020 onward); TrendPB fired 1,025 cross-exits on Breakout positions, dropping Breakout per-trade PnL from +₹29 to +₹3. Same mechanism predicted to hit Recov 2020-21.</li>
+<li><strong>V1c's WR gate is a lagging indicator.</strong> In Recov, Breakout's 20-trade WR carries crash-era losses for weeks after the V-shape recovery begins. Gate stays open during the most explosive part of the rally. 694 cross-exits fired in EqW Recov; even though gate was only open 17% of days, those firings clustered in the period where Breakout had the most to gain.</li>
+<li><strong>V1c+A's short-window override flips the gate on/off more often, not less.</strong> In Recov's choppy uptrend, brief winning streaks trigger the override → gate closes briefly → re-opens → produces a different cross-exit pattern that turned out worse than V1c alone. Net 23 fewer cross-exits, net −10.5pp PnL on EqW (vs V1c).</li>
+</ol>
+
+<p><strong>The pattern across attempts.</strong> Live optimization keeps failing because the asymmetry is fundamental: any mechanism that helps cap Breakout's losses in Live (where Breakout is broken) also cuts Breakout's winners in Crash/Recov (where Breakout works). The data does not separate "good Breakout entries" from "bad Breakout entries" in a way that a strategy-agnostic mechanism can act on. This is the fifth distinct intervention targeting Live and the fifth failure.</p>
+
+<p><strong>Implementation cost burned.</strong> A pre-existing <code>cross_exit_strategies</code> parameter on <code>MultiStrategyRouter</code> + a <code>cross_exit_gate_fn</code> hook + a <code>rolling_win_rate</code> method on <code>StrategyPnLTracker</code> + env-var wiring in <code>run_experiments.py</code>. All reverted on 2026-05-25 after the V1c+A Recov result confirmed the direction is dead.</p>
+
+<p><strong>Operational consequence.</strong> The system's −5.86% Live drag should now be treated as a known regime-bound constraint, not an optimization target. Future engineering effort should focus on untapped levers that lift the 5 profitable periods (e.g. QuietBrk routing carve-out, universe rescore measuring LOW_VOL_SIDEWAYS share, sector concentration cap) rather than further attempts to fix Live. If a Live-specific intervention is needed, it should be operational (manual <code>SUPPRESS_NEW_BUYS</code> flip when a production monitor detects sustained Breakout WR &lt; 35%) rather than algorithmic.</p>
+
 <hr style="border-color:#30363d;margin:48px 0 24px">
-<p style="color:#8b949e;font-size:12px">Generated from source analysis of <code>/Users/ujjwalkumar/Financial_lab/app/</code> · 2026-05-23 · All code references verified against current working directory.</p>
+<p style="color:#8b949e;font-size:12px">Generated from source analysis of <code>/Users/ujjwalkumar/Financial_lab/app/</code> · 2026-05-23 · Updated 2026-05-24: Findings 6 &amp; 7 added; Finding 7 revised with WR-override negative result; Finding 8 added documenting the regime-bound conclusion after three failed engineering iterations · Updated 2026-05-25: Finding 9 added documenting V1/V1c/V1c+A cross-strategy-exit test results (all reverted, net-negative system effect). All code references verified against current working directory.</p>
 </main>
 
 <script>

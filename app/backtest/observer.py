@@ -42,6 +42,7 @@ class MarketObserverAgent:
         if not records:
             raise ValueError(f"No data found for {symbol}")
 
+        opens   = [r.open   for r in records]
         closes  = [r.close  for r in records]
         highs   = [r.high   for r in records]
         lows    = [r.low    for r in records]
@@ -205,6 +206,10 @@ class MarketObserverAgent:
                     "rsi_2":  rsi_2[i - 1],
                     "rsi_3":  rsi_3[i - 1],
                 },
+                today_open=opens[i],
+                today_high=highs[i],
+                today_low=lows[i],
+                today_volume=volumes[i],
             )
 
         self.symbol_cache[symbol] = symbol_data
