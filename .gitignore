@@ -17,6 +17,8 @@ finance/
 .venv/
 venv/
 
+data_cache/
+
 # Logs
 logs/
 
