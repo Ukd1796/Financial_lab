@@ -23,6 +23,8 @@ from typing import Callable, Optional
 
 from openai import OpenAI
 
+from app.meta.llm_cache import get_default_cache
+
 
 # ---------------------------------------------------------------------------
 # Empirical Sharpe table — hard-coded from 2018–2024 backtests.
@@ -298,11 +300,28 @@ class AdaptiveStrategySelector:
         self._confirmed_weeks: int          = 0
         # Last raw LLM text response — captured in _call_llm, read by rebalance()
         self._last_raw_response: str | None = None
+        # Last LLM-parsed weights BEFORE any clamp (DualMA floor, regime bounds,
+        # feedback agent). Captured in _parse_weights so the rebalance log can
+        # compare raw LLM intent vs final-applied weights.
+        self._last_raw_weights: dict[str, float] | None = None
         # Capital tier from the latest snapshot (MICRO/SMALL/NORMAL). Set in
         # rebalance(); read by _parse_weights() to relax the DualMA floor when
         # the low-capital concentration rule is active. Default NORMAL keeps
         # the original behaviour for accounts that never pass capital.
         self._capital_tier: str = "NORMAL"
+
+        # Experiment toggle: when False, skip all post-LLM clamping
+        # (DualMA floor, _apply_regime_bounds MUSTs, feedback_agent caps) so
+        # the LLM's raw allocation flows through unchanged. Driven by env var
+        # LLM_CLAMP_WEIGHTS so the harness/runners don't need any code changes
+        # to A/B-test "is clamping helping?". Defaults to True (legacy behaviour).
+        self.clamp_weights: bool = os.environ.get("LLM_CLAMP_WEIGHTS", "1") != "0"
+
+        # Optional JSONL log of every rebalance (date, regime, raw_response,
+        # pre-clamp weights, final weights, clamp_active flag). Set the path
+        # via ADAPTIVE_LOG_PATH env var. None = no logging. File is opened in
+        # append mode each rebalance so multiple periods accumulate in one file.
+        self._log_path: str | None = os.environ.get("ADAPTIVE_LOG_PATH") or None
 
     # ------------------------------------------------------------------
     # PUBLIC API
@@ -383,16 +402,42 @@ class AdaptiveStrategySelector:
         self._capital_tier = regime_snapshot.get("capital_tier", "NORMAL")
 
         self._last_raw_response = None
+        self._last_raw_weights  = None
         new_weights = self._call_llm(regime_snapshot, label, desc, confidence)
         if new_weights:
             self.weights = new_weights
             self._call_count += 1
             if self.verbose:
                 w_str = "  ".join(f"{k}={v:.2f}" for k, v in self.weights.items())
+                clamp_tag = "" if self.clamp_weights else "  [NO-CLAMP]"
                 print(
                     f"  [AdaptiveSelector] {current_date.date()}"
-                    f" [{label}/{confidence}] → {w_str}"
+                    f" [{label}/{confidence}] → {w_str}{clamp_tag}"
                 )
+                if not self.clamp_weights and self._last_raw_weights:
+                    raw_str = "  ".join(
+                        f"{k}={v:.2f}" for k, v in self._last_raw_weights.items()
+                    )
+                    print(f"  [AdaptiveSelector raw_llm] → {raw_str}")
+
+            # Optional JSONL rebalance log — one record per LLM call. Append
+            # mode so multiple periods write to the same file. Disable any
+            # logging exception so a write failure never breaks the backtest.
+            if self._log_path:
+                try:
+                    entry = {
+                        "date":         str(current_date.date()),
+                        "regime":       label,
+                        "confidence":   confidence,
+                        "clamp_active": bool(self.clamp_weights),
+                        "raw_response": self._last_raw_response,
+                        "raw_weights":  self._last_raw_weights,
+                        "final_weights": dict(self.weights),
+                    }
+                    with open(self._log_path, "a") as f:
+                        f.write(json.dumps(entry) + "\n")
+                except Exception:
+                    pass
             if self.on_rebalance is not None:
                 try:
                     self.on_rebalance(
@@ -439,7 +484,9 @@ class AdaptiveStrategySelector:
     ) -> dict[str, float] | None:
         """Make one OpenAI API call. Returns normalised weight dict or None on failure."""
         prompt = self._build_prompt(regime_snapshot, label, desc, confidence)
-        try:
+        cache = get_default_cache()
+
+        def _do_api_call() -> str:
             response = self.client.chat.completions.create(
                 model=self.model,
                 max_tokens=128,
@@ -451,7 +498,10 @@ class AdaptiveStrategySelector:
                           # measurable (cf. docs/meta_layer_value_leak.md §12b).
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw = response.choices[0].message.content.strip()
+            return response.choices[0].message.content.strip()
+
+        try:
+            raw = cache.get_or_call(prompt, self.model, _do_api_call)
             self._last_raw_response = raw   # store before any stripping
             if raw.startswith("```"):
                 parts = raw.split("```")
@@ -467,7 +517,14 @@ class AdaptiveStrategySelector:
             return None
 
     def _parse_weights(self, raw: str, label: str | None = None) -> dict[str, float] | None:
-        """Parse JSON, clip negatives, enforce per-regime MUST bounds, normalise."""
+        """Parse JSON, clip negatives, enforce per-regime MUST bounds, normalise.
+
+        When self.clamp_weights is False, skip the post-LLM clamping path
+        entirely (DualMA floor, _apply_regime_bounds MUSTs, feedback agent
+        adjustments) — the LLM's raw allocation flows straight through, only
+        normalized to sum=1.0. Use this to A/B-test whether the clamping is
+        helping or constraining the LLM's actual judgment.
+        """
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -480,6 +537,24 @@ class AdaptiveStrategySelector:
         }
         if not clipped:
             return None
+
+        # Snapshot the raw LLM allocation (post-zero-clip, pre-clamp) so the
+        # rebalance log can show what the LLM actually wanted vs what we sent
+        # to the router. Normalize to 1.0 here so it's directly comparable to
+        # `weights`. Skip strategies the LLM omitted (treat as 0.0).
+        raw_materialised = {k: clipped.get(k, 0.0) for k in self.strategy_names}
+        raw_total = sum(raw_materialised.values()) or 1.0
+        self._last_raw_weights = {
+            k: raw_materialised[k] / raw_total for k in self.strategy_names
+        }
+
+        if not self.clamp_weights:
+            # Experiment path: no DualMA floor, no regime bounds, no feedback
+            # caps. Just normalise the raw LLM output.
+            total = sum(raw_materialised.values())
+            if total <= 0:
+                return None
+            return {k: raw_materialised[k] / total for k in self.strategy_names}
 
         # DualMA floor: positive Sharpe in every regime — never below 0.10.
         # Skipped at concentration tiers (MICRO/SMALL): forcing DualMA back to

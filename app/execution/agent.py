@@ -95,6 +95,7 @@ class ExecutionAgent:
                     exec_price,
                     atr_at_entry=getattr(decision, "atr_at_entry", 0.0),
                     entry_date=getattr(market_state, "timestamp", None),
+                    entry_strategy=getattr(decision, "source", ""),
                 )
                 executed = True
 

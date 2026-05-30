@@ -1157,8 +1157,32 @@ Live improved by 0.25pp — below the 2pp acceptance threshold and well within L
 
 <p><strong>Operational consequence.</strong> The system's −5.86% Live drag should now be treated as a known regime-bound constraint, not an optimization target. Future engineering effort should focus on untapped levers that lift the 5 profitable periods (e.g. QuietBrk routing carve-out, universe rescore measuring LOW_VOL_SIDEWAYS share, sector concentration cap) rather than further attempts to fix Live. If a Live-specific intervention is needed, it should be operational (manual <code>SUPPRESS_NEW_BUYS</code> flip when a production monitor detects sustained Breakout WR &lt; 35%) rather than algorithmic.</p>
 
+<h3>Finding 10 — MFE-lock variant battery: exit-side mechanics are a dead lane (added 2026-05-28)</h3>
+
+<p>Live 2025-26 diagnostics showed MFE efficiency −0.358, persistence half-life 0 days, and continuation-decay losers drifting +0.85% over 5 days post-exit. These read like exit-timing leaks. Plan <code>purrfect-snacking-quilt.md</code> designed an 8-variant battery (V0–V7) sweeping MFE-lock threshold, Phase-2 trail width, scale-out fraction, max-hold days, and strategy-exit override; STRICT acceptance bar at ≤3pp Full regression.</p>
+
+<p><strong>Test design.</strong> Adaptive (5-strat) on all 7 periods, MFE-lock variant cells driven by env vars, perfect-exit ceiling + Day-1 negative rate added to the OPPORTUNITY QUALITY SUMMARY as upper-bound instrumentation. Run with <code>PYTHONHASHSEED=0 LLM_CACHE_ENABLED=1 MFE_VARIANT_BATTERY=1</code>.</p>
+
+<table>
+<tr><th>Variant</th><th>Full Return</th><th>Δ vs V0</th><th>Full MaxDD</th><th>Sharpe</th><th>STRICT bar (≤3pp)</th></tr>
+<tr><td><strong>V0_baseline</strong> — MFE-lock OFF</td><td>+125.63%</td><td>—</td><td>22.24%</td><td>1.27</td><td>—</td></tr>
+<tr><td><strong>V1_vanilla</strong> — threshold 1.5×ATR, breakeven=1</td><td>+120.75%</td><td>−4.88pp</td><td>22.78%</td><td>1.24</td><td>FAIL</td></tr>
+<tr><td><strong>V2_early_lock</strong> — earlier Phase 2 at 0.75×ATR</td><td>+106.46%</td><td>−19.17pp</td><td>21.98%</td><td>1.16</td><td>FAIL</td></tr>
+<tr><td><strong>V3_tight_p2</strong> — Phase 2 fixed 1.0×ATR trail</td><td>+99.89%</td><td>−25.74pp</td><td>19.52%</td><td>1.16</td><td>FAIL</td></tr>
+<tr><td><strong>V4_scale_out</strong> — 50% partial at MFE 1.0×ATR</td><td>+90.71%</td><td>−34.92pp</td><td>18.76%</td><td>1.15</td><td>FAIL</td></tr>
+<tr><td>V5_max_hold / V6_se_override / V7_stack</td><td colspan="5">Not completed — trajectory closure decisive after V4</td></tr>
+</table>
+
+<p><strong>The trajectory is monotonic worse.</strong> Every cell tightening exits regresses 5–35pp Return on Full for 0.3–3.5pp MaxDD improvement. Same shape as the v3-trailing-stop test from months earlier (−21pp). The mechanism is consistent: tighter exits clip winners in the 5 profitable periods that contribute most of the cumulative return, while DD gains are bounded by how much the trail can shrink without becoming structural noise.</p>
+
+<p><strong>Why exit mechanics can't move Live.</strong> Day-1 negative rate measurements (added in this iteration) confirm a structurally high entry-quality tax: a majority of Live trades close below entry on day 1. Persistence half-life = 0 days means the median trade fails before any trail logic engages. No exit-side mechanic can rescue trades that go negative on day 1 — the trigger conditions for MFE-lock, scale-out, or max-hold never fire on those trades. The leak the diagnostic surfaces (MFE efficiency −0.358, continuation decay) describes a minority of trades that do reach a peak before reversing; even perfect exits on those wouldn't sum to the magnitude of the day-1-negative bleed.</p>
+
+<p><strong>Implementation cost burned.</strong> 2-phase MFE-lock infrastructure in <code>app/risk/agent.py</code> (added 2026-05-28); <code>scale_out_done</code> + <code>_mfe_phase2_active</code> fields on <code>Position</code>; partial-SELL semantics in <code>app/execution/agent.py</code> + <code>app/backtest/engine.py</code>; <code>day1_return_pct</code> + perfect-exit ceiling + Day-1 negative rate metrics in <code>app/analytics/{trade_annotator,opportunity_quality}.py</code>; <code>MFE_VARIANTS</code> battery + <code>_run_variant_battery</code> + <code>mfe_lock_enabled</code> ctor/runner threading in <code>run_experiments.py</code>. All reverted on 2026-05-28 after V0–V4 trajectory confirmed direction is dead. Sixth distinct intervention targeting Live and the sixth failure.</p>
+
+<p><strong>Operational consequence.</strong> The exit lever is formally closed. Future iterations should not propose trailing-stop width changes, MFE-lock variants, scale-out, max-hold caps, strategy-exit overrides, breakeven floors, or regime-conditional stop mults on the existing strategy stack. Remaining unexplored lanes are structural: rewriting the Breakout / QuietBreakout signal itself (not adding filters around it), or replacing the strategy roster. Universe-side and filter-side have been confirmed dead in Findings 6–8.</p>
+
 <hr style="border-color:#30363d;margin:48px 0 24px">
-<p style="color:#8b949e;font-size:12px">Generated from source analysis of <code>/Users/ujjwalkumar/Financial_lab/app/</code> · 2026-05-23 · Updated 2026-05-24: Findings 6 &amp; 7 added; Finding 7 revised with WR-override negative result; Finding 8 added documenting the regime-bound conclusion after three failed engineering iterations · Updated 2026-05-25: Finding 9 added documenting V1/V1c/V1c+A cross-strategy-exit test results (all reverted, net-negative system effect). All code references verified against current working directory.</p>
+<p style="color:#8b949e;font-size:12px">Generated from source analysis of <code>/Users/ujjwalkumar/Financial_lab/app/</code> · 2026-05-23 · Updated 2026-05-24: Findings 6 &amp; 7 added; Finding 7 revised with WR-override negative result; Finding 8 added documenting the regime-bound conclusion after three failed engineering iterations · Updated 2026-05-25: Finding 9 added documenting V1/V1c/V1c+A cross-strategy-exit test results (all reverted, net-negative system effect) · Updated 2026-05-28: Finding 10 added documenting V0–V4 MFE-lock variant battery results (all reverted, monotonic regression on Full; exit-side mechanics formally closed as a lever). All code references verified against current working directory.</p>
 </main>
 
 <script>

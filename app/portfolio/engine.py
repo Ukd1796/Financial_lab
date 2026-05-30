@@ -7,7 +7,7 @@ class PortfolioEngine:
         self.portfolio = portfolio
 
     def buy(self, symbol: str, quantity: float, price: float,
-            atr_at_entry: float = 0.0, entry_date=None):
+            atr_at_entry: float = 0.0, entry_date=None, entry_strategy: str = ""):
 
         cost = quantity * price
 
@@ -37,6 +37,7 @@ class PortfolioEngine:
                 atr_at_entry=atr_at_entry,
                 high_watermark=price,   # initialise to entry price; trails up from here
                 entry_date=entry_date,
+                entry_strategy=entry_strategy,
             )
 
     def sell(self, symbol: str, quantity: float, price: float):

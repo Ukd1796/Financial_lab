@@ -78,6 +78,201 @@ class BreakoutUniverseFilter:
         return [c.symbol for c in self.select_universe(src)]
 
 
+class QuietBreakoutUniverseFilter:
+    """
+    Selects slow-grinding, low-activity stocks for QuietBreakoutStrategy.
+
+    QuietBreakoutStrategy's 20-day-high entry signal is structurally similar
+    to BreakoutMomentumStrategy's 10-day-high entry — every QuietBrk BUY
+    candidate is also a Breakout BUY candidate on the same bar. When both
+    filters draw from the same activity-biased top-80 pool, the router's
+    weight tiebreak and ownership rule mean Breakout wins every entry and
+    QuietBrk contributes 0 won_merge across all periods (verified across
+    backtest history).
+
+    This filter solves the collision at the *universe* layer by giving
+    QuietBrk a structurally orthogonal slice: stocks in the middle band of
+    activity (calm but not dead) that Breakout's own entry gate (vol_ratio
+    > 1.2, |daily_return| effectively > 1.5%) will reject. QuietBrk's
+    20-day signal then has an uncontested cohort to find genuine breakouts
+    in — the slow drifters that produce 20-day highs without the daily
+    fireworks Breakout requires.
+
+    Hard filters (per-day cross-sectional percentiles on the pool):
+      - atr_ratio        in [25th, 60th] pct of pool — moderate range
+      - rolling_vol_5d   in [25th, 60th] pct of pool — moderate choppiness
+      - |daily_return|   < 0.015                     — no big move today
+      - relative_volume  in [0.7, 1.5]               — normal-ish volume
+
+    Fallback for warm-up / sparse pools (< 4 non-zero atr_ratio values):
+      use fixed thresholds atr_ratio < 0.04 and rolling_vol_5d < 0.025.
+
+    Scoring: rank by rolling_vol_5d ascending (calmest first) so the
+    quietest tail of the band appears first in the union ordering.
+
+    use_full_universe = True: low-activity stocks score poorly on the
+    DynamicAgent's activity-biased opportunity_score and are excluded from
+    the top-80. Scanning all 150 surfaces the correct morphology.
+    """
+
+    use_full_universe = True
+
+    def __init__(
+        self,
+        atr_pct_low:        float = 0.25,
+        atr_pct_high:       float = 0.60,
+        vol5d_pct_low:      float = 0.25,
+        vol5d_pct_high:     float = 0.60,
+        max_abs_return:     float = 0.015,
+        min_rel_volume:     float = 0.7,
+        max_rel_volume:     float = 1.5,
+        fallback_atr_max:   float = 0.04,
+        fallback_vol5d_max: float = 0.025,
+        min_pool_for_pct:   int   = 4,
+        top_n:              int   = 20,
+    ):
+        self.atr_pct_low        = atr_pct_low
+        self.atr_pct_high       = atr_pct_high
+        self.vol5d_pct_low      = vol5d_pct_low
+        self.vol5d_pct_high     = vol5d_pct_high
+        self.max_abs_return     = max_abs_return
+        self.min_rel_volume     = min_rel_volume
+        self.max_rel_volume     = max_rel_volume
+        self.fallback_atr_max   = fallback_atr_max
+        self.fallback_vol5d_max = fallback_vol5d_max
+        self.min_pool_for_pct   = min_pool_for_pct
+        self.top_n              = top_n
+
+    @staticmethod
+    def _pct(sorted_vals: list[float], q: float) -> float:
+        # Linear-interpolating percentile on a pre-sorted list. No numpy dep —
+        # the rest of this module is pure stdlib and we keep that constraint.
+        if not sorted_vals:
+            return 0.0
+        if len(sorted_vals) == 1:
+            return sorted_vals[0]
+        pos = q * (len(sorted_vals) - 1)
+        lo  = int(pos)
+        hi  = min(lo + 1, len(sorted_vals) - 1)
+        frac = pos - lo
+        return sorted_vals[lo] * (1.0 - frac) + sorted_vals[hi] * frac
+
+    def select_universe(
+        self, candidates: list[UniverseCandidate]
+    ) -> list[UniverseCandidate]:
+        atr_vals   = sorted(c.atr_ratio      for c in candidates if c.atr_ratio      > 0)
+        vol5d_vals = sorted(c.rolling_vol_5d for c in candidates if c.rolling_vol_5d > 0)
+
+        use_pct = (
+            len(atr_vals)   >= self.min_pool_for_pct
+            and len(vol5d_vals) >= self.min_pool_for_pct
+        )
+        if use_pct:
+            atr_lo   = self._pct(atr_vals,   self.atr_pct_low)
+            atr_hi   = self._pct(atr_vals,   self.atr_pct_high)
+            vol5d_lo = self._pct(vol5d_vals, self.vol5d_pct_low)
+            vol5d_hi = self._pct(vol5d_vals, self.vol5d_pct_high)
+        else:
+            # Warm-up / sparse-pool fallback: fixed absolute thresholds.
+            atr_lo,   atr_hi   = 0.0, self.fallback_atr_max
+            vol5d_lo, vol5d_hi = 0.0, self.fallback_vol5d_max
+
+        filtered = [
+            c for c in candidates
+            if atr_lo   <= c.atr_ratio      <= atr_hi
+            and vol5d_lo <= c.rolling_vol_5d <= vol5d_hi
+            and abs(c.daily_return) < self.max_abs_return
+            and self.min_rel_volume <= c.relative_volume <= self.max_rel_volume
+        ]
+        # Calmest first — QuietBrk wants the slowest drifters, not the
+        # busiest of the quiet cohort.
+        filtered.sort(key=lambda c: c.rolling_vol_5d)
+        return filtered[: self.top_n]
+
+    def select_symbols(
+        self,
+        candidates: list[UniverseCandidate],
+        all_candidates: list[UniverseCandidate] | None = None,
+    ) -> list[str]:
+        src = all_candidates if (self.use_full_universe and all_candidates is not None) else candidates
+        return [c.symbol for c in self.select_universe(src)]
+
+
+class ActivityTailFilter:
+    """
+    Selects the activity tail — stocks Breakout's strict thresholds reject
+    but that are still active enough for a 20-day breakout signal to fire.
+
+    Why this exists (replaces QuietBreakoutUniverseFilter for QuietBrk's lane):
+    The middle-band quiet filter (QuietBreakoutUniverseFilter) gave QuietBrk
+    structurally inactive stocks — low ATR ratio, low rolling vol, no daily
+    move. But QuietBreakoutStrategy's entry signal (price > high_20d with
+    vol_ratio > 1.2) needs *movement* to fire. Inactive stocks rarely break
+    above a 20-day high. Empirically (2 backtest runs), QuietBrk fired only
+    1-5 trades per period in the ensemble on that universe, vs 287 trades in
+    Crash and 546 trades in Recov standalone on the relaxed-Breakout universe.
+
+    This filter gives QuietBrk a universe closer to its standalone one
+    (moderate-activity stocks) while structurally avoiding Breakout's strict
+    territory — so the asymmetric router gate (exclusive_strategies={"QuietBrk"})
+    keeps these reserved for QuietBrk without poaching opportunities Breakout
+    would otherwise take.
+
+    Hard filters (on the top-80 broad pool):
+      - NOT (relative_volume > breakout_vol_threshold
+             AND |daily_return| > breakout_return_threshold)
+                                                       — exclude Breakout's strict picks
+      - relative_volume > min_vol                      — still moderate volume
+      - |daily_return|  > min_abs_return               — still moves enough to break out
+
+    Scoring: rank by candidate.score descending (same activity-based metric
+    Breakout uses) so the best of the second-tier appears first.
+
+    use_full_universe = False: operates on the activity-biased top-80, the
+    pool where 20-day breakouts actually happen. The all-150 pool's tail
+    (stocks rank 80-150) is the dead zone QuietBrk struggled with before.
+    """
+
+    use_full_universe = False
+
+    def __init__(
+        self,
+        breakout_vol_threshold:    float = 1.5,
+        breakout_return_threshold: float = 0.015,
+        min_vol:                   float = 1.0,
+        min_abs_return:            float = 0.005,
+        top_n:                     int   = 20,
+    ):
+        self.breakout_vol_threshold    = breakout_vol_threshold
+        self.breakout_return_threshold = breakout_return_threshold
+        self.min_vol                   = min_vol
+        self.min_abs_return            = min_abs_return
+        self.top_n                     = top_n
+
+    def select_universe(
+        self, candidates: list[UniverseCandidate]
+    ) -> list[UniverseCandidate]:
+        filtered = [
+            c for c in candidates
+            if not (
+                c.relative_volume > self.breakout_vol_threshold
+                and abs(c.daily_return) > self.breakout_return_threshold
+            )
+            and c.relative_volume > self.min_vol
+            and abs(c.daily_return) > self.min_abs_return
+        ]
+        filtered.sort(key=lambda c: c.score, reverse=True)
+        return filtered[: self.top_n]
+
+    def select_symbols(
+        self,
+        candidates: list[UniverseCandidate],
+        all_candidates: list[UniverseCandidate] | None = None,
+    ) -> list[str]:
+        src = all_candidates if (self.use_full_universe and all_candidates is not None) else candidates
+        return [c.symbol for c in self.select_universe(src)]
+
+
 class PullbackUniverseFilter:
     """
     Selects stocks in a confirmed, rising uptrend that are currently pulling
@@ -344,8 +539,52 @@ class UnionUniverseFilter:
     """
 
     def __init__(self, filters: list):
-        self.filters = filters
-        self.top_n   = sum(getattr(f, "top_n", 20) for f in filters)
+        # Accept either:
+        #   [filter, filter, ...]            — legacy untagged form
+        #   [(strategy_name, filter), ...]   — tagged form for per-strategy gating
+        # When tagged, `last_per_strategy_symbols` is populated after each
+        # select_universe call so MultiStrategyRouter can blind each strategy
+        # to symbols outside its assigned slice (preventing Breakout from
+        # poaching QuietBrk's quiet stocks in `symbol_states`).
+        if filters and isinstance(filters[0], tuple):
+            self._tags   = [t for (t, _) in filters]
+            self.filters = [f for (_, f) in filters]
+        else:
+            self._tags   = [None] * len(filters)
+            self.filters = list(filters)
+        self.top_n   = sum(getattr(f, "top_n", 20) for f in self.filters)
+        # Per-filter overlap diagnostics. `absorbed_by_earlier[i]` counts how
+        # many candidates filter i selected that were already claimed by an
+        # earlier filter in the union ordering. `call_count` lets callers
+        # report mean/max per day at end-of-period. Reset is intentional:
+        # counters are cumulative across the run.
+        self.absorbed_by_earlier: dict[int, int] = {i: 0 for i in range(len(self.filters))}
+        self.absorbed_max:        dict[int, int] = {i: 0 for i in range(len(self.filters))}
+        self.call_count:          int            = 0
+        # Latest per-strategy symbol sets from the most recent select_universe
+        # call. Only populated for tagged filters; untagged entries contribute
+        # nothing (router's gate no-ops when a strategy name is absent).
+        self.last_per_strategy_symbols: dict[str, set] = {}
+
+    def get_overlap_stats(self) -> list[dict]:
+        """
+        Per-filter overlap stats since instantiation. One dict per filter:
+            {name, total_absorbed, max_absorbed_in_a_call, mean_per_call}
+
+        Use after a backtest period to confirm structurally orthogonal slices.
+        Low mean (< 3/day) = filters select different cohorts. High mean
+        (> 8/day) = filters competing for same names; carve isn't working.
+        """
+        calls = max(self.call_count, 1)
+        return [
+            {
+                "name":                   type(self.filters[i]).__name__,
+                "total_absorbed":         self.absorbed_by_earlier[i],
+                "max_absorbed_in_a_call": self.absorbed_max[i],
+                "mean_per_call":          self.absorbed_by_earlier[i] / calls,
+            }
+            for i in range(len(self.filters))
+        ]
 
     def select_universe(
         self,
@@ -369,12 +608,28 @@ class UnionUniverseFilter:
         full_pool = all_candidates if all_candidates is not None else candidates
         seen:   set  = set()
         result: list = []
-        for f in self.filters:
+        self.call_count += 1
+        per_strategy: dict[str, set] = {}
+        for i, f in enumerate(self.filters):
             src = full_pool if getattr(f, "use_full_universe", False) else candidates
-            for candidate in f.select_universe(src):
+            absorbed_this_call = 0
+            picks = f.select_universe(src)
+            tag   = self._tags[i]
+            if tag is not None:
+                per_strategy[tag] = {c.symbol for c in picks}
+            for candidate in picks:
                 if candidate.symbol not in seen:
                     seen.add(candidate.symbol)
                     result.append(candidate)
+                else:
+                    absorbed_this_call += 1
+            self.absorbed_by_earlier[i] += absorbed_this_call
+            if absorbed_this_call > self.absorbed_max[i]:
+                self.absorbed_max[i] = absorbed_this_call
+        # Mutate in place so callers holding a reference to last_per_strategy_symbols
+        # see the new bar's slices without re-fetching the attribute each call.
+        self.last_per_strategy_symbols.clear()
+        self.last_per_strategy_symbols.update(per_strategy)
         return result
 
     def select_symbols(

@@ -36,6 +36,7 @@ class RiskAgent:
         regime_gating:       bool  = False,  # ETF: cap concurrent slots + restrict to defensive ETFs by regime
         defensive_symbols          = None,   # symbols allowed to BUY in defensive regimes (default GOLDBEES/SILVERBEES)
         regime_slot_caps:    dict  = None,   # {regime_label: max_concurrent_slots}; None ⇒ sensible default map
+        no_atr_stop_strategies: set = None,  # strategy names exempt from ATR trailing stop (e.g. mean-reversion)
     ):
         self.max_position_pct        = max_position_pct
         self.atr_multiplier          = atr_multiplier
@@ -53,6 +54,7 @@ class RiskAgent:
         self.regime_gating           = regime_gating
         self.defensive_symbols       = set(defensive_symbols) if defensive_symbols else {"GOLDBEES", "SILVERBEES"}
         self.regime_slot_caps        = regime_slot_caps
+        self.no_atr_stop_strategies  = set(no_atr_stop_strategies) if no_atr_stop_strategies else set()
 
     def _stop_multiplier(self, regime: str | None) -> float:
         """Return the ATR multiplier to use for the trailing stop given the current regime."""
@@ -164,23 +166,24 @@ class RiskAgent:
             high_watermark = max(prev_watermark, current_price)
             position.high_watermark = high_watermark   # update in-place for next day
 
-            # Regime-conditional multiplier: tighter in choppy/downtrend regimes,
-            # wider in smooth low-vol uptrends. Falls back to fixed atr_multiplier
-            # when regime_multipliers is not configured.
-            stop_mult  = self._stop_multiplier(regime)
-            stop_price = high_watermark - (stop_mult * entry_atr)
+            if getattr(position, "entry_strategy", "") not in self.no_atr_stop_strategies:
+                # Regime-conditional multiplier: tighter in choppy/downtrend regimes,
+                # wider in smooth low-vol uptrends. Falls back to fixed atr_multiplier
+                # when regime_multipliers is not configured.
+                stop_mult  = self._stop_multiplier(regime)
+                stop_price = high_watermark - (stop_mult * entry_atr)
 
-            if current_price <= stop_price:
-                return Decision(
-                    symbol=symbol,
-                    action="SELL",
-                    quantity=position.quantity,
-                    reasoning=(
-                        f"Trailing ATR stop hit at {stop_price:.2f} "
-                        f"(watermark {high_watermark:.2f}, entry ATR {entry_atr:.2f}, "
-                        f"mult {stop_mult:.1f}×, regime {regime})"
-                    ),
-                )
+                if current_price <= stop_price:
+                    return Decision(
+                        symbol=symbol,
+                        action="SELL",
+                        quantity=position.quantity,
+                        reasoning=(
+                            f"Trailing ATR stop hit at {stop_price:.2f} "
+                            f"(watermark {high_watermark:.2f}, entry ATR {entry_atr:.2f}, "
+                            f"mult {stop_mult:.1f}×, regime {regime})"
+                        ),
+                    )
 
         # --- HOLD pass-through ---
         if decision.action == "HOLD":
@@ -233,6 +236,7 @@ class RiskAgent:
                     action="BUY",
                     quantity=slot_qty,
                     atr_at_entry=atr or 0.0,
+                    source=getattr(decision, "source", ""),
                     reasoning=self.slot_sizer.reasoning(
                         total_equity, current_price, int(slot_qty)
                     ),
@@ -268,6 +272,7 @@ class RiskAgent:
                 action="BUY",
                 quantity=quantity,
                 atr_at_entry=atr or 0.0,
+                source=getattr(decision, "source", ""),
                 reasoning=self._sizing_reasoning(total_equity, current_price, atr, quantity, strategy_weight),
             )
 

@@ -70,6 +70,8 @@ class MultiStrategyRouter:
         allowed_regimes: dict | None = None,
         allow_cross_strategy_exits: bool = False,
         cross_exit_strategies: set | None = None,
+        per_strategy_universe_source=None,
+        exclusive_strategies: set | None = None,
     ):
         self.strategies      = strategies
         self.weights         = self._normalise(
@@ -102,6 +104,35 @@ class MultiStrategyRouter:
         # Requires dispatch to also show cross-exit strategies ALL held positions
         # (not just their own + regime-matched ones) so signals can generate.
         self.cross_exit_strategies: set = cross_exit_strategies or set()
+
+        # Optional per-strategy universe gate. When set, this callable returns
+        # {strategy_name: set[symbol]} for the *current bar* — typically a
+        # closure over UnionUniverseFilter.last_per_strategy_symbols. Each
+        # strategy then sees only the symbols its own universe filter selected
+        # (plus held positions for exits). Without this gate, every strategy
+        # sees the merged active_symbols, allowing one strategy to fire on
+        # another's intended slice (e.g. Breakout poaching QuietBrk's quiet
+        # stocks). Strategies whose name is absent from the dict bypass the
+        # gate (backwards-compat for untagged unions).
+        self.per_strategy_universe_source = per_strategy_universe_source
+
+        # Asymmetric gate: only strategies named here get the "see only my
+        # slice" treatment. Every other strategy sees (merged - union of
+        # exclusive slices) — i.e. their universe is reduced by exactly the
+        # symbols reserved for exclusive strategies, but they still poach
+        # freely across the remaining slices.
+        #
+        # Rationale: the symmetric gate (every tagged strategy on its own
+        # slice) regressed Adapt+RCA -4.85pp Crash / -9.47pp Recent because
+        # Breakout's broad poaching was generating real PnL. An asymmetric
+        # gate scoped to {"QuietBrk"} only takes ~10% of Breakout's surface
+        # (the quiet slice) while giving QuietBrk an uncontested lane to
+        # express its standalone Sharpe-2 behavior. See plan file
+        # `velvet-swimming-harbor.md` for the full design.
+        #
+        # Empty / None = no asymmetry; falls through to the symmetric gate
+        # (if per_strategy_universe_source set) or legacy (if not).
+        self.exclusive_strategies: set = exclusive_strategies or set()
 
         # Detect dispatch mode once — avoids repeated introspection per bar
         self._multi_symbol: dict[str, bool] = {
@@ -243,11 +274,82 @@ class MultiStrategyRouter:
         lies with the owning strategy.  Untracked positions (no owner recorded)
         are included as a safe fallback.
         """
-        regimes = self.allowed_regimes.get(name)
         # Symbols this strategy owns (should always receive exit signals)
         owned = {
             sym for sym, owner in self.position_owners.items() if owner == name
         }
+
+        # ── Per-strategy universe gate ────────────────────────────────────
+        # Two modes depending on `exclusive_strategies`:
+        #
+        # ASYMMETRIC (`exclusive_strategies` non-empty):
+        #   - If `name` is in exclusive_strategies → see only `slices[name]`
+        #     (reserved private lane).
+        #   - Else → see (merged - union of all exclusive slices). Keeps the
+        #     strategy's normal poaching reach minus the reserved symbols.
+        #
+        # SYMMETRIC (legacy gate, `exclusive_strategies` empty):
+        #   - If `name` is in slices → see only `slices[name]`.
+        #   - Else → no filtering (backwards-compat for untagged routers).
+        #
+        # Bypass rules (both modes): own positions, untracked positions, and
+        # cross-exit strategies pass through so exit signals always fire.
+        if self.per_strategy_universe_source is not None:
+            slices = self.per_strategy_universe_source() or {}
+
+            if self.exclusive_strategies:
+                # Asymmetric mode
+                excluded_union: set = set()
+                for excl_name in self.exclusive_strategies:
+                    excluded_union |= slices.get(excl_name, set())
+
+                if name in self.exclusive_strategies:
+                    allowed_syms = slices.get(name, set())
+                    symbol_states = {
+                        sym: state for sym, state in symbol_states.items()
+                        if sym in allowed_syms
+                        or sym in owned
+                        or (
+                            sym in portfolio.positions
+                            and sym not in self.position_owners
+                        )
+                        or (
+                            name in self.cross_exit_strategies
+                            and sym in portfolio.positions
+                        )
+                    }
+                elif excluded_union:
+                    symbol_states = {
+                        sym: state for sym, state in symbol_states.items()
+                        if sym not in excluded_union
+                        or sym in owned
+                        or (
+                            sym in portfolio.positions
+                            and sym not in self.position_owners
+                        )
+                        or (
+                            name in self.cross_exit_strategies
+                            and sym in portfolio.positions
+                        )
+                    }
+            elif name in slices:
+                # Symmetric mode (legacy)
+                allowed_syms = slices[name]
+                symbol_states = {
+                    sym: state for sym, state in symbol_states.items()
+                    if sym in allowed_syms
+                    or sym in owned
+                    or (
+                        sym in portfolio.positions
+                        and sym not in self.position_owners
+                    )
+                    or (
+                        name in self.cross_exit_strategies
+                        and sym in portfolio.positions
+                    )
+                }
+
+        regimes = self.allowed_regimes.get(name)
         if regimes is not None:
             filtered_states = {
                 sym: state for sym, state in symbol_states.items()

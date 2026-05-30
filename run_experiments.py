@@ -1,7 +1,17 @@
+import os
 from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
+
+# Skip solo strategies + EqualWeight baseline when set; run only Adaptive +
+# Adaptive+RCA. Useful when iterating on the meta-layer (MFE-lock, RCA tuning,
+# prompt changes) where solo/EqW runs are unaffected and just slow the loop.
+# Set ADAPTIVE_ONLY=1 to enable.
+ADAPTIVE_ONLY = os.environ.get("ADAPTIVE_ONLY", "0") != "0"
+# Skip Adaptive (LLM) and RCA runs — run only solo strategies + EqualWeight.
+# Useful for fast diagnostics (no LLM cost, ~3× faster).
+EQW_ONLY = os.environ.get("EQW_ONLY", "0") != "0"
 
 from app.backtest.engine import BacktestEngine
 from app.backtest.observer import MarketObserverAgent
@@ -22,6 +32,7 @@ from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.meta.regime_context_agent import RegimeContextAgent
 from app.universe.filters import (
+    ActivityTailFilter,
     BreakoutUniverseFilter,
     DualMAUniverseFilter,
     MeanReversionUniverseFilter,
@@ -280,7 +291,7 @@ class PeriodContext:
 # -----------------------------------------------------------------------
 # Single backtest run  (receives shared period context)
 # -----------------------------------------------------------------------
-def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0, regime_context_agent=None, pnl_tracker=None):
+def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.20, allowed_regimes=None, breadth_circuit_breaker=False, universe_filter=None, adaptive_selector=None, max_downtrend_pct=0.40, min_atr_cost_ratio=0.0, regime_context_agent=None, pnl_tracker=None, regime_multipliers=None, no_atr_stop_strategies=None):
 
     if not ctx.historical_dates:
         return None
@@ -307,6 +318,8 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         breadth_circuit_breaker=breadth_circuit_breaker,
         max_downtrend_pct=max_downtrend_pct,
         min_atr_cost_ratio=min_atr_cost_ratio,
+        regime_multipliers=regime_multipliers,
+        no_atr_stop_strategies=no_atr_stop_strategies,
     )
 
     # Use the per-strategy universe filter when provided; fall back to the
@@ -395,6 +408,71 @@ def _print_router_diagnostics(label: str, router) -> None:
         print(
             f"  {name:<12}"
             f"{issued:>9}{won:>8}{prio:>11}{own:>11}{buy_rej:>9}{pct:>11.1f}%"
+        )
+
+
+def _print_universe_overlap(label: str, universe_filter) -> None:
+    """Per-child overlap counts from UnionUniverseFilter — confirms structurally
+    orthogonal slices when mean/day is small. Used to track QuietBrk carve-out."""
+    get_stats = getattr(universe_filter, "get_overlap_stats", None)
+    if get_stats is None:
+        return
+    stats = get_stats()
+    if not stats:
+        return
+    print(f"\n  {'-' * ROW_W}  [{label} — union-filter overlap (per trading day)]")
+    print(f"  {'Filter':<32}{'total':>9}{'max/day':>10}{'mean/day':>11}")
+    for s in stats:
+        print(f"  {s['name']:<32}{s['total_absorbed']:>9}{s['max_absorbed_in_a_call']:>10}{s['mean_per_call']:>11.2f}")
+
+
+def _print_exit_attribution(trades: list, label: str = "") -> None:
+    """Break down exits by reason (ATR stop vs strategy) and by strategy."""
+    from collections import defaultdict
+    if not trades:
+        return
+
+    by_reason: dict = defaultdict(list)   # reason → [pnl]
+    by_strat:  dict = defaultdict(lambda: defaultdict(list))  # strat → reason → [pnl]
+
+    for t in trades:
+        reason = getattr(t, "exit_reason", "") or "unknown"
+        strat  = getattr(t, "strategy",    "") or "Unknown"
+        by_reason[reason].append(t.pnl)
+        by_strat[strat][reason].append(t.pnl)
+
+    total = len(trades)
+    title = f"Exit Attribution — {label}" if label else "Exit Attribution"
+    print(f"\n  {'-' * ROW_W}  [{title}]")
+    print(f"  {'Reason':<14} {'Trades':>8} {'  %':>5}  {'WinRate':>8}  {'Avg PnL':>9}  {'Total PnL':>11}")
+    for reason in ("atr_stop", "strategy", "unknown"):
+        pnls = by_reason.get(reason, [])
+        if not pnls:
+            continue
+        n    = len(pnls)
+        wr   = sum(1 for p in pnls if p > 0) / n * 100
+        avg  = sum(pnls) / n
+        tot  = sum(pnls)
+        pct  = n / total * 100
+        print(f"  {reason:<14} {n:>8} {pct:>5.1f}% {wr:>7.1f}% {avg:>+10.1f} {tot:>+11.0f}")
+
+    print(f"\n  {'Strategy':<12} {'ATR%':>6} {'Strat%':>7}  {'ATR WR':>7}  {'Strat WR':>9}  {'ATR Avg':>8}  {'Strat Avg':>10}")
+    for strat in sorted(by_strat):
+        atr   = by_strat[strat].get("atr_stop", [])
+        stg   = by_strat[strat].get("strategy", [])
+        n_tot = len(atr) + len(stg)
+        if n_tot == 0:
+            continue
+        atr_pct  = len(atr) / n_tot * 100 if n_tot else 0
+        stg_pct  = len(stg) / n_tot * 100 if n_tot else 0
+        atr_wr   = sum(1 for p in atr if p > 0) / len(atr) * 100 if atr else 0
+        stg_wr   = sum(1 for p in stg if p > 0) / len(stg) * 100 if stg else 0
+        atr_avg  = sum(atr) / len(atr) if atr else 0
+        stg_avg  = sum(stg) / len(stg) if stg else 0
+        print(
+            f"  {strat:<12} {atr_pct:>5.1f}% {stg_pct:>6.1f}%"
+            f" {atr_wr:>7.1f}% {stg_wr:>9.1f}%"
+            f" {atr_avg:>+8.1f} {stg_avg:>+10.1f}"
         )
 
 
@@ -683,13 +761,15 @@ def _make_adaptive_components(strategy_names):
             "TrendPB":  _TREND_AND_SIDEWAYS,
             "RSI-MR":   _UPTREND_AND_SIDEWAYS,
         },
+        per_strategy_universe_source=lambda: union_filter.last_per_strategy_symbols,
+        exclusive_strategies={"QuietBrk"},
     )
     union_filter = UnionUniverseFilter([
-        BreakoutUniverseFilter(top_n=20),
-        BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-        PullbackUniverseFilter(top_n=20),
-        MeanReversionUniverseFilter(top_n=20),
-        DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ("Breakout", BreakoutUniverseFilter(top_n=20)),
+        ("QuietBrk", ActivityTailFilter(top_n=20)),
+        ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+        ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+        ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
     ])
     return router, union_filter
 
@@ -745,7 +825,7 @@ def run_walk_forward(repository) -> None:
         oos_selector = AdaptiveStrategySelector(
             strategy_names=_STRATEGY_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o-mini",
+            model="gpt-4o",
             verbose=False,
             regime_stability_weeks=2,
             performance_table=wf_table,
@@ -764,7 +844,7 @@ def run_walk_forward(repository) -> None:
         is_selector = AdaptiveStrategySelector(
             strategy_names=_STRATEGY_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o-mini",
+            model="gpt-4o",
             verbose=False,
             regime_stability_weeks=2,
         )
@@ -811,263 +891,267 @@ def _run_full_periods(repository):
         print(f"{'=' * (ROW_W + 2)}")
         print(HEADER)
 
-        current_group = None
+        # Solo strategies — skipped when ADAPTIVE_ONLY=1.
+        if not ADAPTIVE_ONLY:
+            current_group = None
+            for cfg in STRATEGIES:
+                if cfg["group"] != current_group:
+                    current_group = cfg["group"]
+                    print(f"{DIVIDER}  [{current_group}]")
 
-        for cfg in STRATEGIES:
-            if cfg["group"] != current_group:
-                current_group = cfg["group"]
-                print(f"{DIVIDER}  [{current_group}]")
+                strategy         = cfg["factory"]()
+                universe_filter  = cfg["universe_filter"]() if cfg.get("universe_filter") else None
+                result           = run_experiment(
+                    repository, strategy, ctx,
+                    max_position_pct=cfg["max_pos_pct"],
+                    allowed_regimes=cfg.get("allowed_regimes"),
+                    breadth_circuit_breaker=cfg.get("breadth_circuit_breaker", False),
+                    universe_filter=universe_filter,
+                )
+                _print_row(cfg["label"], result)
+        else:
+            print(f"{DIVIDER}  [ADAPTIVE_ONLY=1 — skipping solo strategies and EqualWeight]")
 
-            strategy         = cfg["factory"]()
-            universe_filter  = cfg["universe_filter"]() if cfg.get("universe_filter") else None
-            result           = run_experiment(
-                repository, strategy, ctx,
-                max_position_pct=cfg["max_pos_pct"],
-                allowed_regimes=cfg.get("allowed_regimes"),
-                breadth_circuit_breaker=cfg.get("breadth_circuit_breaker", False),
-                universe_filter=universe_filter,
-            )
-            _print_row(cfg["label"], result)
-
-        # ------------------------------------------------------------------
-        # Step 14 baseline: all 5 strategies at equal weight (0.20 each)
-        # on a shared portfolio.
-        #
-        # Three correctness requirements addressed here:
-        #   1. decision.weight (0.20) is now applied in RiskAgent._size_position()
-        #      so each strategy deploys 20% of the normal risk budget per trade.
-        #   2. Per-strategy allowed_regimes are enforced inside MultiStrategyRouter
-        #      before each strategy's decide() is called — same gates as solo runs.
-        #   3. Universe uses the activity-based top-20 filter (same as solo runs)
-        #      so each strategy sees the same candidate pool it was calibrated on.
-        #
-        # This is the comparison floor for AdaptiveStrategySelector (step 15).
-        # ------------------------------------------------------------------
-        print(f"{DIVIDER}  [Multi-strategy baseline — equal weight]")
-
-        multi_router = MultiStrategyRouter(
-            strategies={
-                "DualMA":   DualMovingAverageStrategy(),
-                "Breakout": BreakoutMomentumStrategy(),
-                "QuietBrk": QuietBreakoutStrategy(),
-                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
-                "RSI-MR":   RSIMeanReversionStrategy(
-                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
-            },
-            weights={
-                "DualMA":   0.20,
-                "Breakout": 0.20,
-                "QuietBrk": 0.20,
-                "TrendPB":  0.20,
-                "RSI-MR":   0.20,
-            },
-            # Mirror each strategy's solo allowed_regimes — the router filters
-            # symbol_states per-strategy before calling decide().
-            allowed_regimes={
-                "DualMA":   _UPTREND_ONLY,
-                "Breakout": _TREND_AND_SIDEWAYS,
-                "QuietBrk": _UPTREND_ONLY,
-                "TrendPB":  _TREND_AND_SIDEWAYS,
-                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
-            },
-        )
-
-        # Build the union filter once per period — runs each strategy's own filter
-        # on the top-80 DynamicAgent candidates and takes the de-duplicated union.
-        # This gives each strategy a domain-appropriate candidate pool without
-        # competing for the same 20 activity-filtered slots.
+        # Build the union filter and analytics state once per period — required
+        # by Adaptive/RCA even when EqualWeight is skipped (compute_universe_diagnostics
+        # and the trade annotator both read these).
         union_filter = UnionUniverseFilter([
-            BreakoutUniverseFilter(top_n=20),
-            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),  # QuietBrk
-            PullbackUniverseFilter(top_n=20),
-            MeanReversionUniverseFilter(top_n=20),
-            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+            ("Breakout", BreakoutUniverseFilter(top_n=20)),
+            ("QuietBrk", ActivityTailFilter(top_n=20)),
+            ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+            ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+            ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
         ])
-
         _annotator      = TradeAnnotator(repository, ctx.observer)
         _period_enriched: list = []
 
-        _ew_attrib = TradeAttributionTracker(list(multi_router.strategies))
-        result_multi = run_experiment(
-            repository, multi_router, ctx,
-            max_position_pct=0.10,        # per-position cap (further scaled by weight inside RiskAgent)
-            allowed_regimes=None,         # router handles per-strategy regime gating internally
-            breadth_circuit_breaker=True,
-            universe_filter=union_filter, # each strategy sees its own domain candidates
-            max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
-            min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
-            pnl_tracker=_ew_attrib,
-        )
-        _print_row("EqualWeight (5-strat)", result_multi)
-        _print_strategy_attribution(_ew_attrib, "EqualWeight")
-        _print_router_diagnostics("EqualWeight", multi_router)
-        if result_multi and result_multi.get("trades"):
-            _period_enriched.extend(_annotator.annotate(
-                result_multi["trades"],
-                attribution_tracker=_ew_attrib,
-                period_label=period_label.strip(),
-                run_label="EqualWeight",
-            ))
+        # ------------------------------------------------------------------
+        # Step 14 baseline: all 5 strategies at equal weight (0.20 each).
+        # Skipped when ADAPTIVE_ONLY=1.
+        # ------------------------------------------------------------------
+        if not ADAPTIVE_ONLY:
+            print(f"{DIVIDER}  [Multi-strategy baseline — equal weight]")
+
+            multi_router = MultiStrategyRouter(
+                strategies={
+                    "DualMA":   DualMovingAverageStrategy(),
+                    "Breakout": BreakoutMomentumStrategy(),
+                    "QuietBrk": QuietBreakoutStrategy(),
+                    "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                    "RSI-MR":   RSIMeanReversionStrategy(
+                                    rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+                },
+                weights={
+                    "DualMA":   0.20,
+                    "Breakout": 0.20,
+                    "QuietBrk": 0.20,
+                    "TrendPB":  0.20,
+                    "RSI-MR":   0.20,
+                },
+                # Mirror each strategy's solo allowed_regimes — the router filters
+                # symbol_states per-strategy before calling decide().
+                allowed_regimes={
+                    "DualMA":   _UPTREND_ONLY,
+                    "Breakout": _TREND_AND_SIDEWAYS,
+                    "QuietBrk": _UPTREND_ONLY,
+                    "TrendPB":  _TREND_AND_SIDEWAYS,
+                    "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+                },
+                per_strategy_universe_source=lambda: union_filter.last_per_strategy_symbols,
+                exclusive_strategies={"QuietBrk"},
+            )
+
+            _ew_attrib = TradeAttributionTracker(list(multi_router.strategies))
+            result_multi = run_experiment(
+                repository, multi_router, ctx,
+                max_position_pct=0.10,        # per-position cap (further scaled by weight inside RiskAgent)
+                allowed_regimes=None,         # router handles per-strategy regime gating internally
+                breadth_circuit_breaker=True,
+                universe_filter=union_filter, # each strategy sees its own domain candidates
+                max_downtrend_pct=0.35,       # tighter than solo-strategy default (0.40)
+                min_atr_cost_ratio=3.0,       # ATR must cover ≥ 3× round-trip cost (0.45% min ATR)
+                pnl_tracker=_ew_attrib,
+                no_atr_stop_strategies={"RSI-MR", "TrendPB"},
+            )
+            _print_row("EqualWeight (5-strat)", result_multi)
+            _print_strategy_attribution(_ew_attrib, "EqualWeight")
+            _print_router_diagnostics("EqualWeight", multi_router)
+            _print_universe_overlap("EqualWeight", union_filter)
+            if result_multi and result_multi.get("trades"):
+                _print_exit_attribution(result_multi["trades"], "EqualWeight")
+                _period_enriched.extend(_annotator.annotate(
+                    result_multi["trades"],
+                    attribution_tracker=_ew_attrib,
+                    period_label=period_label.strip(),
+                    run_label="EqualWeight",
+                ))
 
         # ------------------------------------------------------------------
         # Step 15: Adaptive (LLM-driven) multi-strategy run
         #
         # Same 5 strategies + same UnionUniverseFilter as the equal-weight
         # baseline — the ONLY difference is that strategy weights are updated
-        # weekly by AdaptiveStrategySelector (OpenAI GPT-4o-mini call).
+        # weekly by AdaptiveStrategySelector (OpenAI GPT-4o call).
         #
         # Comparison:
         #   equal-weight  →  measures diversification benefit
         #   adaptive       →  measures LLM allocation benefit ON TOP of that
         # ------------------------------------------------------------------
-        print(f"{DIVIDER}  [Multi-strategy adaptive — LLM weights]")
+        result_adaptive = None
+        if not EQW_ONLY:
+            print(f"{DIVIDER}  [Multi-strategy adaptive — LLM weights]")
 
-        _STRATEGY_NAMES = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
+            _STRATEGY_NAMES = ["DualMA", "Breakout", "QuietBrk", "TrendPB", "RSI-MR"]
 
-        adaptive_router = MultiStrategyRouter(
-            strategies={
-                "DualMA":   DualMovingAverageStrategy(),
-                "Breakout": BreakoutMomentumStrategy(),
-                "QuietBrk": QuietBreakoutStrategy(),
-                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
-                "RSI-MR":   RSIMeanReversionStrategy(
-                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
-            },
-            weights={n: 0.20 for n in _STRATEGY_NAMES},   # start equal; LLM adjusts weekly
-            allowed_regimes={
-                "DualMA":   _UPTREND_ONLY,
-                "Breakout": _TREND_AND_SIDEWAYS,
-                "QuietBrk": _UPTREND_ONLY,
-                "TrendPB":  _TREND_AND_SIDEWAYS,
-                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
-            },
-        )
+            adaptive_router = MultiStrategyRouter(
+                strategies={
+                    "DualMA":   DualMovingAverageStrategy(),
+                    "Breakout": BreakoutMomentumStrategy(),
+                    "QuietBrk": QuietBreakoutStrategy(),
+                    "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                    "RSI-MR":   RSIMeanReversionStrategy(
+                                    rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+                },
+                weights={n: 0.20 for n in _STRATEGY_NAMES},   # start equal; LLM adjusts weekly
+                allowed_regimes={
+                    "DualMA":   _UPTREND_ONLY,
+                    "Breakout": _TREND_AND_SIDEWAYS,
+                    "QuietBrk": _UPTREND_ONLY,
+                    "TrendPB":  _TREND_AND_SIDEWAYS,
+                    "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+                },
+                per_strategy_universe_source=lambda: adaptive_union_filter.last_per_strategy_symbols,
+                exclusive_strategies={"QuietBrk"},
+            )
 
-        selector = AdaptiveStrategySelector(
-            strategy_names=_STRATEGY_NAMES,
-            rebalance_frequency_days=5,
-            model="gpt-4o-mini",
-            verbose=True,    # prints each weekly weight update
-        )
+            selector = AdaptiveStrategySelector(
+                strategy_names=_STRATEGY_NAMES,
+                rebalance_frequency_days=5,
+                model="gpt-4o",
+                verbose=True,    # prints each weekly weight update
+            )
 
-        adaptive_union_filter = UnionUniverseFilter([
-            BreakoutUniverseFilter(top_n=20),
-            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-            PullbackUniverseFilter(top_n=20),
-            MeanReversionUniverseFilter(top_n=20),
-            DualMAUniverseFilter(max_cross_age=5, top_n=30),
-        ])
+            adaptive_union_filter = UnionUniverseFilter([
+                ("Breakout", BreakoutUniverseFilter(top_n=20)),
+                ("QuietBrk", ActivityTailFilter(top_n=20)),
+                ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+                ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+                ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
+            ])
 
-        _adaptive_attrib = TradeAttributionTracker(list(adaptive_router.strategies))
-        result_adaptive = run_experiment(
-            repository, adaptive_router, ctx,
-            max_position_pct=0.10,
-            allowed_regimes=None,
-            breadth_circuit_breaker=True,
-            universe_filter=adaptive_union_filter,
-            adaptive_selector=selector,
-            max_downtrend_pct=0.35,
-            min_atr_cost_ratio=3.0,
-            pnl_tracker=_adaptive_attrib,
-        )
-        _print_row("Adaptive  (5-strat)", result_adaptive)
-        print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
-        _print_strategy_attribution(_adaptive_attrib, "Adaptive")
-        _print_router_diagnostics("Adaptive", adaptive_router)
-        if result_adaptive and result_adaptive.get("trades"):
-            _period_enriched.extend(_annotator.annotate(
-                result_adaptive["trades"],
-                attribution_tracker=_adaptive_attrib,
-                period_label=period_label.strip(),
-                run_label="Adaptive",
-            ))
+            _adaptive_attrib = TradeAttributionTracker(list(adaptive_router.strategies))
+            result_adaptive = run_experiment(
+                repository, adaptive_router, ctx,
+                max_position_pct=0.10,
+                allowed_regimes=None,
+                breadth_circuit_breaker=True,
+                universe_filter=adaptive_union_filter,
+                adaptive_selector=selector,
+                max_downtrend_pct=0.35,
+                min_atr_cost_ratio=3.0,
+                pnl_tracker=_adaptive_attrib,
+                no_atr_stop_strategies={"RSI-MR", "TrendPB"},
+            )
+            _print_row("Adaptive  (5-strat)", result_adaptive)
+            print(f"  {'':>{COL_W}} (LLM calls: {selector.call_count})")
+            _print_strategy_attribution(_adaptive_attrib, "Adaptive")
+            _print_router_diagnostics("Adaptive", adaptive_router)
+            _print_universe_overlap("Adaptive", adaptive_union_filter)
+            if result_adaptive and result_adaptive.get("trades"):
+                _period_enriched.extend(_annotator.annotate(
+                    result_adaptive["trades"],
+                    attribution_tracker=_adaptive_attrib,
+                    period_label=period_label.strip(),
+                    run_label="Adaptive",
+                ))
 
         # ------------------------------------------------------------------
-        # Step 16: Adaptive + RegimeContextAgent
-        #
-        # Identical to Step 15 except the BacktestEngine receives the
-        # RegimeContextAgent built from this period's DynamicUniverseAgent
-        # cache. The RCA:
-        #   1. Builds a richer regime snapshot (150-symbol breadth signals)
-        #   2. Synthesises a broad_regime label fed to the LLM prompt
-        #   3. Relaxes the CB effective threshold during TRANSITION_UP
-        #
-        # Comparison vs Step 15 isolates the pure RCA contribution.
-        # Expected improvement: Recovery and Crash periods (earlier re-entry);
-        # neutral or slightly better in Bear (BEAR_TRANSITION awareness).
+        # Step 16: Adaptive + RegimeContextAgent. Skipped when ADAPTIVE_ONLY=1.
         # ------------------------------------------------------------------
-        print(f"{DIVIDER}  [Multi-strategy adaptive + RegimeContextAgent]")
+        result_rca = None
+        if not ADAPTIVE_ONLY and not EQW_ONLY:
+            print(f"{DIVIDER}  [Multi-strategy adaptive + RegimeContextAgent]")
 
-        rca_router = MultiStrategyRouter(
-            strategies={
-                "DualMA":   DualMovingAverageStrategy(),
-                "Breakout": BreakoutMomentumStrategy(),
-                "QuietBrk": QuietBreakoutStrategy(),
-                "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
-                "RSI-MR":   RSIMeanReversionStrategy(
-                                rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
-            },
-            weights={n: 0.20 for n in _STRATEGY_NAMES},
-            allowed_regimes={
-                "DualMA":   _UPTREND_ONLY,
-                "Breakout": _TREND_AND_SIDEWAYS,
-                "QuietBrk": _UPTREND_ONLY,
-                "TrendPB":  _TREND_AND_SIDEWAYS,
-                "RSI-MR":   _UPTREND_AND_SIDEWAYS,
-            },
-        )
-        rca_selector = AdaptiveStrategySelector(
-            strategy_names=_STRATEGY_NAMES,
-            rebalance_frequency_days=5,
-            model="gpt-4o-mini",
-            verbose=False,
-        )
-        rca_filter = UnionUniverseFilter([
-            BreakoutUniverseFilter(top_n=20),
-            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-            PullbackUniverseFilter(top_n=20),
-            MeanReversionUniverseFilter(top_n=20),
-            DualMAUniverseFilter(max_cross_age=5, top_n=30),
-        ])
-        _rca_attrib = TradeAttributionTracker(list(rca_router.strategies))
-        result_rca = run_experiment(
-            repository, rca_router, ctx,
-            max_position_pct=0.10,
-            allowed_regimes=None,
-            breadth_circuit_breaker=True,
-            universe_filter=rca_filter,
-            adaptive_selector=rca_selector,
-            max_downtrend_pct=0.35,
-            min_atr_cost_ratio=3.0,
-            regime_context_agent=ctx.regime_context_agent,
-            pnl_tracker=_rca_attrib,
-        )
-        _print_row("Adaptive+RCA (5-strat)", result_rca)
-        print(f"  {'':>{COL_W}} (LLM calls: {rca_selector.call_count})")
-        _print_strategy_attribution(_rca_attrib, "Adaptive+RCA")
-        _print_router_diagnostics("Adaptive+RCA", rca_router)
-        if result_rca and result_rca.get("trades"):
-            _period_enriched.extend(_annotator.annotate(
-                result_rca["trades"],
-                attribution_tracker=_rca_attrib,
-                period_label=period_label.strip(),
-                run_label="Adaptive+RCA",
-            ))
+            rca_router = MultiStrategyRouter(
+                strategies={
+                    "DualMA":   DualMovingAverageStrategy(),
+                    "Breakout": BreakoutMomentumStrategy(),
+                    "QuietBrk": QuietBreakoutStrategy(),
+                    "TrendPB":  TrendPullbackStrategy(pullback_threshold=0.05),
+                    "RSI-MR":   RSIMeanReversionStrategy(
+                                    rsi_oversold=5, rsi_overbought=80, max_hold_days=7),
+                },
+                weights={n: 0.20 for n in _STRATEGY_NAMES},
+                allowed_regimes={
+                    "DualMA":   _UPTREND_ONLY,
+                    "Breakout": _TREND_AND_SIDEWAYS,
+                    "QuietBrk": _UPTREND_ONLY,
+                    "TrendPB":  _TREND_AND_SIDEWAYS,
+                    "RSI-MR":   _UPTREND_AND_SIDEWAYS,
+                },
+                per_strategy_universe_source=lambda: rca_filter.last_per_strategy_symbols,
+                exclusive_strategies={"QuietBrk"},
+            )
+            rca_selector = AdaptiveStrategySelector(
+                strategy_names=_STRATEGY_NAMES,
+                rebalance_frequency_days=5,
+                model="gpt-4o",
+                verbose=False,
+            )
+            rca_filter = UnionUniverseFilter([
+                ("Breakout", BreakoutUniverseFilter(top_n=20)),
+                ("QuietBrk", ActivityTailFilter(top_n=20)),
+                ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+                ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+                ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
+            ])
+            _rca_attrib = TradeAttributionTracker(list(rca_router.strategies))
+            result_rca = run_experiment(
+                repository, rca_router, ctx,
+                max_position_pct=0.10,
+                allowed_regimes=None,
+                breadth_circuit_breaker=True,
+                universe_filter=rca_filter,
+                adaptive_selector=rca_selector,
+                max_downtrend_pct=0.35,
+                min_atr_cost_ratio=3.0,
+                regime_context_agent=ctx.regime_context_agent,
+                pnl_tracker=_rca_attrib,
+                no_atr_stop_strategies={"RSI-MR", "TrendPB"},
+            )
+            _print_row("Adaptive+RCA (5-strat)", result_rca)
+            print(f"  {'':>{COL_W}} (LLM calls: {rca_selector.call_count})")
+            _print_strategy_attribution(_rca_attrib, "Adaptive+RCA")
+            _print_router_diagnostics("Adaptive+RCA", rca_router)
+            _print_universe_overlap("Adaptive+RCA", rca_filter)
+            if result_rca and result_rca.get("trades"):
+                _period_enriched.extend(_annotator.annotate(
+                    result_rca["trades"],
+                    attribution_tracker=_rca_attrib,
+                    period_label=period_label.strip(),
+                    run_label="Adaptive+RCA",
+                ))
 
-        # Delta row: show RCA improvement at a glance
-        if result_adaptive and result_rca:
-            base_sharpe = result_adaptive["portfolio_metrics"].get("sharpe_ratio") or 0.0
-            rca_sharpe  = result_rca["portfolio_metrics"].get("sharpe_ratio")       or 0.0
-            base_ret    = result_adaptive["portfolio_metrics"].get("total_return")  or 0.0
-            rca_ret     = result_rca["portfolio_metrics"].get("total_return")       or 0.0
-            delta_s = rca_sharpe - base_sharpe
-            delta_r = (rca_ret - base_ret) * 100
-            sign_s  = "+" if delta_s >= 0 else ""
-            sign_r  = "+" if delta_r >= 0 else ""
-            print(f"  {'RCA delta':<{COL_W}} {sign_s}{delta_s:>5.2f}  {sign_r}{delta_r:>7.2f}%")
+            # Delta row: show RCA improvement at a glance
+            if result_adaptive and result_rca:
+                base_sharpe = result_adaptive["portfolio_metrics"].get("sharpe_ratio") or 0.0
+                rca_sharpe  = result_rca["portfolio_metrics"].get("sharpe_ratio")       or 0.0
+                base_ret    = result_adaptive["portfolio_metrics"].get("total_return")  or 0.0
+                rca_ret     = result_rca["portfolio_metrics"].get("total_return")       or 0.0
+                delta_s = rca_sharpe - base_sharpe
+                delta_r = (rca_ret - base_ret) * 100
+                sign_s  = "+" if delta_s >= 0 else ""
+                sign_r  = "+" if delta_r >= 0 else ""
+                print(f"  {'RCA delta':<{COL_W}} {sign_s}{delta_s:>5.2f}  {sign_r}{delta_r:>7.2f}%")
 
         # ── Period-end analytics ─────────────────────────────────────────────
-        _u_tracker = compute_universe_diagnostics(ctx, union_filter)
+        # When ADAPTIVE_ONLY=1, the EqW union_filter was created but never run
+        # (its last_per_strategy_symbols stays empty), so use adaptive_union_filter
+        # for diagnostics instead — its filter state reflects what was actually traded.
+        diag_filter = (adaptive_union_filter
+                       if (ADAPTIVE_ONLY and not EQW_ONLY)
+                       else union_filter)
+        _u_tracker = compute_universe_diagnostics(ctx, diag_filter)
         _oqm = compute_opportunity_quality_metrics(_period_enriched, _u_tracker.daily_records)
         print_opportunity_quality_summary(_oqm, period_label.strip())
         if _period_enriched:
@@ -1177,18 +1261,20 @@ def _run_recent_diagnostic(repository) -> None:
             },
             weights={n: 0.20 for n in _STRAT_NAMES},
             allowed_regimes=cfg["allowed_regimes"],
+            per_strategy_universe_source=lambda: union_filter.last_per_strategy_symbols,
+            exclusive_strategies={"QuietBrk"},
         )
         union_filter = UnionUniverseFilter([
-            BreakoutUniverseFilter(top_n=20),
-            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-            PullbackUniverseFilter(top_n=20),
-            MeanReversionUniverseFilter(top_n=20),
-            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+            ("Breakout", BreakoutUniverseFilter(top_n=20)),
+            ("QuietBrk", ActivityTailFilter(top_n=20)),
+            ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+            ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+            ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
         ])
         selector = AdaptiveStrategySelector(
             strategy_names=_STRAT_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o-mini",
+            model="gpt-4o",
             verbose=False,
             regime_stability_weeks=2,
         )
@@ -1260,18 +1346,20 @@ def _run_recent_diagnostic(repository) -> None:
                 "TrendPB":  _TREND_AND_SIDEWAYS,
                 "RSI-MR":   _UPTREND_AND_SIDEWAYS,
             },
+            per_strategy_universe_source=lambda: uf_r.last_per_strategy_symbols,
+            exclusive_strategies={"QuietBrk"},
         )
         uf_r = UnionUniverseFilter([
-            BreakoutUniverseFilter(top_n=20),
-            BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-            PullbackUniverseFilter(top_n=20),
-            MeanReversionUniverseFilter(top_n=20),
-            DualMAUniverseFilter(max_cross_age=5, top_n=30),
+            ("Breakout", BreakoutUniverseFilter(top_n=20)),
+            ("QuietBrk", ActivityTailFilter(top_n=20)),
+            ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+            ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+            ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
         ])
         sel_r = AdaptiveStrategySelector(
             strategy_names=_STRAT_NAMES_R,
             rebalance_frequency_days=5,
-            model="gpt-4o-mini",
+            model="gpt-4o",
             verbose=False,
             regime_stability_weeks=2,
         )

@@ -1,4 +1,6 @@
 import inspect
+import os
+from collections import deque
 from datetime import datetime
 from typing import List
 
@@ -77,6 +79,17 @@ class BacktestEngine:
         _last_known_prices: dict = {}
 
         open_positions_meta = {}
+
+        # RCA quality gate — rolling Breakout WR window. When recent Breakout
+        # WR is poor, the CB relaxation that RCA applies during TRANSITION_UP
+        # (engine ll. ~210) becomes an amplifier that lets more bad Breakout
+        # trades through. Disable relaxation when quality < threshold.
+        _rca_gate_enabled       = os.environ.get("RCA_QUALITY_GATE", "1") != "0"
+        _rca_gate_window        = int(os.environ.get("RCA_QUALITY_WINDOW", "20"))
+        _rca_gate_min_samples   = int(os.environ.get("RCA_QUALITY_MIN_SAMPLES", "10"))
+        _rca_gate_wr_threshold  = float(os.environ.get("RCA_QUALITY_WR_THRESHOLD", "0.40"))
+        _breakout_recent_wins: deque = deque(maxlen=_rca_gate_window)
+        _rca_gate_logged = False
 
         # ==================================================
         # DAILY LOOP
@@ -204,10 +217,26 @@ class BacktestEngine:
             effective_downtrend_pct = market_downtrend_pct
             if regime_snapshot:
                 broad_regime = regime_snapshot.get("broad_regime")
-                if broad_regime == "TRANSITION_UP":
-                    effective_downtrend_pct = min(market_downtrend_pct, 0.30)
-                elif broad_regime == "BEAR_EARLY":
-                    effective_downtrend_pct = min(market_downtrend_pct, 0.38)
+                # RCA quality gate: skip relaxation when rolling Breakout WR is
+                # below threshold. Prevents the amplifier-effect in periods where
+                # Breakout's signal quality is structurally broken (Live, Bull, Bear).
+                rca_quality_ok = True
+                if _rca_gate_enabled and len(_breakout_recent_wins) >= _rca_gate_min_samples:
+                    recent_wr = sum(_breakout_recent_wins) / len(_breakout_recent_wins)
+                    if recent_wr < _rca_gate_wr_threshold:
+                        rca_quality_ok = False
+                        if not _rca_gate_logged:
+                            print(
+                                f"  [RCAQualityGate] {current_date.date()} → Breakout WR "
+                                f"{recent_wr:.1%} < {_rca_gate_wr_threshold:.0%} over last "
+                                f"{len(_breakout_recent_wins)} trades — CB relaxation disabled"
+                            )
+                            _rca_gate_logged = True
+                if rca_quality_ok:
+                    if broad_regime == "TRANSITION_UP":
+                        effective_downtrend_pct = min(market_downtrend_pct, 0.30)
+                    elif broad_regime == "BEAR_EARLY":
+                        effective_downtrend_pct = min(market_downtrend_pct, 0.38)
 
             # --- Risk + execution ---
             # Process higher-weight strategy signals first so they claim cash
@@ -321,6 +350,11 @@ class BacktestEngine:
                         if symbol in open_positions_meta:
                             entry = open_positions_meta[symbol]
                             owning_strategy = entry.get("strategy", "") or ""
+                            # "atr_stop" when the strategy proposed HOLD/BUY but
+                            # RiskAgent converted it to SELL via the trailing stop.
+                            exit_reason = (
+                                "atr_stop" if decision.action != "SELL" else "strategy"
+                            )
                             completed_trades.append(
                                 Trade(
                                     symbol=symbol,
@@ -330,8 +364,14 @@ class BacktestEngine:
                                     pnl=execution_result.trade_pnl,
                                     entry_date=entry["entry_date"],
                                     exit_date=current_date,
+                                    exit_reason=exit_reason,
+                                    strategy=owning_strategy,
                                 )
                             )
+                            if owning_strategy == "Breakout":
+                                _breakout_recent_wins.append(
+                                    1 if execution_result.trade_pnl > 0 else 0
+                                )
                             del open_positions_meta[symbol]
                         # Per-strategy P&L attribution (PAA Phase 1).
                         # Owner-at-BUY-time is the right attribution target (not

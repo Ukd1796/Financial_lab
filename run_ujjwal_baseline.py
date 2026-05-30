@@ -52,6 +52,7 @@ from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.meta.regime_context_agent import RegimeContextAgent
 from app.universe.filters import (
+    ActivityTailFilter,
     BreakoutUniverseFilter,
     DualMAUniverseFilter,
     MeanReversionUniverseFilter,
@@ -157,16 +158,23 @@ DIVIDER = f"  {'-' * ROW_W}"
 
 
 def _make_union_filter():
+    # Order matters: earlier filters get priority on overlap (UnionUniverseFilter
+    # dedups by first-seen). Breakout listed before QuietBrk so the rare names
+    # that satisfy both criteria are routed to Breakout, and QuietBrk gets the
+    # activity tail (moderate-activity stocks Breakout's strict thresholds reject).
+    # Tagged with strategy names so MultiStrategyRouter can gate each strategy's
+    # symbol_states to its own slice via exclusive_strategies={"QuietBrk"} —
+    # prevents Breakout from poaching QuietBrk's reserved activity-tail symbols.
     return UnionUniverseFilter([
-        BreakoutUniverseFilter(top_n=20),
-        BreakoutUniverseFilter(vol_threshold=1.2, return_threshold=0.008, top_n=20),
-        PullbackUniverseFilter(top_n=20),
-        MeanReversionUniverseFilter(top_n=20),
-        DualMAUniverseFilter(max_cross_age=5, top_n=30),
+        ("Breakout", BreakoutUniverseFilter(top_n=20)),
+        ("QuietBrk", ActivityTailFilter(top_n=20)),
+        ("TrendPB",  PullbackUniverseFilter(top_n=20)),
+        ("RSI-MR",   MeanReversionUniverseFilter(top_n=20)),
+        ("DualMA",   DualMAUniverseFilter(max_cross_age=5, top_n=30)),
     ])
 
 
-def _make_router():
+def _make_router(universe_filter=None):
     return MultiStrategyRouter(
         strategies={
             "DualMA":   DualMovingAverageStrategy(),
@@ -179,6 +187,11 @@ def _make_router():
         weights={"DualMA": 0.20, "Breakout": 0.20, "QuietBrk": 0.20,
                  "TrendPB": 0.20, "RSI-MR": 0.20},
         allowed_regimes=_ALLOWED_REGIMES,
+        per_strategy_universe_source=(
+            (lambda: universe_filter.last_per_strategy_symbols)
+            if universe_filter is not None else None
+        ),
+        exclusive_strategies={"QuietBrk"} if universe_filter is not None else None,
     )
 
 
@@ -264,6 +277,23 @@ def _print_router_diagnostics(label: str, router) -> None:
         survivors = max(won - buy_rej, 0)
         pct = (survivors / issued * 100.0) if issued > 0 else 0.0
         print(f"  {name:<12}{issued:>9}{won:>8}{prio:>11}{own:>11}{buy_rej:>9}{pct:>11.1f}%")
+
+
+def _print_universe_overlap(label: str, universe_filter) -> None:
+    # Reports how often each child filter's picks were already claimed by an
+    # earlier filter in UnionUniverseFilter's dedup ordering. Low mean
+    # (< 3/day) confirms the carve is structurally orthogonal; high mean
+    # (> 8/day) means filters are competing for the same cohort.
+    get_stats = getattr(universe_filter, "get_overlap_stats", None)
+    if get_stats is None:
+        return
+    stats = get_stats()
+    if not stats:
+        return
+    print(f"\n  {'-' * ROW_W}  [{label} — union-filter overlap (per trading day)]")
+    print(f"  {'Filter':<32}{'total':>9}{'max/day':>10}{'mean/day':>11}")
+    for s in stats:
+        print(f"  {s['name']:<32}{s['total_absorbed']:>9}{s['max_absorbed_in_a_call']:>10}{s['mean_per_call']:>11.2f}")
 
 
 def _print_strategy_attribution(attrib: "TradeAttributionTracker", label: str = "") -> None:
@@ -486,7 +516,7 @@ def run_baseline(equal_weight_only: bool = False):
     if equal_weight_only:
         out("  Mode: --equal-weight-only (deterministic, no LLM calls)")
     else:
-        out("  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o-mini, rebalance every 5 days, RegimeContextAgent)")
+        out("  Mode: EqualWeight + Adaptive+RCA (both; gpt-4o, rebalance every 5 days, RegimeContextAgent)")
 
     for period_label, (start_date, end_date) in PERIODS.items():
         ctx = PeriodContext(repository, start_date, end_date)
@@ -509,7 +539,7 @@ def run_baseline(equal_weight_only: bool = False):
 
         # ── EqualWeight ──
         out(f"{DIVIDER}  [EqW] ATR×2.5 trailing stop + volume filter")
-        router     = _make_router()
+        router     = _make_router(universe_filter=ctx.universe_filter)
         _ew_attrib = TradeAttributionTracker(list(_STRAT_NAMES))
         eqw_result = _run_one(repository, router, ctx, atr_multiplier=2.5,
                               attrib_tracker=_ew_attrib)
@@ -529,10 +559,10 @@ def run_baseline(equal_weight_only: bool = False):
         # ── Adaptive (LLM) ──
         if not equal_weight_only:
             out(f"{DIVIDER}  [Adaptive+RCA] ATR×2.5 + AdaptiveStrategySelector + RegimeContextAgent")
-            router   = _make_router()
+            router   = _make_router(universe_filter=ctx.universe_filter)
             selector = AdaptiveStrategySelector(
                 strategy_names=_STRAT_NAMES,
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 rebalance_frequency_days=5,
                 regime_stability_weeks=2,
                 verbose=True,
@@ -560,6 +590,7 @@ def run_baseline(equal_weight_only: bool = False):
             _oqe = compute_opportunity_quality_metrics(_period_enriched)
             print_opportunity_quality_summary(_oqe)
             export_enriched_trades_csv(_period_enriched, "trade_analytics.csv")
+        _print_universe_overlap(period_label.strip(), ctx.universe_filter)
 
     # ── Summary ──
     if equal_weight_only:
@@ -639,7 +670,7 @@ def append_results_to_md(equal_weight_only: bool = False):
     mode_desc = (
         "EqualWeight only (ATR×2.5, no LLM)."
         if equal_weight_only else
-        "EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o-mini, weekly LLM rebalance, matches live)."
+        "EqualWeight + AdaptiveStrategySelector + RegimeContextAgent (gpt-4o, weekly LLM rebalance, matches live)."
     )
     results_block = (
         "\n\n---\n\n"

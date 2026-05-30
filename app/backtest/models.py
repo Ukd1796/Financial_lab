@@ -19,4 +19,6 @@ class Trade:
     pnl: float
     entry_date: datetime
     exit_date: datetime
+    exit_reason: str = ""   # "atr_stop" | "strategy" — set by BacktestEngine
+    strategy: str = ""      # owning strategy at BUY time — set by BacktestEngine
 
