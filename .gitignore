@@ -19,8 +19,11 @@ venv/
 
 data_cache/
 
-# Logs
+# Logs and run artifacts
 logs/
+runs/
+issues/
+trade_analytics.csv
 
 # IDE
 .idea/
