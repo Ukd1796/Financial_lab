@@ -56,7 +56,6 @@ from app.data.repository import MarketDataRepository
 # ---------------------------------------------------------------------------
 # Universe to cache — must cover everything any backtest might request.
 # Stocks: NIFTY_50 + NIFTY_NEXT_50 + NIFTY_MIDCAP_50 (mirrors run_experiments.py)
-# ETFs: from app.universe.etf_agent.ETF_UNIVERSE (the 17 NSE ETFs we trade)
 # ---------------------------------------------------------------------------
 NIFTY_50 = [
     "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
@@ -96,15 +95,7 @@ NIFTY_MIDCAP_50 = [
 ]
 BROAD_UNIVERSE = NIFTY_50 + NIFTY_NEXT_50 + NIFTY_MIDCAP_50
 
-# ETFs: pull from the etf_agent so we stay in sync with whatever the
-# ETF profile trades.
-try:
-    from app.universe.etf_agent import ETF_UNIVERSE as _ETF_UNIVERSE
-    ETF_UNIVERSE = list(_ETF_UNIVERSE)
-except ImportError:
-    ETF_UNIVERSE = []   # ETF module optional — fall back gracefully
-
-ALL_SYMBOLS = list(set(BROAD_UNIVERSE) | set(ETF_UNIVERSE))
+ALL_SYMBOLS = list(set(BROAD_UNIVERSE))
 
 # Window — wide enough for any backtest period including the 200-day warm-up
 # buffers that strategies need before period start.
@@ -156,8 +147,7 @@ def main() -> None:
 
     print(f"\n  Local cache target: {DEFAULT_CACHE_PATH}")
     print(f"  Window:             {CACHE_START.date()} → {CACHE_END.date()}")
-    print(f"  Symbols:            {len(ALL_SYMBOLS)} "
-          f"(stocks={len(BROAD_UNIVERSE)}, ETFs={len(ETF_UNIVERSE)})")
+    print(f"  Symbols:            {len(ALL_SYMBOLS)}")
     print(f"  Mode:               {'REFRESH (replace existing)' if args.refresh else 'INITIAL SYNC'}")
     print(f"  Batch size:         {BATCH_SIZE}")
     print()

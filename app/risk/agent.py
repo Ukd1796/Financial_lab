@@ -31,11 +31,6 @@ class RiskAgent:
         round_trip_cost_pct: float = 0.0015, # 0.10% commission + 0.05% slippage per side
         regime_multipliers:  dict  = None,   # if set, overrides atr_multiplier for stop eval per regime
         allow_min_one_share: bool  = False,  # low-capital floor: take 1 share when sizing rounds to 0
-        slot_sizer                 = None,   # ETF profile: equal-notional SlotSizer; None ⇒ ATR-vol (EQUITY, unchanged)
-        min_hold_days:       int   = 0,      # ETF: block strategy exits before N calendar days (0 ⇒ off; ATR stop always exempt)
-        regime_gating:       bool  = False,  # ETF: cap concurrent slots + restrict to defensive ETFs by regime
-        defensive_symbols          = None,   # symbols allowed to BUY in defensive regimes (default GOLDBEES/SILVERBEES)
-        regime_slot_caps:    dict  = None,   # {regime_label: max_concurrent_slots}; None ⇒ sensible default map
         no_atr_stop_strategies: set = None,  # strategy names exempt from ATR trailing stop (e.g. mean-reversion)
     ):
         self.max_position_pct        = max_position_pct
@@ -49,11 +44,6 @@ class RiskAgent:
         self.round_trip_cost_pct     = round_trip_cost_pct
         self.regime_multipliers      = regime_multipliers
         self.allow_min_one_share     = allow_min_one_share
-        self.slot_sizer              = slot_sizer
-        self.min_hold_days           = min_hold_days
-        self.regime_gating           = regime_gating
-        self.defensive_symbols       = set(defensive_symbols) if defensive_symbols else {"GOLDBEES", "SILVERBEES"}
-        self.regime_slot_caps        = regime_slot_caps
         self.no_atr_stop_strategies  = set(no_atr_stop_strategies) if no_atr_stop_strategies else set()
 
     def _stop_multiplier(self, regime: str | None) -> float:
@@ -61,32 +51,6 @@ class RiskAgent:
         if self.regime_multipliers is None or not regime:
             return self.atr_multiplier
         return self.regime_multipliers.get(regime, self.atr_multiplier)
-
-    # ETF regime gating helpers ---------------------------------------------
-    # Labels are the RCA broad_regime set (app/meta/adaptive_selector._REGIME_RULES).
-    _DEFENSIVE_REGIMES = {"BEAR_CONFIRMED", "BEAR_EARLY", "CRASH_HIGHVOL"}
-
-    def _is_defensive_regime(self, label: str | None) -> bool:
-        return bool(label) and label in self._DEFENSIVE_REGIMES
-
-    def _regime_slot_cap(self, label: str | None) -> int:
-        """
-        Max concurrent ETF slots allowed in the given broad regime.
-
-        Offensive (BULL_*/RECOVERY/TRANSITION_UP) → full book; MIXED → half;
-        BEAR/CRASH → 1 (and defensive-ETF-only via _is_defensive_regime, so
-        idle capital stays in cash rather than chasing equity-ETF longs).
-        """
-        n = self.slot_sizer.n_slots if self.slot_sizer is not None else 1
-        if self.regime_slot_caps is not None:
-            return int(self.regime_slot_caps.get(label, n))
-        if not label:
-            return n
-        if label in ("BEAR_CONFIRMED", "BEAR_EARLY", "CRASH_HIGHVOL"):
-            return 1
-        if label == "MIXED":
-            return max(1, n // 2)
-        return n   # BULL_SUSTAINED / BULL_LOWVOL / BULL_MEDVOL / RECOVERY / TRANSITION_UP
 
     # --------------------------------------------------
     # MAIN EVALUATION
@@ -98,7 +62,6 @@ class RiskAgent:
         market_state,
         equity_prices: dict = None,
         market_downtrend_pct: float = 0.0,
-        regime_label: str = None,
     ):
         """
         equity_prices        — full {symbol: price} map for the current day.
@@ -205,43 +168,6 @@ class RiskAgent:
             # Default 1.0 preserves full sizing for single-strategy experiments.
             strategy_weight = getattr(decision, "weight", 1.0)
 
-            # Slot sizing (ETF profile): equal-notional slots, capped at
-            # n_slots concurrent positions. EQUITY profile injects no
-            # slot_sizer → this block is skipped and the original ATR-vol
-            # path below runs byte-identical (regression-safe).
-            if self.slot_sizer is not None:
-                # Regime-gated exposure (ETF profile): the 150-stock RCA label
-                # caps concurrent slots and, in defensive regimes, restricts
-                # new BUYs to defensive ETFs — idle capital stays in cash
-                # rather than chasing equity-ETF longs into a downtrend.
-                # Off by default (regime_gating=False) ⇒ no effect.
-                if self.regime_gating and regime_label:
-                    cap = self._regime_slot_cap(regime_label)
-                    if cap <= 0 or len(portfolio.positions) >= cap:
-                        return Decision(symbol=symbol, action="HOLD")
-                    if (
-                        self._is_defensive_regime(regime_label)
-                        and symbol not in self.defensive_symbols
-                    ):
-                        return Decision(symbol=symbol, action="HOLD")
-                if not self.slot_sizer.slots_available(len(portfolio.positions)):
-                    return Decision(symbol=symbol, action="HOLD")
-                slot_qty     = self.slot_sizer.quantity(total_equity, current_price)
-                max_cash_qty = portfolio.cash // current_price
-                slot_qty     = min(slot_qty, max_cash_qty)
-                if slot_qty <= 0:
-                    return Decision(symbol=symbol, action="HOLD")
-                return Decision(
-                    symbol=symbol,
-                    action="BUY",
-                    quantity=slot_qty,
-                    atr_at_entry=atr or 0.0,
-                    source=getattr(decision, "source", ""),
-                    reasoning=self.slot_sizer.reasoning(
-                        total_equity, current_price, int(slot_qty)
-                    ),
-                )
-
             quantity = self._size_position(total_equity, current_price, atr, strategy_weight)
 
             # Low-capital floor: when normal sizing rounds to zero (the
@@ -280,27 +206,6 @@ class RiskAgent:
         if decision.action == "SELL":
             if symbol not in portfolio.positions:
                 return Decision(symbol=symbol, action="HOLD")
-
-            # Min-hold gate (ETF profile): suppress *strategy* exits until the
-            # position has been held min_hold_days. The ATR trailing stop is
-            # exempt by construction — it returns a SELL earlier in evaluate(),
-            # so a hard stop always fires regardless of holding period.
-            # Default min_hold_days=0 ⇒ no gating (EQUITY path byte-identical).
-            if self.min_hold_days > 0:
-                pos = portfolio.positions[symbol]
-                ed  = getattr(pos, "entry_date", None)
-                ts  = getattr(market_state, "timestamp", None)
-                if ed is not None and ts is not None:
-                    held_days = (ts - ed).days
-                    if held_days < self.min_hold_days:
-                        return Decision(
-                            symbol=symbol,
-                            action="HOLD",
-                            reasoning=(
-                                f"Min-hold {held_days}d < {self.min_hold_days}d "
-                                f"— strategy exit suppressed"
-                            ),
-                        )
 
             return Decision(
                 symbol=symbol,

@@ -37,7 +37,6 @@ from app.strategy.multi_router import MultiStrategyRouter
 from app.strategy.quiet_breakout import QuietBreakoutStrategy
 from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
-from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.universe.filters import (
     BreakoutUniverseFilter,
@@ -291,10 +290,6 @@ def execute_backtest(run_id: str, config: dict) -> None:
 
         rca            = RegimeContextAgent(dynamic_agent)
         observer       = MarketObserverAgent(repository)
-        universe_agent = UniverseSelectionAgent(
-            volume_threshold=1.5, volatility_threshold=0.02, top_n=20
-        )
-
         # Build union filter from active strategies
         active_internals = list(weights.keys())
         filter_instances = [_STRATEGY_REGISTRY[n]["filter"]() for n in active_internals]

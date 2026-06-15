@@ -9,7 +9,7 @@ class Position:
     average_price: float
     atr_at_entry: float = 0.0
     high_watermark: float = 0.0  # highest price seen since entry; trailing stop trails this
-    entry_date: object = None    # datetime of first fill; used by the ETF min-hold gate (None ⇒ ungated)
+    entry_date: object = None    # datetime of first fill; used by trade analytics and strategy time stops
     entry_strategy: str = ""     # owning strategy at BUY time; used by RiskAgent no_atr_stop_strategies
 
 

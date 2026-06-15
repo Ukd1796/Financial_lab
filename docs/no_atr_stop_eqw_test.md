@@ -74,7 +74,7 @@
   Continuation decay (post-exit drift):
                       1D        3D        5D
     Winners      -0.03%    +0.40%    +0.69%
-    Losers       -0.10%    +0.08%    +0.24%
+
   ──────────────────────────────────────────────────────────────────
   Universe diagnostics (1581 days):
     Avg stability score  : 0.331  (0=fully churning, 1=static)

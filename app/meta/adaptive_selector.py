@@ -27,11 +27,42 @@ from app.meta.llm_cache import get_default_cache
 
 
 # ---------------------------------------------------------------------------
-# Empirical Sharpe table — hard-coded from 2018–2024 backtests.
+# Empirical Sharpe table — derived mechanically from solo-strategy backtests.
 # (net of 0.10% commission + 0.05% slippage per side)
-# Updated 2026-03-21 after MultiStrategyRouter + UnionUniverseFilter tuning.
+#
+# Recalibrated 2026-05-30 from no_atr_stop_adaptive_test.md / new_version_quiet.md.
+# Each cell = solo-strategy Sharpe in the period whose dominant regime matches:
+#   Bull/LowVol  = avg(Bull 2019, Live 2025-26)
+#   Crash/HighVol = Crash 2020
+#   Recovery     = Recov 2020-21
+#   Bear/Choppy  = Bear 2022
+#   Mixed        = avg(Recent 2022-24, Full 2018-24)
+# Prior table (2026-03-21) preserved in PRIOR_STRATEGY_REGIME_PERFORMANCE below
+# for rollback. Two prior cells flipped sign on real data — see the table.
 # ---------------------------------------------------------------------------
 _STRATEGY_REGIME_PERFORMANCE = """\
+Strategy Sharpe ratios by market regime (NSE Indian equities, latest backtests):
+
+                  Bull/LowVol  Crash/HighVol  Recovery  Bear/Choppy  Mixed
+DualMA SMA20/50     -0.05         1.67         1.87       -0.20      0.64
+Breakout 10d        -0.21         1.72         2.62        0.26      0.86
+QuietBrk 20d         0.26         1.95         2.42       -0.22      0.81
+TrendPB 5%           0.93         1.83         1.30       -0.40      0.84
+RSI-MR os=5          0.14         1.05         1.31       -0.97     -0.06
+
+Notable shifts vs the prior table:
+  - DualMA Bear/Choppy flipped from +0.51 to -0.20 (Bear 2022 solo). The
+    "DualMA is the only positive Bear strategy" claim is no longer true.
+  - Breakout Bear/Choppy flipped from -0.05 to +0.26 — Breakout is now the
+    best Bear performer.
+  - DualMA Bull/LowVol fell from +0.44 to near zero (-0.05) on Bull '19 +
+    Live '25-26 evidence — a low-vol uptrend bleeds the medium-term MA.
+  - TrendPB Bull/LowVol confirmed strong (+0.93) — the only consistent
+    positive strategy in narrow uptrends across both Bull '19 and Live."""
+
+
+# Prior table kept for rollback / A-B comparison.
+PRIOR_STRATEGY_REGIME_PERFORMANCE = """\
 Strategy Sharpe ratios by market regime (NSE Indian equities, 2018–2024 backtests):
 
                   Bull/LowVol  Crash/HighVol  Recovery  Bear/Choppy  Mixed
@@ -39,10 +70,7 @@ DualMA SMA20/50      0.44          1.28         2.66        0.51      1.69
 Breakout 10d         0.93          1.72         3.18       -0.05      1.06
 QuietBrk 20d         1.09          1.38         2.33       -0.05      1.08
 TrendPB 5%           0.97          1.81         1.19       -0.34      0.90
-RSI-MR os=5          0.15          0.88         1.34       -0.65     -0.14
-
-QuietBrk 20d is gated to confirmed UPTREND stocks only — its Bear/Crash exposure
-is heavily filtered. RSI-MR is the only strategy with negative Sharpe in Mixed/Recent."""
+RSI-MR os=5          0.15          0.88         1.34       -0.65     -0.14"""
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +80,37 @@ is heavily filtered. RSI-MR is the only strategy with negative Sharpe in Mixed/R
 # This is passed directly into the prompt so the LLM does not need to infer
 # the regime from raw percentages — it can focus purely on allocation.
 # ---------------------------------------------------------------------------
+
+
+def _vol(s: dict) -> float:
+    """
+    Volatility signal used by the BULL_*/CRASH_HIGHVOL/RECOVERY rules.
+
+    Prefers the broad-universe `avg_rolling_vol_5d` (computed by
+    RegimeContextAgent across the 150-stock cache) when present. Falls back to
+    the narrow-universe `avg_atr_pct` (computed across the active 24-80 set)
+    when RCA isn't wired in.
+
+    Why: the narrow universe is high-vol by construction (DynamicUniverseAgent
+    ranks by activity, which selects volatile stocks). Per the per-period
+    diagnostics under `issues/`, `avg_atr_pct` sat at 0.024-0.030 across the
+    Bull/Recent/Live periods — above the 0.022 BULL_SUSTAINED threshold on
+    essentially every week. That made the BULL_* family dead code in
+    production. Broad `avg_rolling_vol_5d` runs ~0.014-0.020 over the same
+    periods and properly fires BULL_SUSTAINED on the weeks the broad market
+    is actually in a calm uptrend.
+
+    Backward-compatible: plain Adaptive (no RCA) snapshots have no
+    `avg_rolling_vol_5d` key → this helper falls back to `avg_atr_pct` and the
+    classifier behaves byte-identically to before. The behaviour shift only
+    fires on Adaptive+RCA runs.
+    """
+    v = s.get("avg_rolling_vol_5d")
+    if v is None:
+        return s.get("avg_atr_pct", 0.0)
+    return v
+
+
 _REGIME_RULES = [
     # (label, description, condition_fn, confidence)
     #
@@ -61,9 +120,15 @@ _REGIME_RULES = [
     # DualMA-heavy bear allocation that is optimised for LOW-vol downtrends.
     # TRANSITION_UP must precede BEAR_CONFIRMED so that an improving bear gets
     # recovery allocation before the bear rule fires.
+    #
+    # Vol input via _vol(s): broad rolling_vol_5d when RCA present, narrow
+    # avg_atr_pct otherwise. Breadth (pct_uptrend / pct_downtrend) is
+    # unchanged — narrow and broad breadth agreed in the diagnostics; only
+    # volatility was the dominant defect. Thresholds retained — they were the
+    # right values for the data scale, just applied to the wrong input.
     ("CRASH_HIGHVOL",
-     "Sharp selloff — >35% DOWNTREND and avg ATR% > 2.3%",
-     lambda s: s["pct_downtrend"] > 0.35 and s["avg_atr_pct"] > 0.023,
+     "Sharp selloff — >35% DOWNTREND and avg vol > 2.3%",
+     lambda s: s["pct_downtrend"] > 0.35 and _vol(s) > 0.023,
      "HIGH"),
     ("TRANSITION_UP",
      "Breadth recovering — 5-day trend IMPROVING with >20% still in downtrend",
@@ -78,16 +143,16 @@ _REGIME_RULES = [
      lambda s: 0.35 <= s["pct_downtrend"] <= 0.45,
      "MEDIUM"),
     ("RECOVERY",
-     "Post-crash V-shape — >60% UPTREND and avg ATR% > 2.2%",
-     lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] > 0.022,
+     "Post-crash V-shape — >60% UPTREND and avg vol > 2.2%",
+     lambda s: s["pct_uptrend"] > 0.60 and _vol(s) > 0.022,
      "HIGH"),
     ("BULL_SUSTAINED",
-     "Sustained broad uptrend — >60% UPTREND and avg ATR% ≤ 2.2%",
-     lambda s: s["pct_uptrend"] > 0.60 and s["avg_atr_pct"] <= 0.022,
+     "Sustained broad uptrend — >60% UPTREND and avg vol ≤ 2.2%",
+     lambda s: s["pct_uptrend"] > 0.60 and _vol(s) <= 0.022,
      "HIGH"),
     ("BULL_LOWVOL",
-     "Slow broad uptrend — >55% UPTREND and avg ATR% < 1.5%",
-     lambda s: s["pct_uptrend"] > 0.55 and s["avg_atr_pct"] < 0.015,
+     "Slow broad uptrend — >55% UPTREND and avg vol < 1.5%",
+     lambda s: s["pct_uptrend"] > 0.55 and _vol(s) < 0.015,
      "HIGH"),
     ("BULL_MEDVOL",
      "Moderate uptrend — >55% UPTREND",
@@ -101,54 +166,58 @@ _REGIME_RULES = [
 
 # Per-regime HARD allocation constraints passed into the LLM prompt.
 # "MUST be" language is intentional — prevents hedging.
+#
+# Sharpe values referenced in prose come from _STRATEGY_REGIME_PERFORMANCE above
+# (recalibrated 2026-05-30). MUST/cap statements mirror _REGIME_WEIGHT_BOUNDS
+# below — both are derived from the same Sharpe-band rule (see module docstring).
 _REGIME_ALLOCATION_RULES = {
     "TRANSITION_UP": (
         "TRANSITION / EARLY RECOVERY (breadth improving, downtrend declining). "
-        "Market moving from bear to recovery. Early breakout and mean-reversion catch "
-        "the first moves. Breakout MUST be ≥ 0.30. RSI-MR can be 0.10–0.20. "
-        "DualMA MUST be ≥ 0.20. QuietBrk can be 0.15–0.20. TrendPB MUST be ≤ 0.15."
+        "Treat like Recovery — momentum strategies regain edge first. "
+        "Breakout MUST be ≥ 0.15. QuietBrk MUST be ≥ 0.15. TrendPB MUST be ≥ 0.15. "
+        "DualMA MUST be ≥ 0.15. RSI-MR MUST be ≥ 0.10 (positive Sharpe in transitions)."
     ),
     "BEAR_CONFIRMED": (
-        "BEAR CONFIRMED (>45% DOWNTREND). DualMA is the ONLY strategy with positive "
-        "Bear Sharpe. DualMA MUST be ≥ 0.55. RSI-MR MUST be ≤ 0.05. "
-        "QuietBrk MUST be ≤ 0.05 (or 0.0). TrendPB MUST be ≤ 0.10. "
-        "Breakout can have 0.15–0.25 for short bursts."
+        "BEAR CONFIRMED (>45% DOWNTREND). Breakout (+0.26) is the only positive-Sharpe "
+        "strategy on Bear 2022 evidence. Breakout MUST be ≥ 0.15. "
+        "DualMA cap ≤ 0.15 (Sharpe -0.20). QuietBrk cap ≤ 0.15 (Sharpe -0.22). "
+        "TrendPB cap ≤ 0.10 (Sharpe -0.40). RSI-MR cap ≤ 0.05 (Sharpe -0.97)."
     ),
     "BEAR_EARLY": (
-        "BEAR EARLY (35–45% DOWNTREND). Regime is deteriorating — shift defensively. "
-        "DualMA MUST be ≥ 0.40. RSI-MR MUST be ≤ 0.05. QuietBrk MUST be ≤ 0.15. "
-        "TrendPB MUST be ≤ 0.15. Breakout can remain at 0.20–0.30."
+        "BEAR EARLY (35–45% DOWNTREND). Same shape as BEAR_CONFIRMED but less extreme. "
+        "Breakout MUST be ≥ 0.15. DualMA cap ≤ 0.15. QuietBrk cap ≤ 0.15. "
+        "TrendPB cap ≤ 0.10. RSI-MR cap ≤ 0.05."
     ),
     "CRASH_HIGHVOL": (
-        "CRASH / HIGH VOL (>25% DOWNTREND, ATR>2.3%). High-vol moves favour Breakout "
-        "(1.72) and TrendPB (1.81). Breakout MUST be ≥ 0.30. TrendPB MUST be ≥ 0.20. "
-        "DualMA can be 0.20–0.30. RSI-MR MUST be ≤ 0.05. QuietBrk MUST be ≤ 0.10."
+        "CRASH / HIGH VOL. All strategies show strong Sharpe on Crash 2020 — "
+        "diversify aggressively. Breakout, QuietBrk, TrendPB, DualMA each MUST be ≥ 0.15. "
+        "RSI-MR MUST be ≥ 0.10 (Sharpe 1.05). Avoid concentration in any single name."
     ),
     "RECOVERY": (
-        "RECOVERY (>60% UPTREND, high ATR). Breakout (3.18) and QuietBrk (2.33) dominate. "
-        "Breakout MUST be ≥ 0.35. QuietBrk MUST be ≥ 0.25. "
-        "DualMA can be 0.15–0.25. RSI-MR MUST be ≤ 0.05. TrendPB MUST be ≤ 0.15."
+        "RECOVERY (>60% UPTREND, high ATR). Every strategy posted Sharpe > 1.20 on "
+        "Recov 2020-21. Spread broadly: all five strategies MUST be ≥ 0.15. "
+        "Breakout and QuietBrk lead but the regime rewards diversified momentum."
     ),
     "BULL_LOWVOL": (
-        "BULL / LOW VOL (>55% UPTREND, ATR<1.5%). Slow trend favours QuietBrk (1.09) "
-        "and TrendPB (0.97). QuietBrk MUST be ≥ 0.25. TrendPB MUST be ≥ 0.20. "
-        "DualMA can be 0.20–0.30. RSI-MR MUST be ≤ 0.05 (Sharpe 0.15 — nearly useless here)."
+        "BULL / LOW VOL (>55% UPTREND, ATR<1.5%). Narrow uptrends penalise momentum. "
+        "TrendPB (+0.93) is the only consistent positive strategy here — TrendPB MUST be ≥ 0.15. "
+        "DualMA cap ≤ 0.15 (Sharpe -0.05). Breakout cap ≤ 0.15 (Sharpe -0.21). "
+        "QuietBrk and RSI-MR are free in the 0–0.30 range (mild positives)."
     ),
     "BULL_SUSTAINED": (
-        "BULL SUSTAINED (>60% UPTREND, normal vol). Multi-week broad uptrend — DualMA "
-        "(1.69 Recent Sharpe) is co-equal with momentum strategies here. "
-        "DualMA MUST be ≥ 0.25. Breakout MUST be ≥ 0.25. QuietBrk MUST be ≥ 0.20. "
-        "RSI-MR MUST be ≤ 0.05. TrendPB can be 0.10–0.20."
+        "BULL SUSTAINED (>60% UPTREND, normal vol). Balanced uptrend — momentum + "
+        "trend-following both work. Breakout MUST be ≥ 0.15. QuietBrk MUST be ≥ 0.15. "
+        "TrendPB MUST be ≥ 0.15. DualMA MUST be ≥ 0.15. RSI-MR cap ≤ 0.15."
     ),
     "BULL_MEDVOL": (
-        "BULL / MODERATE VOL (>55% UPTREND). Balanced trending environment. "
-        "Breakout MUST be ≥ 0.25. QuietBrk MUST be ≥ 0.20. DualMA MUST be ≥ 0.20. "
-        "RSI-MR MUST be ≤ 0.05."
+        "BULL / MODERATE VOL (>55% UPTREND). Same shape as BULL_SUSTAINED. "
+        "Breakout MUST be ≥ 0.15. QuietBrk MUST be ≥ 0.15. TrendPB MUST be ≥ 0.15. "
+        "DualMA MUST be ≥ 0.15. RSI-MR cap ≤ 0.15."
     ),
     "MIXED": (
-        "MIXED regime. Diversify — no strategy should be below 0.10 unless its Sharpe "
-        "is negative in this regime. RSI-MR can be ≤ 0.10 (negative Mixed Sharpe: -0.14). "
-        "Balanced across DualMA, Breakout, QuietBrk, TrendPB."
+        "MIXED regime. Four of five strategies show Sharpe ≥ 0.60 on the Mixed bucket. "
+        "Breakout MUST be ≥ 0.15. QuietBrk MUST be ≥ 0.15. TrendPB MUST be ≥ 0.15. "
+        "DualMA MUST be ≥ 0.15. RSI-MR cap ≤ 0.15 (slightly negative Sharpe -0.06)."
     ),
 }
 
@@ -304,6 +373,10 @@ class AdaptiveStrategySelector:
         # feedback agent). Captured in _parse_weights so the rebalance log can
         # compare raw LLM intent vs final-applied weights.
         self._last_raw_weights: dict[str, float] | None = None
+        # Last prompt hash (= LLM cache key) — captured in _call_llm, dumped by
+        # rebalance() when PROMPT_HASH_DUMP is set. Used to diff the Adaptive
+        # prompt stream between ADAPTIVE_ONLY=1 and =0 runs.
+        self._last_prompt_sha: str | None = None
         # Capital tier from the latest snapshot (MICRO/SMALL/NORMAL). Set in
         # rebalance(); read by _parse_weights() to relax the DualMA floor when
         # the low-capital concentration rule is active. Default NORMAL keeps
@@ -404,6 +477,32 @@ class AdaptiveStrategySelector:
         self._last_raw_response = None
         self._last_raw_weights  = None
         new_weights = self._call_llm(regime_snapshot, label, desc, confidence)
+
+        # ── PROMPT_HASH_DUMP diagnostic (env-gated; no-op unless set) ──────────
+        # One record per rebalance (LLM call). Same code path in both modes —
+        # the only difference between runs is the ADAPTIVE_ONLY env var — so any
+        # divergence in prompt_sha for the same (period, date, leg) proves the
+        # Adaptive prompt inputs leak from the solo/EqW legs. The leg is inferred
+        # from a snapshot field only RCA populates (pct_above_sma50_broad).
+        _dump = os.environ.get("PROMPT_HASH_DUMP")
+        if _dump:
+            try:
+                leg = ("Adaptive+RCA"
+                       if regime_snapshot.get("pct_above_sma50_broad") is not None
+                       else "Adaptive")
+                rec = {
+                    "mode":       os.environ.get("ADAPTIVE_ONLY", "0"),
+                    "period":     os.environ.get("PERIOD", ""),
+                    "date":       str(current_date.date()),
+                    "leg":        leg,
+                    "regime":     label,
+                    "prompt_sha": self._last_prompt_sha,
+                }
+                with open(_dump, "a") as f:
+                    f.write(json.dumps(rec) + "\n")
+            except Exception:
+                pass
+
         if new_weights:
             self.weights = new_weights
             self._call_count += 1
@@ -423,13 +522,34 @@ class AdaptiveStrategySelector:
             # Optional JSONL rebalance log — one record per LLM call. Append
             # mode so multiple periods write to the same file. Disable any
             # logging exception so a write failure never breaks the backtest.
+            #
+            # Snapshot fields (the classifier inputs) are included so a downstream
+            # diagnostic can answer "why was this week labelled REGIME_X?" and
+            # cross-check the narrow-universe pct_uptrend against the
+            # broad-universe pct_above_sma50_broad (when RCA is active).
             if self._log_path:
                 try:
                     entry = {
                         "date":         str(current_date.date()),
+                        "period":       os.environ.get("PERIOD", ""),  # set by runner
                         "regime":       label,
                         "confidence":   confidence,
                         "clamp_active": bool(self.clamp_weights),
+                        # --- Snapshot inputs that fed the classifier ---
+                        "pct_uptrend":            regime_snapshot.get("pct_uptrend"),
+                        "pct_downtrend":          regime_snapshot.get("pct_downtrend"),
+                        "pct_sideways":           regime_snapshot.get("pct_sideways"),
+                        "pct_high_vol":           regime_snapshot.get("pct_high_vol"),
+                        "avg_atr_pct":            regime_snapshot.get("avg_atr_pct"),
+                        "universe_size":          regime_snapshot.get("universe_size"),
+                        # --- RCA-only broad-universe enrichments (None when RCA off) ---
+                        "pct_above_sma50_broad":  regime_snapshot.get("pct_above_sma50_broad"),
+                        "advance_decline_ratio":  regime_snapshot.get("advance_decline_ratio"),
+                        "avg_rolling_vol_5d":     regime_snapshot.get("avg_rolling_vol_5d"),
+                        "broad_universe_size":    regime_snapshot.get("broad_universe_size"),
+                        "trend":                  regime_snapshot.get("trend"),
+                        "broad_regime":           regime_snapshot.get("broad_regime"),
+                        # --- LLM output + final weights ---
                         "raw_response": self._last_raw_response,
                         "raw_weights":  self._last_raw_weights,
                         "final_weights": dict(self.weights),
@@ -485,6 +605,10 @@ class AdaptiveStrategySelector:
         """Make one OpenAI API call. Returns normalised weight dict or None on failure."""
         prompt = self._build_prompt(regime_snapshot, label, desc, confidence)
         cache = get_default_cache()
+        # Capture the prompt hash (= cache key) for the PROMPT_HASH_DUMP diagnostic.
+        # This is byte-for-byte the same key the cache uses, so it directly answers
+        # "would these two runs hit the same cached LLM response?".
+        self._last_prompt_sha = cache.make_key(prompt, self.model)
 
         def _do_api_call() -> str:
             response = self.client.chat.completions.create(

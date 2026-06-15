@@ -47,7 +47,6 @@ from app.strategy.multi_router import MultiStrategyRouter
 from app.strategy.quiet_breakout import QuietBreakoutStrategy
 from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
-from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.meta.regime_context_agent import RegimeContextAgent

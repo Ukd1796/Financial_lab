@@ -104,14 +104,10 @@ class BacktestEngine:
             # Stage 1: DynamicUniverseAgent scores all symbols → top 80 UniverseCandidates
             #          (activity-biased; used by Breakout filters)
             #          + all candidates without gate (for strategy-native filters)
-            # Stage 2: UniverseSelectionAgent / UnionUniverseFilter selects symbols
+            # Stage 2: UnionUniverseFilter selects symbols
             if self.dynamic_universe_agent and self.universe_agent:
                 broad_candidates = self.dynamic_universe_agent.select_candidates(current_date)
-                all_candidates = (
-                    self.dynamic_universe_agent.select_all_candidates(current_date)
-                    if hasattr(self.dynamic_universe_agent, "select_all_candidates")
-                    else broad_candidates
-                )
+                all_candidates = self.dynamic_universe_agent.select_all_candidates(current_date)
                 active_symbols = self.universe_agent.select_symbols(
                     broad_candidates, all_candidates=all_candidates
                 )
@@ -295,13 +291,6 @@ class BacktestEngine:
                     market_state,
                     equity_prices=equity_prices,
                     market_downtrend_pct=effective_downtrend_pct,
-                    # RCA broad regime for the ETF regime-gating path. None
-                    # when no RCA snapshot (e.g. EQUITY EqW) ⇒ RiskAgent
-                    # ignores it (regime_gating off) ⇒ EQUITY byte-identical.
-                    regime_label=(
-                        regime_snapshot.get("broad_regime")
-                        if regime_snapshot else None
-                    ),
                 )
                 execution_result = self.execution_agent.execute(risk_adjusted, market_state, self.portfolio)
 

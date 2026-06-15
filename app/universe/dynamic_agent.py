@@ -22,7 +22,7 @@ class DynamicUniverseAgent:
 
     No hard filters are applied — every symbol with sufficient history
     receives a score.  The agent returns the top_n symbols by score as
-    the candidate universe for UniverseSelectionAgent.
+    the candidate universe for UnionUniverseFilter.
 
     Workflow
         1. Call preload(start_date, end_date) once before the backtest loop.
@@ -241,7 +241,7 @@ class DynamicUniverseAgent:
         than 2 symbols have data.
 
         These candidates — carrying all precomputed metrics — are passed
-        directly to UniverseSelectionAgent for threshold filtering.
+        directly to UnionUniverseFilter for threshold filtering.
         """
         rows, scores = self._build_scored_df(current_date)
         if scores is None:

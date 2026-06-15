@@ -2,7 +2,7 @@
 #
 # Per-strategy second-stage universe filters.
 #
-# All five filter classes share the same interface as UniverseSelectionAgent:
+# All five filter classes share a common interface:
 #   select_universe(candidates) → list[UniverseCandidate]
 #   select_symbols(candidates)  → list[str]
 #
@@ -34,8 +34,7 @@ class BreakoutUniverseFilter:
     institutional participation (high relative volume) combined with a price
     move that shows the market is actively repricing the stock.
 
-    This is identical in spirit to the original UniverseSelectionAgent but
-    explicitly named so the intent is clear.
+    Explicitly named so the intent is clear.
 
     Scoring: cross-sectional activity score (same as DynamicUniverseAgent's
     opportunity_score — already embedded in candidate.score).

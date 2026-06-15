@@ -27,7 +27,6 @@ from app.strategy.multi_router import MultiStrategyRouter
 from app.strategy.quiet_breakout import QuietBreakoutStrategy
 from app.strategy.rsi_mean_reversion import RSIMeanReversionStrategy
 from app.strategy.trend_pullback import TrendPullbackStrategy
-from app.universe.agent import UniverseSelectionAgent
 from app.universe.dynamic_agent import DynamicUniverseAgent
 from app.meta.adaptive_selector import AdaptiveStrategySelector
 from app.meta.regime_context_agent import RegimeContextAgent
@@ -132,7 +131,6 @@ _UPTREND_AND_SIDEWAYS = [
 # Time periods
 # -----------------------------------------------------------------------
 PERIODS = {
-    "Full  2018–2024": (datetime(2018, 1, 1),  datetime(2024, 6, 1)),
     "Bull  2019–2020": (datetime(2019, 1, 1),  datetime(2020, 2, 1)),
     "Crash 2020     ": (datetime(2020, 1, 1),  datetime(2020, 12, 31)),
     "Recov 2020–2021": (datetime(2020, 4, 1),  datetime(2021, 12, 31)),
@@ -231,7 +229,6 @@ class PeriodContext:
     """
     Holds everything that is identical for every strategy in a given period:
       - dynamic_universe_agent  : preloaded once (bulk DB fetch for all 150 symbols)
-      - universe_agent          : stateless filter, shared freely
       - observer                : read-only MarketState cache, lazy-loaded per symbol
                                   on first encounter and then reused by later strategies
       - historical_dates        : sorted list of trading days in the period
@@ -248,13 +245,6 @@ class PeriodContext:
             top_n=80,
         )
         self.dynamic_universe_agent.preload(start_date, end_date)
-
-        # Stage 2 — stateless, nothing to preload
-        self.universe_agent = UniverseSelectionAgent(
-            volume_threshold=1.5,
-            volatility_threshold=0.02,
-            top_n=20,
-        )
 
         # Observer cache grows lazily; safe to share across strategies because
         # it stores only read-only MarketState (no portfolio state).
@@ -322,9 +312,7 @@ def run_experiment(repository, strategy, ctx: PeriodContext, max_position_pct=0.
         no_atr_stop_strategies=no_atr_stop_strategies,
     )
 
-    # Use the per-strategy universe filter when provided; fall back to the
-    # shared UniverseSelectionAgent (the original activity-based filter).
-    active_universe_agent = universe_filter if universe_filter is not None else ctx.universe_agent
+    active_universe_agent = universe_filter
 
     engine = BacktestEngine(
         observer=ctx.observer,
@@ -879,7 +867,30 @@ def run_walk_forward(repository) -> None:
 def _run_full_periods(repository):
     """Full historical backtest suite. Called from main() when RUN_FULL=True."""
     repository.warm_all(BROAD_UNIVERSE)   # full 2014–2026 window
-    for period_label, (start_date, end_date) in PERIODS.items():
+
+    # Optional single-period filter for diagnostic / fast-iteration runs:
+    #   PERIOD=Bull       → matches "Bull  2019–2020" (case-insensitive substring)
+    #   PERIOD=Live       → matches "Live  2025–2026"
+    #   unset / empty     → run all 7 periods (default)
+    # The matched period's exact label is also exposed back to AdaptiveSelector
+    # via the same env var so JSONL log entries are tagged with the period.
+    _period_filter = (os.environ.get("PERIOD") or "").strip().lower()
+    if _period_filter:
+        _filtered = {k: v for k, v in PERIODS.items() if _period_filter in k.lower()}
+        if not _filtered:
+            print(f"\n[PERIOD filter] No period matches '{os.environ['PERIOD']}'. Available:")
+            for k in PERIODS:
+                print(f"  - {k.strip()}")
+            return
+        print(f"\n[PERIOD filter] Running {len(_filtered)} of {len(PERIODS)} periods: "
+              f"{', '.join(k.strip() for k in _filtered)}")
+        _periods_to_run = _filtered
+    else:
+        _periods_to_run = PERIODS
+
+    for period_label, (start_date, end_date) in _periods_to_run.items():
+        # Re-export the exact label so the AdaptiveSelector JSONL log can tag rows.
+        os.environ["PERIOD"] = period_label.strip()
 
         # Build shared context once — single DB fetch for all 150 symbols
         ctx = PeriodContext(repository, start_date, end_date)
