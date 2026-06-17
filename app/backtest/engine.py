@@ -1,4 +1,3 @@
-import inspect
 import os
 from collections import deque
 from datetime import datetime
@@ -62,12 +61,6 @@ class BacktestEngine:
 
         start_date = historical_dates[0]
         end_date   = historical_dates[-1]
-
-        # Determine dispatch path once — avoids repeated inspection in the loop.
-        # Multi-symbol strategies: decide(current_date, symbol_states, portfolio)  → 3 params
-        # Per-symbol strategies:   decide(market_state, portfolio)                 → 2 params
-        _n_params     = len(inspect.signature(self.strategy_router.decide).parameters)
-        _multi_symbol = _n_params == 3
 
         # Observer is preloaded lazily — only when a symbol first appears
         # in the filtered universe, never upfront for the full symbol list.
@@ -155,20 +148,11 @@ class BacktestEngine:
             equity_prices.update(current_prices)
 
             # --- Strategy layer ---
-            if _multi_symbol:
-                proposed_decisions = self.strategy_router.decide(
-                    current_date,
-                    daily_symbol_states,
-                    self.portfolio,
-                )
-            else:
-                proposed_decisions = []
-                for symbol, state in daily_symbol_states.items():
-                    decision = self.strategy_router.decide(
-                        state,
-                        self.portfolio,
-                    )
-                    proposed_decisions.append(decision)
+            proposed_decisions = self.strategy_router.decide(
+                current_date,
+                daily_symbol_states,
+                self.portfolio,
+            )
 
             # --- Market breadth: fraction of active universe in DOWNTREND ---
             # Used by the breadth circuit breaker in RiskAgent.

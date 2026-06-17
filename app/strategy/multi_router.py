@@ -22,7 +22,6 @@
 # 4. update_weights() is called by AdaptiveStrategySelector (step 12) each week
 #    to shift capital allocation based on the current market regime.
 
-import inspect
 from datetime import datetime
 
 from app.strategy.models import Decision
@@ -130,15 +129,7 @@ class MultiStrategyRouter:
         # express its standalone Sharpe-2 behavior. See plan file
         # `velvet-swimming-harbor.md` for the full design.
         #
-        # Empty / None = no asymmetry; falls through to the symmetric gate
-        # (if per_strategy_universe_source set) or legacy (if not).
         self.exclusive_strategies: set = exclusive_strategies or set()
-
-        # Detect dispatch mode once — avoids repeated introspection per bar
-        self._multi_symbol: dict[str, bool] = {
-            name: (len(inspect.signature(s.decide).parameters) == 3)
-            for name, s in strategies.items()
-        }
 
         # Tracks which strategy entered each open position.
         # Only the owning strategy (or the ATR stop in RiskAgent) may close it
@@ -279,65 +270,39 @@ class MultiStrategyRouter:
             sym for sym, owner in self.position_owners.items() if owner == name
         }
 
-        # ── Per-strategy universe gate ────────────────────────────────────
-        # Two modes depending on `exclusive_strategies`:
+        # ── Per-strategy universe gate (asymmetric mode) ─────────────────
+        # Strategies in `exclusive_strategies` see only their own filter slice
+        # (reserved private lane). All other strategies see the merged pool
+        # minus the union of exclusive slices — preserving broad poaching reach
+        # while giving exclusive strategies an uncontested cohort.
         #
-        # ASYMMETRIC (`exclusive_strategies` non-empty):
-        #   - If `name` is in exclusive_strategies → see only `slices[name]`
-        #     (reserved private lane).
-        #   - Else → see (merged - union of all exclusive slices). Keeps the
-        #     strategy's normal poaching reach minus the reserved symbols.
-        #
-        # SYMMETRIC (legacy gate, `exclusive_strategies` empty):
-        #   - If `name` is in slices → see only `slices[name]`.
-        #   - Else → no filtering (backwards-compat for untagged routers).
-        #
-        # Bypass rules (both modes): own positions, untracked positions, and
-        # cross-exit strategies pass through so exit signals always fire.
+        # Own positions, untracked positions, and cross-exit strategies always
+        # bypass this gate so exit signals can always fire.
         if self.per_strategy_universe_source is not None:
             slices = self.per_strategy_universe_source() or {}
+            excluded_union: set = set()
+            for excl_name in self.exclusive_strategies:
+                excluded_union |= slices.get(excl_name, set())
 
-            if self.exclusive_strategies:
-                # Asymmetric mode
-                excluded_union: set = set()
-                for excl_name in self.exclusive_strategies:
-                    excluded_union |= slices.get(excl_name, set())
-
-                if name in self.exclusive_strategies:
-                    allowed_syms = slices.get(name, set())
-                    symbol_states = {
-                        sym: state for sym, state in symbol_states.items()
-                        if sym in allowed_syms
-                        or sym in owned
-                        or (
-                            sym in portfolio.positions
-                            and sym not in self.position_owners
-                        )
-                        or (
-                            name in self.cross_exit_strategies
-                            and sym in portfolio.positions
-                        )
-                    }
-                elif excluded_union:
-                    symbol_states = {
-                        sym: state for sym, state in symbol_states.items()
-                        if sym not in excluded_union
-                        or sym in owned
-                        or (
-                            sym in portfolio.positions
-                            and sym not in self.position_owners
-                        )
-                        or (
-                            name in self.cross_exit_strategies
-                            and sym in portfolio.positions
-                        )
-                    }
-            elif name in slices:
-                # Symmetric mode (legacy)
-                allowed_syms = slices[name]
+            if name in self.exclusive_strategies:
+                allowed_syms = slices.get(name, set())
                 symbol_states = {
                     sym: state for sym, state in symbol_states.items()
                     if sym in allowed_syms
+                    or sym in owned
+                    or (
+                        sym in portfolio.positions
+                        and sym not in self.position_owners
+                    )
+                    or (
+                        name in self.cross_exit_strategies
+                        and sym in portfolio.positions
+                    )
+                }
+            elif excluded_union:
+                symbol_states = {
+                    sym: state for sym, state in symbol_states.items()
+                    if sym not in excluded_union
                     or sym in owned
                     or (
                         sym in portfolio.positions
@@ -370,15 +335,7 @@ class MultiStrategyRouter:
         if not filtered_states:
             return []
 
-        if self._multi_symbol[name]:
-            return strategy.decide(current_date, filtered_states, portfolio)
-        else:
-            decisions = []
-            for state in filtered_states.values():
-                d = strategy.decide(state, portfolio)
-                if d is not None:
-                    decisions.append(d)
-            return decisions
+        return strategy.decide(current_date, filtered_states, portfolio)
 
     def _merge_into(
         self,
