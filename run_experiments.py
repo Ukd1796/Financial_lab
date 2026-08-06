@@ -813,7 +813,7 @@ def run_walk_forward(repository) -> None:
         oos_selector = AdaptiveStrategySelector(
             strategy_names=_STRATEGY_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o",
+            model="gpt-4o-mini",
             verbose=False,
             regime_stability_weeks=2,
             performance_table=wf_table,
@@ -832,7 +832,7 @@ def run_walk_forward(repository) -> None:
         is_selector = AdaptiveStrategySelector(
             strategy_names=_STRATEGY_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o",
+            model="gpt-4o-mini",
             verbose=False,
             regime_stability_weeks=2,
         )
@@ -1038,7 +1038,7 @@ def _run_full_periods(repository):
             selector = AdaptiveStrategySelector(
                 strategy_names=_STRATEGY_NAMES,
                 rebalance_frequency_days=5,
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 verbose=True,    # prints each weekly weight update
             )
 
@@ -1106,7 +1106,7 @@ def _run_full_periods(repository):
             rca_selector = AdaptiveStrategySelector(
                 strategy_names=_STRATEGY_NAMES,
                 rebalance_frequency_days=5,
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 verbose=False,
             )
             rca_filter = UnionUniverseFilter([
@@ -1285,7 +1285,7 @@ def _run_recent_diagnostic(repository) -> None:
         selector = AdaptiveStrategySelector(
             strategy_names=_STRAT_NAMES,
             rebalance_frequency_days=5,
-            model="gpt-4o",
+            model="gpt-4o-mini",
             verbose=False,
             regime_stability_weeks=2,
         )
@@ -1370,7 +1370,7 @@ def _run_recent_diagnostic(repository) -> None:
         sel_r = AdaptiveStrategySelector(
             strategy_names=_STRAT_NAMES_R,
             rebalance_frequency_days=5,
-            model="gpt-4o",
+            model="gpt-4o-mini",
             verbose=False,
             regime_stability_weeks=2,
         )

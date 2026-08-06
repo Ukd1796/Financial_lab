@@ -165,10 +165,9 @@ class BacktestEngine:
                 downtrend_count / len(daily_symbol_states) if daily_symbol_states else 0.0
             )
 
-            # Current account equity — fed into the regime snapshot so the
-            # AdaptiveStrategySelector can concentrate allocation at low capital
-            # (a ₹10k account cannot diversify across 5 strategies). Uses the
-            # same total_equity() call the equity-snapshot below uses.
+            # Current account equity — passed into the regime snapshot so the
+            # AdaptiveStrategySelector can set the capital_tier (MICRO/SMALL/NORMAL)
+            # used in the LLM prompt to adjust weight concentration accordingly.
             current_equity = self.portfolio.total_equity(equity_prices)
 
             # --- Regime snapshot: enhanced (RCA) or base ---

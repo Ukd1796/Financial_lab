@@ -30,7 +30,6 @@ class RiskAgent:
         min_atr_cost_ratio:  float = 3.0,    # ATR must cover ≥ N× round-trip cost (0 = disabled)
         round_trip_cost_pct: float = 0.0015, # 0.10% commission + 0.05% slippage per side
         regime_multipliers:  dict  = None,   # if set, overrides atr_multiplier for stop eval per regime
-        allow_min_one_share: bool  = False,  # low-capital floor: take 1 share when sizing rounds to 0
         no_atr_stop_strategies: set = None,  # strategy names exempt from ATR trailing stop (e.g. mean-reversion)
     ):
         self.max_position_pct        = max_position_pct
@@ -43,7 +42,6 @@ class RiskAgent:
         self.min_atr_cost_ratio      = min_atr_cost_ratio
         self.round_trip_cost_pct     = round_trip_cost_pct
         self.regime_multipliers      = regime_multipliers
-        self.allow_min_one_share     = allow_min_one_share
         self.no_atr_stop_strategies  = set(no_atr_stop_strategies) if no_atr_stop_strategies else set()
 
     def _stop_multiplier(self, regime: str | None) -> float:
@@ -170,22 +168,8 @@ class RiskAgent:
 
             quantity = self._size_position(total_equity, current_price, atr, strategy_weight)
 
-            # Low-capital floor: when normal sizing rounds to zero (the
-            # per-position budget is smaller than one share), still take a
-            # single share IF the price stays within the *undiluted* absolute
-            # single-name ceiling (max_position_pct of equity, never scaled by
-            # strategy_weight). Default-off — when allow_min_one_share is False
-            # this branch returns HOLD exactly as before, so the ₹1L baselines
-            # are unchanged. The cash cap below still authoritatively rejects
-            # the share if cash < price (no separate cash check needed here).
             if quantity <= 0:
-                if (
-                    self.allow_min_one_share
-                    and current_price <= total_equity * self.max_position_pct
-                ):
-                    quantity = 1
-                else:
-                    return Decision(symbol=symbol, action="HOLD")
+                return Decision(symbol=symbol, action="HOLD")
 
             # Cap to actual available cash (unrealized gains cannot be spent)
             max_cash_qty = portfolio.cash // current_price

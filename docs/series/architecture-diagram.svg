@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800" width="100%" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Inter, Roboto, sans-serif">
+<defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#101828" flood-opacity="0.10"/></filter>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1a2230"/></marker>
+<marker id="arrowMeta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#e0a326"/></marker>
+<marker id="arrowDash" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8a94a6"/></marker>
+<marker id="arrowSrc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6feb"/></marker>
+</defs>
+<rect width="1000" height="800" fill="#fff"/>
+<text x="48" y="50" font-size="24" font-weight="800" fill="#1a2230">Adaptive Trading System · Architecture</text>
+<text x="48" y="74" font-size="13.5" fill="#5b6675">A pipeline of single responsibility agents. A deterministic core with the model at the edge.</text>
+<rect x="40" y="100" width="440" height="674" rx="16" fill="#f7f9fc" stroke="#e3e8ef" stroke-width="1.5"/>
+<text x="64" y="138" font-size="18" font-weight="800" fill="#1a2230" letter-spacing="1.2">DAILY PIPELINE</text>
+<text x="64" y="157" font-size="11.5" fill="#5b6675">runs every trading day</text>
+<rect x="520" y="180" width="440" height="290" rx="16" fill="#fffaf0" stroke="#f3e2c0" stroke-width="1.5"/>
+<text x="544" y="214" font-size="16" font-weight="800" fill="#e0a326" letter-spacing="1.1">WEEKLY META LAYER</text>
+<text x="544" y="232" font-size="11.5" fill="#5b6675">updates weekly · supporting role</text>
+<g filter="url(#shadow)">
+<rect x="90" y="176" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="176" width="6" height="60" rx="3" fill="#2f6feb"/>
+</g>
+<text x="114" y="201.2" font-size="16" font-weight="700" fill="#1a2230">Market Data</text>
+<text x="114" y="218.2" font-size="12.5" fill="#5b6675">Daily EOD price data</text>
+<g filter="url(#shadow)">
+<rect x="90" y="262" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="262" width="6" height="60" rx="3" fill="#4f5bd5"/>
+</g>
+<text x="114" y="287.2" font-size="16" font-weight="700" fill="#1a2230">Universe Agent</text>
+<text x="114" y="304.2" font-size="12.5" fill="#5b6675">Select tradable universe</text>
+<g filter="url(#shadow)">
+<rect x="90" y="348" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="348" width="6" height="60" rx="3" fill="#4f5bd5"/>
+</g>
+<text x="114" y="373.2" font-size="16" font-weight="700" fill="#1a2230">5 Strategies</text>
+<text x="114" y="390.2" font-size="12.5" fill="#5b6675">Generate independent signals</text>
+<g filter="url(#shadow)">
+<rect x="90" y="434" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="434" width="6" height="60" rx="3" fill="#4f5bd5"/>
+</g>
+<text x="114" y="459.2" font-size="16" font-weight="700" fill="#1a2230">MultiStrategy Router</text>
+<text x="114" y="476.2" font-size="12.5" fill="#5b6675">Resolve conflicts</text>
+<g filter="url(#shadow)">
+<rect x="90" y="520" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="520" width="6" height="60" rx="3" fill="#4f5bd5"/>
+</g>
+<text x="114" y="545.2" font-size="16" font-weight="700" fill="#1a2230">Risk Agent</text>
+<text x="114" y="562.2" font-size="12.5" fill="#5b6675">Validate &amp; size trades</text>
+<g filter="url(#shadow)">
+<rect x="90" y="606" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="606" width="6" height="60" rx="3" fill="#4f5bd5"/>
+</g>
+<text x="114" y="631.2" font-size="16" font-weight="700" fill="#1a2230">Execution</text>
+<text x="114" y="648.2" font-size="12.5" fill="#5b6675">Apply fills &amp; costs</text>
+<g filter="url(#shadow)">
+<rect x="90" y="692" width="340" height="60" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="90" y="692" width="6" height="60" rx="3" fill="#1f9d57"/>
+</g>
+<text x="114" y="717.2" font-size="16" font-weight="700" fill="#1a2230">Portfolio</text>
+<text x="114" y="734.2" font-size="12.5" fill="#5b6675">Current portfolio state</text>
+<path d="M 260.0 236 L 260.0 260" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M 260.0 322 L 260.0 346" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M 260.0 408 L 260.0 432" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M 260.0 494 L 260.0 518" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M 260.0 580 L 260.0 604" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<path d="M 260.0 666 L 260.0 690" fill="none" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<g filter="url(#shadow)">
+<rect x="550" y="250" width="380" height="52" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="550" y="250" width="6" height="52" rx="3" fill="#e0a326"/>
+</g>
+<text x="574" y="271.84" font-size="13.5" font-weight="700" fill="#1a2230">Regime Context Agent</text>
+<text x="574" y="288.84" font-size="11" fill="#5b6675">Classify market regime</text>
+<g filter="url(#shadow)">
+<rect x="550" y="358" width="380" height="52" rx="12" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<rect x="550" y="358" width="6" height="52" rx="3" fill="#e0a326"/>
+</g>
+<text x="574" y="379.84" font-size="13.5" font-weight="700" fill="#1a2230">Adaptive Selector · LLM</text>
+<text x="574" y="396.84" font-size="11" fill="#5b6675">Allocate weight across strategies</text>
+<path d="M 430 206.0 L 548 276.0" fill="none" stroke="#2f6feb" stroke-width="2" marker-end="url(#arrowSrc)"/>
+<path d="M 740.0 302 L 740.0 356" fill="none" stroke="#e0a326" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M 550 384.0 L 432 464.0" fill="none" stroke="#e0a326" stroke-width="3.2" marker-end="url(#arrowMeta)"/>
+<text x="490.0" y="418.0" text-anchor="middle" font-size="12" font-weight="700" fill="#e0a326">Strategy</text>
+<text x="490.0" y="432.0" text-anchor="middle" font-size="12" font-weight="700" fill="#e0a326">Weights</text>
+<path d="M 90 722.0 L 56 722.0 L 56 550.0 L 88 550.0" fill="none" stroke="#8a94a6" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arrowDash)"/>
+<text x="47" y="636.0" text-anchor="middle" font-size="11" fill="#8a94a6" transform="rotate(-90 47 636.0)">holdings feed stops</text>
+<rect x="520" y="500" width="440" height="170" rx="14" fill="#fff" stroke="#e3e8ef" stroke-width="1.5"/>
+<text x="544" y="532" font-size="14" font-weight="800" fill="#1a2230">Legend</text>
+<rect x="544" y="545" width="16" height="16" rx="4" fill="#2f6feb"/>
+<text x="570" y="558" font-size="12.5" fill="#5b6675">Data source</text>
+<rect x="544" y="572" width="16" height="16" rx="4" fill="#4f5bd5"/>
+<text x="570" y="585" font-size="12.5" fill="#5b6675">Pipeline stage</text>
+<rect x="544" y="599" width="16" height="16" rx="4" fill="#1f9d57"/>
+<text x="570" y="612" font-size="12.5" fill="#5b6675">Output state</text>
+<rect x="544" y="626" width="16" height="16" rx="4" fill="#e0a326"/>
+<text x="570" y="639" font-size="12.5" fill="#5b6675">Meta layer (deterministic + AI)</text>
+<line x1="770" y1="553" x2="820" y2="553" stroke="#1a2230" stroke-width="2.2" marker-end="url(#arrow)"/>
+<text x="832" y="558" font-size="12.5" fill="#5b6675">daily flow</text>
+<line x1="770" y1="580" x2="820" y2="580" stroke="#e0a326" stroke-width="3.2" marker-end="url(#arrowMeta)"/>
+<text x="832" y="585" font-size="12.5" fill="#5b6675">strategy weights</text>
+<line x1="770" y1="607" x2="820" y2="607" stroke="#8a94a6" stroke-width="1.8" stroke-dasharray="6 5" marker-end="url(#arrowDash)"/>
+<text x="832" y="612" font-size="12.5" fill="#5b6675">feedback</text>
+</svg>

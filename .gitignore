@@ -29,3 +29,11 @@ trade_analytics.csv
 .idea/
 .vscode/
 *.swp
+
+# Bytecode & OS junk
+__pycache__/
+*.pyc
+.DS_Store
+
+# Regenerable analytics dumps (docs/series has ~73MB of CSVs)
+docs/series/*.csv

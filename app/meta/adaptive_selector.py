@@ -105,6 +105,11 @@ def _vol(s: dict) -> float:
     classifier behaves byte-identically to before. The behaviour shift only
     fires on Adaptive+RCA runs.
     """
+    # A/B toggle: META_VOL=narrow forces the pre-branch (main) behaviour of using
+    # narrow avg_atr_pct for regime classification, so the broad-vol swap can be
+    # isolated. Default (unset/broad) keeps the branch behaviour.
+    if os.environ.get("META_VOL") == "narrow":
+        return s.get("avg_atr_pct", 0.0)
     v = s.get("avg_rolling_vol_5d")
     if v is None:
         return s.get("avg_atr_pct", 0.0)
@@ -332,10 +337,27 @@ class AdaptiveStrategySelector:
         on_rebalance: Optional[Callable] = None,
         feedback_agent: object | None = None,
     ):
-        self.client                   = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        # Provider switch: LLM_PROVIDER=gemini routes through Gemini's
+        # OpenAI-compatible endpoint (free tier). Default = OpenAI.
+        _provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+        if _provider == "gemini":
+            self.client = OpenAI(
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"),
+            )
+            self._provider = "gemini"
+            self._use_seed = False   # Gemini's OpenAI-compat layer rejects `seed`
+        else:
+            self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            self._provider = "openai"
+            self._use_seed = True
         self.strategy_names           = strategy_names
         self.rebalance_frequency_days = rebalance_frequency_days
-        self.model                    = model
+        # On Gemini, override the caller-supplied model with a Gemini id.
+        self.model                    = (
+            os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+            if self._provider == "gemini" else model
+        )
         self.verbose                  = verbose
         self.history_weeks            = history_weeks
         # Require a new regime to appear for this many consecutive weeks before
@@ -611,18 +633,35 @@ class AdaptiveStrategySelector:
         self._last_prompt_sha = cache.make_key(prompt, self.model)
 
         def _do_api_call() -> str:
-            response = self.client.chat.completions.create(
+            import time
+            kwargs = dict(
                 model=self.model,
                 max_tokens=128,
                 temperature=0.0,
-                seed=0,   # best-effort determinism (OpenAI) — pins API-side
-                          # sampling so identical prompts → identical outputs;
-                          # combined with PYTHONHASHSEED=0 in the harness this
-                          # is required to make the regime-thrash gate
-                          # measurable (cf. docs/meta_layer_value_leak.md §12b).
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.choices[0].message.content.strip()
+            if self._use_seed:
+                kwargs["seed"] = 0   # OpenAI-only: pins API-side sampling for
+                                     # reproducibility (cf. meta_layer_value_leak §12b).
+            if self._provider == "gemini":
+                # gemini-2.5-* are thinking models: internal reasoning consumes the
+                # output-token budget and truncates the JSON answer. Disable thinking
+                # (reasoning_effort=none) and give ample budget so the full weight
+                # dict is emitted.
+                kwargs["max_tokens"] = 2048
+                kwargs["extra_body"] = {"reasoning_effort": "none"}
+            last_exc = None
+            for attempt in range(4):
+                try:
+                    response = self.client.chat.completions.create(**kwargs)
+                    return response.choices[0].message.content.strip()
+                except Exception as e:  # noqa: BLE001
+                    last_exc = e
+                    if "429" in str(e) or "rate" in str(e).lower() or "quota" in str(e).lower():
+                        time.sleep(2 * (attempt + 1))   # backoff on rate limit
+                        continue
+                    raise
+            raise last_exc
 
         try:
             raw = cache.get_or_call(prompt, self.model, _do_api_call)

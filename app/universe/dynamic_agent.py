@@ -1,5 +1,6 @@
 # app/universe/dynamic_agent.py
 
+import os
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -40,6 +41,23 @@ class DynamicUniverseAgent:
         self.symbols        = symbols
         self.top_n          = top_n
         self.vol_avg_window = vol_avg_window
+
+        # EXPERIMENT (Universe Stability Thesis): EMA-smooth the three ranking
+        # features before scoring, to kill the 1-day noise that drives ~54%
+        # daily churn. span<=1 → no smoothing (default; identical to legacy).
+        # Only the SCORING inputs are smoothed; raw feature values passed to
+        # downstream strategy filters are left untouched, so this isolates the
+        # ranking signal. Set via env UNIVERSE_SMOOTH_SPAN (e.g. 3 or 5).
+        self.smooth_span = int(os.getenv("UNIVERSE_SMOOTH_SPAN", "0"))
+
+        # EXPERIMENT (selection AXIS): what the opportunity_score ranks on.
+        #   activity  — legacy: 0.40·rv + 0.30·|ret| + 0.30·vol5d (spike/activity)
+        #   blend     — 0.30·rv + 0.20·|ret| + 0.20·vol5d + 0.30·rank(return_20d)
+        #   momentum  — pure relative strength: rank(return_20d)
+        #   twostage  — liquidity floor (rel_vol>=1), then rank survivors by return_20d
+        # Tests whether ranking on persistent STRUCTURE (aligned with what strategies
+        # trade) beats ranking on transient ACTIVITY. Default "activity" == legacy.
+        self.rank_mode = os.getenv("UNIVERSE_RANK_MODE", "activity").lower()
 
         # symbol → DataFrame indexed by timestamp with precomputed signals
         self._cache: dict[str, pd.DataFrame] = {}
@@ -107,11 +125,29 @@ class DynamicUniverseAgent:
         # ---- Price movement ----
         df["daily_return"] = df["close"].pct_change(1)
         df["return_3d"]    = df["close"].pct_change(3)
+        # Persistent-structure factor for UNIVERSE_RANK_MODE (relative strength).
+        # 20-day return; cross-sectional rank of this == relative strength vs universe.
+        df["return_20d"]   = df["close"].pct_change(20)
 
         # ---- Short-term realised volatility ----
         df["rolling_vol_5d"] = (
             df["daily_return"].rolling(5, min_periods=5).std()
         )
+
+        # ---- Scoring inputs (optionally EMA-smoothed) ----
+        # These feed opportunity_score ONLY. When smoothing is off they equal
+        # the raw features (legacy behaviour). EMA at row t uses rows <= t, the
+        # same completed-bar convention as the raw features — no new look-ahead.
+        abs_return = df["daily_return"].abs()
+        if self.smooth_span and self.smooth_span > 1:
+            span = self.smooth_span
+            df["relative_volume_scored"] = df["relative_volume"].ewm(span=span, min_periods=1).mean()
+            df["abs_return_scored"]      = abs_return.ewm(span=span, min_periods=1).mean()
+            df["rolling_vol_5d_scored"]  = df["rolling_vol_5d"].ewm(span=span, min_periods=1).mean()
+        else:
+            df["relative_volume_scored"] = df["relative_volume"]
+            df["abs_return_scored"]      = abs_return
+            df["rolling_vol_5d_scored"]  = df["rolling_vol_5d"]
 
         # ---- Trend state — used by per-strategy universe filters ----
         # shift(1) so that today's SMA is computed from completed bars only;
@@ -173,7 +209,13 @@ class DynamicUniverseAgent:
             if pd.isna(rel_vol) or pd.isna(daily_ret) or pd.isna(vol_5d):
                 continue
 
+            # Scoring inputs — smoothed when UNIVERSE_SMOOTH_SPAN>1, else == raw.
+            rel_vol_s = row.get("relative_volume_scored", rel_vol)
+            absret_s  = row.get("abs_return_scored", abs(daily_ret))
+            vol_5d_s  = row.get("rolling_vol_5d_scored", vol_5d)
+
             return_3d          = row.get("return_3d", float("nan"))
+            return_20d         = row.get("return_20d", float("nan"))
             sma_20_above_sma50 = row.get("sma_20_above_sma_50", False)
             sma_20_slope_pos   = row.get("sma_20_slope_positive", False)
             sma_cross_age      = row.get("sma_cross_age", 0)
@@ -186,8 +228,13 @@ class DynamicUniverseAgent:
                     "daily_return":          float(daily_ret),
                     "abs_daily_return":      abs(float(daily_ret)),
                     "rolling_vol_5d":        float(vol_5d),
+                    # smoothed scoring inputs (== raw when smoothing off)
+                    "rv_scored":             float(rel_vol_s),
+                    "absret_scored":         float(absret_s),
+                    "vol5d_scored":          float(vol_5d_s),
                     "atr_ratio":             float(atr_ratio) if not pd.isna(atr_ratio) else 0.0,
                     "return_3d":             float(return_3d) if not pd.isna(return_3d) else 0.0,
+                    "return_20d":            float(return_20d) if not pd.isna(return_20d) else 0.0,
                     "sma_20_above_sma_50":   bool(sma_20_above_sma50),
                     "sma_20_slope_positive": bool(sma_20_slope_pos),
                     "sma_cross_age":         int(sma_cross_age) if not pd.isna(sma_cross_age) else 0,
@@ -199,13 +246,31 @@ class DynamicUniverseAgent:
             return rows, None
 
         scores = pd.DataFrame(rows).set_index("symbol")
-        for col in ["relative_volume", "abs_daily_return", "rolling_vol_5d"]:
+        # Activity ranks on the (optionally smoothed) scoring inputs. With smoothing
+        # off these == raw, so the activity formula is identical to legacy.
+        for col in ["rv_scored", "absret_scored", "vol5d_scored"]:
             scores[f"{col}_rank"] = scores[col].rank(pct=True)
-        scores["opportunity_score"] = (
-            0.40 * scores["relative_volume_rank"]
-            + 0.30 * scores["abs_daily_return_rank"]
-            + 0.30 * scores["rolling_vol_5d_rank"]
-        )
+        # Relative-strength (structure) rank for the axis experiment.
+        scores["mom_rank"] = scores["return_20d"].rank(pct=True).fillna(0.0)
+
+        rv, ar, vv = "rv_scored_rank", "absret_scored_rank", "vol5d_scored_rank"
+        mode = self.rank_mode
+        if mode == "momentum":
+            scores["opportunity_score"] = scores["mom_rank"]
+        elif mode == "blend":
+            scores["opportunity_score"] = (
+                0.30 * scores[rv] + 0.20 * scores[ar]
+                + 0.20 * scores[vv] + 0.30 * scores["mom_rank"]
+            )
+        elif mode == "twostage":
+            # Liquidity floor first (traded at least its 20d-avg volume), then rank
+            # survivors by relative strength; illiquid names demoted to 0.
+            liquid = scores["relative_volume"] >= 1.0
+            scores["opportunity_score"] = scores["mom_rank"].where(liquid, 0.0)
+        else:  # "activity" (legacy default)
+            scores["opportunity_score"] = (
+                0.40 * scores[rv] + 0.30 * scores[ar] + 0.30 * scores[vv]
+            )
         return rows, scores
 
     def _candidates_from_scores(self, scores, index) -> list[UniverseCandidate]:

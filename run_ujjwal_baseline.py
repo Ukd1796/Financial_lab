@@ -561,7 +561,7 @@ def run_baseline(equal_weight_only: bool = False):
             router   = _make_router(universe_filter=ctx.universe_filter)
             selector = AdaptiveStrategySelector(
                 strategy_names=_STRAT_NAMES,
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 rebalance_frequency_days=5,
                 regime_stability_weeks=2,
                 verbose=True,
