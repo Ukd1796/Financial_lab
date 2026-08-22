@@ -5,7 +5,7 @@
 > to the agent memory graveyard. **Update this every session.** Convert relative dates to
 > absolute. Newest decisions at the top of the Decision Log.
 
-**Last updated:** 2026-08-22
+**Last updated:** 2026-08-23
 
 ---
 
@@ -39,10 +39,17 @@ returns INCONCLUSIVE-on-sufficiency, decided by a fetch parameter rather than by
 **Folds B and C have no corpus at all.** The 481 feature snapshots on disk are pilot-scale
 leftovers (A=51, B=59, C=29), not the rolled cohort.
 
-**Immediately next, in order:** (1) full integrated fetch, 2025-01 → 2026-08 — running since
-2026-08-22 21:37, ~2h, unlocks folds B and C; (2) backwards extension for fold A's missing
-2022 comparatives; (3) re-parse under one convention → rebuild features; (4) only then run
-fold A against charter v3 §7. Fold B stays untouched until A is decided.
+**Immediately next, in order:** the corpus build is **paused mid stage 2** (2026-08-23
+01:34, deliberate). Stage 1 is complete — the integrated era now carries 560–582 issuers a
+quarter where it carried 15, so **folds B and C have a corpus for the first time**. Stage 2
+has done 1 of 4 windows: `2022-06-30` went 0 → 397 issuers, taking fold A from 2 chainable
+quarters to **3, against §4's floor of 4**. Windows 2–4 clear it.
+
+Resume with `scripts/event_research/run_overnight_chain.sh` — it starts at stage 2 by
+itself and runs through the re-parse and feature rebuild. ~60–75 min. Then, and only then,
+`run_fold --fold A`. Fold B stays untouched until A is decided.
+
+Full run record, coverage table and open items: `docs/v2_event_pilot_operator.md`.
 
 ---
 
