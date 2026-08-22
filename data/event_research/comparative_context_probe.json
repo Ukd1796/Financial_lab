@@ -1,0 +1,2060 @@
+{
+  "valid_events_examined": 226,
+  "outcomes": {
+    "NO_COMPARATIVE_CONTEXT": 226
+  },
+  "outcomes_by_dissemination_year": {
+    "2023": {
+      "NO_COMPARATIVE_CONTEXT": 46
+    },
+    "2024": {
+      "NO_COMPARATIVE_CONTEXT": 144
+    },
+    "2025": {
+      "NO_COMPARATIVE_CONTEXT": 36
+    }
+  },
+  "cross_check": {
+    "comparable_pairs": 0,
+    "agree": 0,
+    "disagree": 0,
+    "agreement_rate": null,
+    "mismatches": []
+  },
+  "per_event": [
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 32.26,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 30.42,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 14.94,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 15.95,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 22.46,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 19.8,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 6.65,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 7.06,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.38,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.61,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 8.91,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "052541e72b7f4b1ab990a54e71d8c693",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 10.88,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 11.06,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 10.86,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 10.68,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 10.72,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 10.89,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 10.25,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.11,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 10.8,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.03,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.12,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 12.7,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "074e14ef0c3d4f2986845ec18099dc07",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 12.77,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 88.41,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 86.85,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 102.0,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 101.9,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 251.42,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 123.34,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 119.58,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 116.09,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 98.68,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 97.62,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 118.54,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "14d00026c19d47e69d24bb1566d154a1",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 112.12,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 27.09,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 24.89,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 33.11,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 27.31,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 36.38,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 33.38,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 39.1,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 35.91,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 40.21,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 39.72,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 40.15,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 36.85,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 42.7,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1bf205bf4d53431a81164b1e382a2306",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 38.53,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 4.17,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 4.1,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.28,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.47,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.1,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.02,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.08,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.94,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.99,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.06,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 3.95,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "1c0848249ca2444dba0d90a7bb090270",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 4.51,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 21.37,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 28.37,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 15.54,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 21.44,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 19.4,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 31.98,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 21.54,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 20.26,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 14.5,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 24.69,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 17.59,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "2a0f7fe36bce4ff3a3d780d05de381dc",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 24.43,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 29.6,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 29.56,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 30.16,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 30.19,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 27.89,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 27.65,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 17.02,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 17.09,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 17.99,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "3847d9d664284519ad238bba3d8d89d6",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 18.01,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "42f2c6cbcec84fe797d9428c9fd6153e",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": -21.9,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "42f2c6cbcec84fe797d9428c9fd6153e",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": -4.84,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": -1.82,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 2.21,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 1.4,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 3.29,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.73,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.42,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.49,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.24,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.77,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.67,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.67,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.88,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 0.26,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "457a695d115146b4992b451ec7c1bc3c",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 3.11,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 6.49,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 4.86,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 5.85,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 4.59,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 6.37,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.67,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.82,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.7,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.43,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 4.19,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": -44.23,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.74,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 4.17,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "52b63d1bb1a54686a4c499caa1bae162",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 3.8,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 14.79,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 14.2,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 15.79,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 14.76,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 19.25,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 20.43,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 15.38,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 13.9,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 15.71,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 16.41,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 15.31,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5ab206cd07ec49f5bde6f2ce48a1b90f",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 16.43,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 31.14,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 26.79,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 29.45,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 30.29,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 31.48,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 34.37,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 33.28,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 33.48,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 32.92,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 35.91,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 34.21,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "5fc6c13c2853497bb42e5a2c4e0d3aa2",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 32.71,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 3.14,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 1.22,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 25.43,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 22.72,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.03,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.73,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 19.09,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 20.04,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.98,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.67,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.67,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.97,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 11.95,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "6509f3405e6e4aeeb96b9cfebca57cb0",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 14.2,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 2.56,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 2.56,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.91,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.98,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.91,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.07,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.73,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.79,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.4,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 2.62,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 2.59,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "75c1b0e5e3a0407ea471108aa9a6abb1",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 2.59,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 24.05,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2022-12-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 12.76,
+      "reported_period": "2022-10-01..2022-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 12.93,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 23.68,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 23.86,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 20.47,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 24.71,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 17.0,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 29.44,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 21.78,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 28.43,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 32.01,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 28.51,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "8d9fac39a108406cb0d5dface9469f25",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 24.7,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 14.11,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 7.03,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 18.32,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.92,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 45.42,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.54,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 14.51,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.7,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 9.72,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.38,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 14.81,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "945acb4c1100478bbff9e26ef09fb35e",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 3.81,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 28.52,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 20.43,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 25.52,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 14.67,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 28.01,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 16.68,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.25,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 22.37,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 24.48,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.4,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 6.44,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f38e8759a8034204b7562c4c1659a3de",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 13.7,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 5.07,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 39.98,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 5.42,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 8.29,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.69,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.29,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.24,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 9.72,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 11.26,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 27.26,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 9.09,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "f6ef49f1e2e44eb0833edf8a9bedcec3",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 4.56,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 0.43,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2023-03-31",
+      "dissemination_year": "2023",
+      "is_cumulative": false,
+      "reported_eps": 0.72,
+      "reported_period": "2023-01-01..2023-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 1.0,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2023-12-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.92,
+      "reported_period": "2023-10-01..2023-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 3.14,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-03-31",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.39,
+      "reported_period": "2024-01-01..2024-03-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.85,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-06-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.78,
+      "reported_period": "2024-04-01..2024-06-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.97,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-09-30",
+      "dissemination_year": "2024",
+      "is_cumulative": false,
+      "reported_eps": 0.79,
+      "reported_period": "2024-07-01..2024-09-30",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 0.65,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    },
+    {
+      "instrument_id": "fefdc508d74a4ae6afb23a26ae9c330e",
+      "result_period_end": "2024-12-31",
+      "dissemination_year": "2025",
+      "is_cumulative": false,
+      "reported_eps": 0.62,
+      "reported_period": "2024-10-01..2024-12-31",
+      "outcome": "NO_COMPARATIVE_CONTEXT"
+    }
+  ]
+}

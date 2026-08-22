@@ -19,6 +19,23 @@ venv/
 
 data_cache/
 
+# Original event filings can contain licensed exchange data. They are hashed and
+# referenced by the research DB, but are never committed.
+data/event_research/raw/
+data/event_research/*.sqlite*
+
+# Vendor payloads and the fact store are regenerable from the cohort CSV (which
+# IS committed) plus API calls. The raw cache is large and licensed; the sqlite
+# is derived from it.
+data/analysis/raw/
+data/analysis/*.sqlite*
+data/analysis/probe_report.json
+
+# Probe payloads are a paid vendor's data. They are local inputs for writing and
+# inspecting parsers; the test suite itself runs on synthetic payloads so it
+# stays reproducible without them.
+tests/fixtures/indianapi/
+
 # Logs and run artifacts
 logs/
 runs/
@@ -37,3 +54,6 @@ __pycache__/
 
 # Regenerable analytics dumps (docs/series has ~73MB of CSVs)
 docs/series/*.csv
+
+# Cached bhavcopy samples for the delisting extractor — regenerable from NSE.
+data/analysis/bhavcopy/

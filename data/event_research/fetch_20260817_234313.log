@@ -1,0 +1,14 @@
+=== Fetch started Mon Aug 17 23:43:13 IST 2026 ===
+
+--- legacy index 2023-06-01 .. 2023-09-30 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2023-06-01 .. 2023-09-30 ...
+  3403 filings in window; 959 belong to the cohort
+  resuming: 792 already ingested, 167 to fetch
+
+Parse status across cohort filings:
+  VALID: 167
+
+Imported 167 new events; 0 already present; 0 failed
+
+--- legacy index 2023-10-01 .. 2023-12-31 ---

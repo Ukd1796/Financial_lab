@@ -1,0 +1,82 @@
+=== Fetch started Tue Aug 18 01:12:57 IST 2026 ===
+
+--- legacy index 2023-06-01 .. 2023-09-30 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2023-06-01 .. 2023-09-30 ...
+  3403 filings in window; 959 belong to the cohort
+  resuming: 959 already ingested, 0 to fetch
+
+Parse status across cohort filings:
+
+Imported 0 new events; 0 already present; 0 failed
+
+--- legacy index 2023-10-01 .. 2023-12-31 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2023-10-01 .. 2023-12-31 ...
+  3407 filings in window; 983 belong to the cohort
+  resuming: 720 already ingested, 263 to fetch
+
+Parse status across cohort filings:
+  FETCH_FAILED: 138
+  VALID: 125
+
+Imported 124 new events; 1 already present; 138 failed
+
+--- legacy index 2024-01-01 .. 2024-03-31 ---
+Result index unavailable: NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)"))
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2024-01-01 .. 2024-03-31 ...
+  !! window 2024-01-01 .. 2024-03-31 FAILED (exit 1)
+
+--- legacy index 2024-04-01 .. 2024-06-30 ---
+Result index unavailable: NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)"))
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2024-04-01 .. 2024-06-30 ...
+  !! window 2024-04-01 .. 2024-06-30 FAILED (exit 1)
+
+--- legacy index 2024-07-01 .. 2024-09-30 ---
+Result index unavailable: NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)"))
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2024-07-01 .. 2024-09-30 ...
+  !! window 2024-07-01 .. 2024-09-30 FAILED (exit 1)
+
+--- legacy index 2024-10-01 .. 2024-12-31 ---
+Result index unavailable: NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)"))
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2024-10-01 .. 2024-12-31 ...
+  !! window 2024-10-01 .. 2024-12-31 FAILED (exit 1)
+
+--- legacy index 2025-01-01 .. 2025-03-31 ---
+Result index unavailable: NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)"))
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2025-01-01 .. 2025-03-31 ...
+  !! window 2025-01-01 .. 2025-03-31 FAILED (exit 1)
+
+--- integrated filings 2025-01-01 .. 2026-08-14 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching integrated filing index 2025-01-01 .. 2026-08-14 (per symbol) ...
+  ! HDFC: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! RELIANCE: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! MGL: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! SIEMENS: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! ASTRAL: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! INFY: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! DALBHARAT: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! AFFLE: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! ZYDUSLIFE: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! TEJASNET: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! LTTS: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! ACC: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! DABUR: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! LT: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! SBICARD: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! JSWSTEEL: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! HSCL: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! RECLTD: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! ASIANPAINT: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! IEX: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! GSFC: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! RCF: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! MAXHEALTH: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! BPCL: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
+  ! HINDUNILVR: index unavailable (NSE handshake failed: HTTPSConnectionPool(host='www.nseindia.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError("HTTPSConnection(host='www.nseindia.com', port=443): Failed to resolve 'www.nseindia.com' ([Errno 8] nodename nor servname provided, or not known)")))
