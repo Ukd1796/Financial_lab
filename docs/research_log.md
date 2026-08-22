@@ -5,7 +5,7 @@
 > to the agent memory graveyard. **Update this every session.** Convert relative dates to
 > absolute. Newest decisions at the top of the Decision Log.
 
-**Last updated:** 2026-08-18
+**Last updated:** 2026-08-22
 
 ---
 
@@ -19,22 +19,30 @@ failed its pre-registered bar (see OQ7 and the Path-1 table below, kept for the 
 The live question is whether a *timestamped fundamental event* carries information that price
 does not. Phase 1 is data-contract work only.
 
-**State as of 2026-08-18.** Charter v3 has **frozen the pass bar** (peer rule, cost model
+**State as of 2026-08-22.** Charter v3 has **frozen the pass bar** (peer rule, cost model
 0.55% → bar 1.10%/quarter, fixed K=40, minimum sample, INCONCLUSIVE as a third verdict), and
 the Phase-2 pipeline is built and runs end to end: `features.py` → `build_event_features.py`
-→ `run_fold.py`, **171 tests passing**. Fold B's one-pass limit is enforced by a database
-constraint. **No fold verdict has been produced** — the corpus is still being assembled.
+→ `run_fold.py`, **172 tests passing**. Fold B's one-pass limit is enforced by a database
+constraint. **No fold verdict has been produced.**
 
-Legacy fetch is complete (7,771 filings, 554 issuers). The integrated phase (folds B/C) and
-the **backwards extension** (fold A's missing year-ago comparatives) are chained and running
-via `scripts/event_research/run_overnight_chain.sh`.
+Corpus, measured 2026-08-22 — it is thinner than the 2026-08-18 entry implied:
 
-**A plain-language statement of the whole experiment, with its pass/fail table, is in
-`docs/glossary/04-research-methodology.md` — "The V2 test in one page".** Read that first.
+| Quarters | Issuers with a VALID filing | |
+|---|---|---|
+| 2022-06 / 2022-09 | 0 | backwards extension never ran |
+| 2022-12 / 2023-03 | 6 / 21 | retired 19-issuer pilot only |
+| 2023-06 → 2024-12 | 500–548 | ✅ legacy fetch complete |
+| 2025-03 → 2026-06 | 15 | ❌ integrated era rejected wholesale (now fixed) |
 
-**Immediately next, in order:** (1) let the chain finish; (2) `build_event_features --commit`
-on the full corpus; (3) run fold A against charter v3 §7; (4) only if A passes, run fold B —
-once.
+Consequences: **fold A has 2 usable quarters against §4's floor of 4** — running it today
+returns INCONCLUSIVE-on-sufficiency, decided by a fetch parameter rather than by evidence.
+**Folds B and C have no corpus at all.** The 481 feature snapshots on disk are pilot-scale
+leftovers (A=51, B=59, C=29), not the rolled cohort.
+
+**Immediately next, in order:** (1) full integrated fetch, 2025-01 → 2026-08 — running since
+2026-08-22 21:37, ~2h, unlocks folds B and C; (2) backwards extension for fold A's missing
+2022 comparatives; (3) re-parse under one convention → rebuild features; (4) only then run
+fold A against charter v3 §7. Fold B stays untouched until A is decided.
 
 ---
 
@@ -111,6 +119,64 @@ or (c) changing the *objective* away from absolute Return (see OQ1).
 ---
 
 ## Decision Log
+
+- **2026-08-22** — **🔴 The 2025+ integrated era ingested ZERO filings because of a
+  `str(None)` coercion, not because of anything NSE did. Found, fixed, verified live,
+  and the chain that hid it is hardened.**
+
+  **1. The defect.** `validate_filing_payload` normalised the predecessor hash with
+  `str(event.get("supersedes_source_sha256", ""))`. The legacy fetcher *omits* that key,
+  so it becomes `""` — falsy, harmless. The integrated fetcher sets it *explicitly to
+  `None`* for non-revisions, and `str(None)` is the literal string `"None"`, which is
+  truthy. The `len != 64` guard never fires because `is_revision` is `False`, so the
+  payload validates; `import_validated_filing` then looks for a predecessor with
+  `source_sha256 == "None"`, finds none, and raises. **Every non-revision integrated
+  filing died this way: 3,127 fetched, 0 stored.**
+
+  Fixed as `str(event.get(...) or "")` at the validation layer, so both fetchers are
+  covered. Verified against the live endpoint — a 3-symbol run imports 3/3 VALID with
+  zero exceptions. Regression test asserts an explicit `None` normalises to `None`,
+  never `"None"`. 172 tests.
+
+  **2. 🔴 The failure had a plausible-sounding name, which is why it survived a week.**
+  Every one of the 3,127 was logged `REVISION_PREDECESSOR_MISSING` — a real category,
+  invented the day before for a real problem. The 2026-08-18 change that made an
+  unlinkable revision non-fatal was correct in principle, but it converted a loud crash
+  into silent total loss, and the `except ValueError` around the import labels *any*
+  `ValueError` as a missing predecessor. **A catch-all except that assigns a specific
+  cause is how a bug acquires an alibi.** Narrow the except, or label it `IMPORT_FAILED`
+  and store the message.
+
+  **3. The first hypothesis was wrong, and checking it cost one request.** The obvious
+  read was that the integrated index populates `revised_Date` on every row, tripping
+  `isRevision`. A single live index call falsified it: `revised_Date` null in 19/19,
+  `type_Sub` = `"New"`. Cheap falsification before the code change, per OQ discipline.
+
+  **4. ✅ `run_overnight_chain.sh` hardened — it reported no error while producing
+  nothing.** Three fixes, each tested against stubs across every branch:
+  - **`pgrep` failing is not `pgrep` finding nothing.** It exits 1 on no-match but ≥2 on
+    error, and a suspended machine returns "Cannot get process list". The old
+    `while pgrep ...` read that as "the fetch has finished" and started stage 2
+    underneath a still-running stage 1. Now an unreadable process list aborts.
+  - **Stage failures no longer cascade.** `pipestatus[1]` per stage (`$?` after a pipe is
+    tee's, always 0); the chain stops rather than deriving features from a corpus that
+    failed to load.
+  - **A fetch stage that ingests zero new filings aborts the chain** — the exact shape of
+    the defect above.
+
+  The stub testing earned its keep immediately: it caught `status` being a **read-only
+  variable in zsh**, so `local status=${pipestatus[1]}` would have aborted every stage.
+
+  **5. Repo state.** The entire V2 lane was untracked — charter, pipeline, glossary,
+  migrations, tests. Now on `feature/v2-event-research` (pushed), with the V1 momentum
+  removal as a separate revertible commit. `main` still carries V1, so Railway production
+  is unaffected.
+
+  **Open:** the 3,127 stale `REVISION_PREDECESSOR_MISSING` rows are now false — they
+  record a bug in our code, not a fact about any filing, and they will poison coverage
+  statistics exactly as the 137 DNS-outage exceptions would have. Same precedent applies:
+  delete them once the refetch confirms those filings ingest.
+
 
 - **2026-08-18 (later)** — **🔴 Fold A was INCONCLUSIVE BY CONSTRUCTION, decided by a fetch
   parameter rather than by evidence. Found before running it, fixed, and chained. Three
