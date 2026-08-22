@@ -1,0 +1,18 @@
+=== Backwards extension started Sun Aug 23 01:14:16 IST 2026 ===
+
+--- legacy index 2022-07-01 .. 2022-09-30 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2022-07-01 .. 2022-09-30 ...
+  2566 filings in window; 690 belong to the cohort
+
+Parse status across cohort filings:
+  VALID: 673
+  UNRESOLVED_CONTEXT: 12
+  DOCUMENT_ABSENT: 5
+
+Imported 685 new events; 0 already present; 5 failed
+
+--- legacy index 2022-10-01 .. 2022-12-31 ---
+Cohort liquid-2023-06-30, liquid-2023-09-30, liquid-2023-12-31, liquid-2024-03-31, liquid-2024-06-30, liquid-2024-09-30, liquid-2024-12-31, liquid-2025-03-31, liquid-2025-06-30, liquid-2025-09-30, liquid-2025-12-31, liquid-2026-03-31, liquid-2026-06-30: 597 issuers (3900 snapshot rows)
+Fetching NSE result index 2022-10-01 .. 2022-12-31 ...
+  3105 filings in window; 905 belong to the cohort
