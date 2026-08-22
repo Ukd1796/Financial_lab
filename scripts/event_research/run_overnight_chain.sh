@@ -88,12 +88,18 @@ log "  base: $(filing_count) filings in the corpus"
 # ---------------------------------------------------------------------------
 # 1. Wait out an integrated fetch if one is already running.
 # ---------------------------------------------------------------------------
+# If one IS running we own its outcome: a fetch that stops is not a fetch that
+# worked, and stages 2-4 would otherwise build features on top of whatever it
+# failed to store.  Only checked when we actually waited -- if no fetch was
+# running there is no delta to expect.
 PATTERN="scripts.event_research.fetch_cohort_integrated_filings"
+WAITED=0
+STAGE1_BEFORE=$(filing_count)
 while true; do
   pgrep -f "$PATTERN" > /dev/null
   PGREP_STATUS=$?
   case $PGREP_STATUS in
-    0) log "  $(date +%H:%M) waiting for the integrated fetch ..."; sleep 300 ;;
+    0) WAITED=1; log "  $(date +%H:%M) waiting for the integrated fetch ..."; sleep 300 ;;
     1) log "  integrated fetch is not running; continuing"; break ;;
     *) log "\n!! pgrep could not read the process list (exit $PGREP_STATUS)."
        log "   That is a broken machine, not an absent process -- most likely"
@@ -101,6 +107,11 @@ while true; do
        exit 1 ;;
   esac
 done
+
+if [[ $WAITED -eq 1 ]]; then
+  log "\n=== Stage 1: integrated fetch (waited out) ==="
+  assert_corpus_grew "Stage 1 (integrated fetch)" "$STAGE1_BEFORE" "$(filing_count)"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Fetch the year-ago comparatives fold A needs.
