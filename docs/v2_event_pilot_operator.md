@@ -171,3 +171,59 @@ fetched, 0 stored, each logged under a plausible-sounding name. Stage 1's
 ingest is now asserted before stages 2–4 run, and a fetch stage that stores
 nothing aborts the chain. **If this run ends quietly, check the corpus count
 before believing it.**
+
+### Run paused — 2026-08-23 01:34
+
+Stopped deliberately, mid stage 2. Chain killed first so it could not react to
+the fetcher exiting; fetchers sent SIGTERM, not SIGKILL, so the open
+transaction closed. Verified after: `PRAGMA integrity_check` = ok, 0 orphan
+facts, no processes left.
+
+| Stage | State at pause |
+|---|---|
+| 1. Integrated fetch (2025+) | ✅ **complete** — 597/597 issuers, +6,848 filings |
+| 2. Backwards extension | ⏸ **window 1 of 4 done** (`2022-07-01 .. 2022-09-30`) |
+| 3. Re-parse | not started |
+| 4. Feature rebuild | not started |
+
+Corpus: **15,435 filings** (7,774 at chain start).
+
+**Coverage, and what it means for fold A's sufficiency floor of 4 quarters:**
+
+| Fold A quarter | needs q−4 | issuers at q−4 | chainable? |
+|---|---|---|---|
+| 2023-06-30 | 2022-06-30 | **397** | ✅ (was 0) |
+| 2023-09-30 | 2022-09-30 | 67 | ⏸ needs window 2 |
+| 2023-12-31 | 2022-12-31 | 6 | ⏸ needs window 3 |
+| 2024-03-31 | 2023-03-31 | 21 | ⏸ needs window 4 |
+| 2024-06-30 | 2023-06-30 | 500 | ✅ |
+| 2024-09-30 | 2023-09-30 | 507 | ✅ |
+
+**3 of 6 chainable now, against a floor of 4.** Windows 2–4 are what clear it.
+Folds B and C are already at full cohort scale (560–582 issuers per quarter).
+
+#### Resuming
+
+```bash
+scripts/event_research/run_overnight_chain.sh
+```
+
+That is the whole command. With no integrated fetch running the wait loop exits
+immediately and the chain starts at stage 2; `ingested_source_urls()` filters
+window 1's completed downloads before anything is fetched, so the resume costs
+one re-walk of the NSE index per window and nothing more. Stages 3 and 4 follow
+automatically.
+
+Estimated remaining: ~60–75 min for windows 2–4, then stages 3–4 are local.
+
+#### Open item
+
+The **3,127 stale `REVISION_PREDECESSOR_MISSING` rows are now false** — they
+record the `str(None)` bug, not a fact about any filing, and those same filings
+have since ingested cleanly. They will skew any coverage statistic that reads
+the exception table. Same precedent as the 137 deleted DNS-outage exceptions.
+Delete them before computing coverage; kept for now so the defect stays
+inspectable.
+
+Exceptions recorded *since* the fix, across ~7,000 filings: 19
+`DOCUMENT_ABSENT`, 12 `UNRESOLVED_CONTEXT`, 1 `UNPARSEABLE`.
