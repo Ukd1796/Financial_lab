@@ -109,3 +109,65 @@ The target report contains only event/issuer counts, EPS completeness and
 exceptions by year. Stop and fix coverage, identity or timestamp failures
 before writing a return study. The full no-bias rules and pre-registered
 decision standard are in [v2_event_research_charter.md](v2_event_research_charter.md).
+
+---
+
+## Corpus build run — 2026-08-22
+
+The run that takes the corpus from "fold A INCONCLUSIVE by construction, folds
+B and C empty" to a decidable state. Recorded here because it is long, staged,
+and the last attempt failed silently.
+
+### What is running
+
+| | Stage | Command | Log |
+|---|---|---|---|
+| 1 | Integrated fetch, 2025-01-01 → 2026-08-14, all 597 cohort issuers | `fetch_cohort_integrated_filings --cohort-id <13 cohorts> --from 2025-01-01 --to 2026-08-14 --commit` | `data/event_research/integrated_20260822_213729.log` |
+| 2 | Backwards extension — fold A's missing 2022 comparatives | `extend_backwards.sh --commit` | `data/event_research/extend_*.log` |
+| 3 | Re-parse the whole corpus under one convention | `reparse_corpus.py --resolve-conventions --commit` | chain log |
+| 4 | Rebuild event features (signal-blind) | `build_event_features.py --commit` | chain log |
+
+Stages 2–4 are driven by `run_overnight_chain.sh`, launched at 21:54 while
+stage 1 was still running. It waits stage 1 out, then verifies it ingested
+before continuing. Chain log: `data/event_research/chain_20260822_215413.log`.
+Corpus at chain start: **7,774 filings**.
+
+Both are wrapped in `caffeinate -dimsu`, which does **not** survive a lid
+close. Leave the lid open. Every stage resumes, so an interruption costs
+elapsed time and nothing else.
+
+### Watching it
+
+```bash
+# stage 1 progress (597 issuers indexed, then documents downloaded)
+grep -c 'filings,' data/event_research/integrated_20260822_213729.log
+
+# where the chain is
+tail -5 data/event_research/chain_20260822_215413.log
+
+# did the corpus actually grow?  this is the question that matters
+finance/bin/python3 -c "import sqlite3;d=sqlite3.connect('data/event_research/event_research.sqlite');\
+print(d.execute(\"SELECT COUNT(*) FROM financial_result_events\").fetchone()[0])"
+
+# anything being rejected today, and under what name
+finance/bin/python3 -c "import sqlite3;d=sqlite3.connect('data/event_research/event_research.sqlite');\
+print([r for r in d.execute(\"SELECT exception_type,COUNT(*) FROM event_data_exceptions \
+WHERE created_at>=date('now') GROUP BY 1\")])"
+```
+
+### What it does NOT do
+
+It computes no surprise, response, forward return or fold verdict. Fetching is
+signal-blind and spends none of the pre-registration — charter v3 §7 gates
+*evaluation*, not ingestion. **`run_fold --fold A` is run by hand, afterwards,
+and only once the sufficiency floor is actually met.** Fold B stays untouched
+until A is decided; its single pass is enforced by a database constraint, not
+by discipline.
+
+### The failure mode this run is built around
+
+The 2026-08-18 attempt reported no error and produced nothing: 3,127 filings
+fetched, 0 stored, each logged under a plausible-sounding name. Stage 1's
+ingest is now asserted before stages 2–4 run, and a fetch stage that stores
+nothing aborts the chain. **If this run ends quietly, check the corpus count
+before believing it.**
