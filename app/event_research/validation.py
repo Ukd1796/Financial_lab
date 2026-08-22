@@ -116,7 +116,11 @@ def validate_filing_payload(payload: Mapping[str, Any], raw_file: str | Path) ->
     is_revision = event.get("is_revision", False)
     if not isinstance(is_revision, bool):
         errors.append("event.is_revision must be a boolean")
-    supersedes_source_sha256 = str(event.get("supersedes_source_sha256", ""))
+    # `or ""` before str(), not str(... , "") -- a caller that sets the key
+    # explicitly to None yields the literal string "None", which is truthy and
+    # sends every non-revision into the revision-linking branch downstream.
+    # That silently rejected all 3,127 filings of the 2025+ integrated era.
+    supersedes_source_sha256 = str(event.get("supersedes_source_sha256") or "")
     if is_revision and len(supersedes_source_sha256) != 64:
         errors.append("a revision must provide event.supersedes_source_sha256")
 

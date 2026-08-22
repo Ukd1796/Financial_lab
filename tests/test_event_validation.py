@@ -67,6 +67,24 @@ class EventValidationTests(unittest.TestCase):
         self.assertFalse(result.is_valid)
         self.assertTrue(any("supersedes_source_sha256" in error for error in result.errors))
 
+    def test_explicit_none_supersedes_hash_is_not_the_string_None(self):
+        """A non-revision that sets the key explicitly to None must normalise to
+        None, never to the literal string "None".
+
+        `str(event.get(key, ""))` returns "None" for an explicit None, which is
+        truthy, so the repository took every such filing down the revision-linking
+        branch, failed to find a predecessor with source_sha256 == "None", and
+        raised.  The legacy fetcher omits the key so it never saw this; the
+        integrated fetcher sets it to None for non-revisions, and the defect
+        silently rejected all 3,127 filings of the 2025+ era -- fold B and fold C
+        had no corpus at all (2026-08-22).
+        """
+        self.payload["event"]["is_revision"] = False
+        self.payload["event"]["supersedes_source_sha256"] = None
+        result = validate_filing_payload(self.payload, self.raw_file)
+        self.assertTrue(result.is_valid, result.errors)
+        self.assertIsNone(result.normalized["event"]["supersedes_source_sha256"])
+
     def test_validated_event_imports_to_isolated_sqlite_database(self):
         result = validate_filing_payload(self.payload, self.raw_file)
         archive = archive_raw_filing(
