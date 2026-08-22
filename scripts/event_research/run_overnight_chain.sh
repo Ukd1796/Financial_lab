@@ -63,22 +63,58 @@ run_stage() {
   fi
 }
 
-# A fetch stage must have added something.  Zero is not success.
+# Exceptions recorded since a given timestamp.  This is what separates "stored
+# nothing because it is already complete" from "stored nothing because every row
+# was rejected" -- the two are identical from the corpus count alone.
+exceptions_since() {
+  finance/bin/python3 - "$DB" "$1" <<'PY' 2>/dev/null
+import sqlite3, sys
+try:
+    db = sqlite3.connect(sys.argv[1])
+    print(db.execute(
+        "SELECT COUNT(*) FROM event_data_exceptions WHERE created_at >= ?",
+        (sys.argv[2],),
+    ).fetchone()[0])
+except Exception:
+    pass
+PY
+}
+
+# A fetch stage must have added something -- UNLESS it had nothing left to add.
+#
+# The first version of this guard tested the corpus count alone, which made a
+# fully-resumed stage indistinguishable from a wholly-rejected one: re-running
+# the chain after stage 2 had completed would have aborted it, permanently
+# blocking stages 3 and 4.  A resumed stage imports 0 and records 0 exceptions;
+# a broken one imports 0 and records an exception per rejected row.  The
+# exception count is the discriminator.
 assert_corpus_grew() {
-  local name="$1" before="$2" after="$3"
+  local name="$1" before="$2" after="$3" since="$4"
   if [[ -z "$before" || -z "$after" ]]; then
     log "   (corpus size unreadable; skipping the zero-ingest check)"
     return 0
   fi
   log "   corpus: $before -> $after filings (+$((after - before)))"
-  if [[ "$after" -le "$before" ]]; then
-    log "\n!! $name ingested NOTHING. Chain stopped here."
-    log "   A fetch that reports success and stores nothing is a silent"
-    log "   rejection, not an empty window. Check the exception table:"
-    log "     SELECT exception_type, COUNT(*) FROM event_data_exceptions"
-    log "     WHERE created_at >= date('now') GROUP BY 1;"
-    exit 1
+  if [[ "$after" -gt "$before" ]]; then
+    return 0
   fi
+
+  local errs=$(exceptions_since "$since")
+  if [[ -z "$errs" ]]; then
+    log "   (exception count unreadable; treating zero-ingest as fatal)"
+  elif [[ "$errs" -eq 0 ]]; then
+    log "   nothing new to fetch and nothing rejected -- already complete."
+    return 0
+  else
+    log "   $errs exception(s) recorded during this stage."
+  fi
+
+  log "\n!! $name stored NOTHING while rejecting rows. Chain stopped here."
+  log "   A fetch that reports success and stores nothing is a silent"
+  log "   rejection, not an empty window. Check what it called them:"
+  log "     SELECT exception_type, COUNT(*) FROM event_data_exceptions"
+  log "     WHERE created_at >= '$since' GROUP BY 1;"
+  exit 1
 }
 
 log "=== Chain started $(date) ==="
@@ -95,6 +131,7 @@ log "  base: $(filing_count) filings in the corpus"
 PATTERN="scripts.event_research.fetch_cohort_integrated_filings"
 WAITED=0
 STAGE1_BEFORE=$(filing_count)
+STAGE1_START=$(date '+%Y-%m-%d %H:%M:%S')
 while true; do
   pgrep -f "$PATTERN" > /dev/null
   PGREP_STATUS=$?
@@ -110,16 +147,17 @@ done
 
 if [[ $WAITED -eq 1 ]]; then
   log "\n=== Stage 1: integrated fetch (waited out) ==="
-  assert_corpus_grew "Stage 1 (integrated fetch)" "$STAGE1_BEFORE" "$(filing_count)"
+  assert_corpus_grew "Stage 1 (integrated fetch)" "$STAGE1_BEFORE" "$(filing_count)" "$STAGE1_START"
 fi
 
 # ---------------------------------------------------------------------------
 # 2. Fetch the year-ago comparatives fold A needs.
 # ---------------------------------------------------------------------------
 BEFORE=$(filing_count)
+STAGE2_START=$(date '+%Y-%m-%d %H:%M:%S')
 run_stage "Stage 2: backwards extension" \
     scripts/event_research/extend_backwards.sh --commit
-assert_corpus_grew "Stage 2" "$BEFORE" "$(filing_count)"
+assert_corpus_grew "Stage 2" "$BEFORE" "$(filing_count)" "$STAGE2_START"
 
 # ---------------------------------------------------------------------------
 # 3. Re-parse the whole corpus under ONE rule.
